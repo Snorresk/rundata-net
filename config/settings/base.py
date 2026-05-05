@@ -262,6 +262,8 @@ USE_GA = env.bool("USE_GA", False)
 
 # Azure Model API key
 MODEL_KEY = env("MODEL_KEY", default="")
+MODEL_ENDPOINT = env("MODEL_ENDPOINT", default="https://Phi-4-kduuo.eastus2.models.ai.azure.com")
+MODEL_NAME = env("MODEL_NAME", default="Phi-4")
 
 # Azure Blob Storage (PDF files)
 # Single source of truth for both the frontend (window.BLOB_BASE_URL) and the
