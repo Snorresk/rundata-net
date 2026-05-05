@@ -32,12 +32,16 @@ def _get_system_message() -> SystemMessage:
 
 
 def inference(user_msg: str, api_token: Optional[str] = None) -> str:
-    endpoint = "https://Phi-4-kduuo.eastus2.models.ai.azure.com"
-    model_name = "Phi-4"
+    endpoint = settings.MODEL_ENDPOINT
+    model_name = settings.MODEL_NAME
     api_token = api_token or settings.MODEL_KEY
 
+    if not endpoint:
+        raise ValueError("MODEL_ENDPOINT is not configured")
+    if not model_name:
+        raise ValueError("MODEL_NAME is not configured")
     if not api_token:
-        raise ValueError("Failed to obtain API token")
+        raise ValueError("MODEL_KEY is not configured")
 
     client = ChatCompletionsClient(
         endpoint=endpoint,
