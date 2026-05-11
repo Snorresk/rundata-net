@@ -672,6 +672,7 @@ function makeWordSearchRecord({
     normalisation_norse_word_boundaries: norseWords.map((text, i) => ({ start: i, end: i + text.length, text })),
     normalisation_scandinavian_word_boundaries: sc.map((text, i) => ({ start: i, end: i + text.length, text })),
     transliteration_word_boundaries: tr.map((text, i) => ({ start: i, end: i + text.length, text })),
+    transliteration: tr.join(' '),
   };
 }
 
@@ -897,6 +898,77 @@ test('single-word query still works through the same code path (backwards compat
   const result = doSearch(rules, [rec]);
   assert.is(result.length, 1);
   assert.equal(result[0].matchDetails.wordIndices, [2]);
+});
+
+test('symbol-only transliteration query returns transliteration fieldRanges for highlighting', () => {
+  const rec = makeWordSearchRecord({
+    id: 'SYM_ONLY',
+    norseWords: ['alpha', 'beta'],
+    translitWords: ['foo', '×', 'bar', '×'],
+  });
+  rec.transliteration = 'foo × bar ×';
+
+  const rules = buildPhraseRule({
+    operator: 'contains',
+    transliteration: '×',
+    includeSpecialSymbols: true,
+  });
+  const result = doSearch(rules, [rec]);
+
+  assert.is(result.length, 1, 'Symbol query should match transliteration text');
+  assert.equal(
+    result[0].matchDetails.fieldRanges.transliteration,
+    [[4, 5], [10, 11]],
+    'All matching symbol occurrences should be returned as highlight ranges'
+  );
+});
+
+test('symbol contains with trailing whitespace still highlights terminal symbol occurrence', () => {
+  const rec = makeWordSearchRecord({
+    id: 'SYM_EDGE',
+    norseWords: ['alpha'],
+    translitWords: ['foo', '×', 'bar', '×'],
+  });
+  rec.transliteration = 'foo × bar ×';
+
+  const rules = buildPhraseRule({
+    operator: 'contains',
+    transliteration: '× ',
+    includeSpecialSymbols: true,
+  });
+  const result = doSearch(rules, [rec]);
+
+  assert.is(result.length, 1, 'Symbol contains-search should still match with trailing whitespace in query');
+  assert.equal(
+    result[0].matchDetails.fieldRanges.transliteration,
+    [[4, 5], [10, 11]],
+    'Terminal symbol should be highlighted even when query includes trailing whitespace'
+  );
+});
+
+test('normalization + symbol transliteration returns both wordIndices and transliteration ranges', () => {
+  const rec = makeWordSearchRecord({
+    id: 'SYM_COMBINED',
+    norseWords: ['stone', 'raised', 'memory'],
+    translitWords: ['foo', '×', 'bar'],
+  });
+  rec.transliteration = 'foo × bar';
+
+  const rules = buildPhraseRule({
+    operator: 'contains',
+    normalization: 'raised',
+    transliteration: '×',
+    includeSpecialSymbols: true,
+  });
+  const result = doSearch(rules, [rec]);
+
+  assert.is(result.length, 1, 'Combined query should match when both parts match');
+  assert.equal(result[0].matchDetails.wordIndices, [1], 'Normalization match details are preserved');
+  assert.equal(
+    result[0].matchDetails.fieldRanges.transliteration,
+    [[4, 5]],
+    'Transliteration symbol range should be present for rendering'
+  );
 });
 
 // ── Inscription-level integration tests (Öl 1) ────────────────────────────────

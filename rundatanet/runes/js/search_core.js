@@ -48,7 +48,7 @@ export function stripSpecialSymbols(str) {
     .replace(/&quot;/g, '')
     .replace(/&lt;/g, '')
     .replace(/&gt;/g, '')
-    .replace(/["<>|[\](){}^\u00b4?]/g, '');
+    .replace(/["<>|[\](){}^\u00b4?+:\u00d7\u00b7\u00a4'÷¶]/g, '');
 }
 
 /**

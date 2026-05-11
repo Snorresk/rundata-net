@@ -396,6 +396,50 @@ const doWordSearch = (entry, ruleValue, searchDirection, searchMode, ignoreCase 
     return { match: false, details: null };
   }
 
+  const transliterationHasSymbol = (query) => {
+    if (query === null || query === undefined) return false;
+    return /(&quot;|&lt;|&gt;|["<>|[\](){}^\u00b4?+:\u00d7\u00b7\u00a4'÷¶])/.test(String(query));
+  };
+
+  const getRawTransliterationMatchRanges = (query) => {
+    if (query === null || query === undefined) return [];
+
+    const rawSource = String(entry.transliteration || '');
+    const preparedSource = prepareForComparison(rawSource, ignoreCase);
+    // Canonicalize query the same way phrase searches do:
+    // trim outer whitespace and collapse internal whitespace to single spaces.
+    // This ensures symbol contains-search also catches symbols at string edges.
+    const preparedQuery = prepareForComparison(
+      splitPhraseTokens(String(query)).join(' '),
+      ignoreCase
+    );
+    if (preparedQuery.length === 0) return [];
+
+    switch (searchMode) {
+      case 'exact':
+        return preparedSource === preparedQuery ? [[0, rawSource.length]] : [];
+      case 'beginsWith':
+        return preparedSource.startsWith(preparedQuery) ? [[0, preparedQuery.length]] : [];
+      case 'endsWith': {
+        if (!preparedSource.endsWith(preparedQuery)) return [];
+        const start = preparedSource.length - preparedQuery.length;
+        return [[start, start + preparedQuery.length]];
+      }
+      case 'includes':
+      default: {
+        const ranges = [];
+        let cursor = 0;
+        while (cursor <= preparedSource.length - preparedQuery.length) {
+          const start = preparedSource.indexOf(preparedQuery, cursor);
+          if (start === -1) break;
+          ranges.push([start, start + preparedQuery.length]);
+          cursor = start + preparedQuery.length;
+        }
+        return ranges;
+      }
+    }
+  };
+
   // Build matching windows for a single query against a word list.
   // Returns Map<startIndex, number[]> where value is the window of indices.
   // For single-word queries, windows are of length 1.
@@ -437,6 +481,55 @@ const doWordSearch = (entry, ruleValue, searchDirection, searchMode, ignoreCase 
     indices.forEach(i => matchedSet.add(i));
   };
 
+  const buildResultFromMatchedSet = (extraDetails = null) => {
+    const matchedWords = [...matchedSet].sort((a, b) => a - b);
+    const numFoundNames = matchedWords.reduce((acc, i) => (
+      i < normalWords.length && isPersonalName(normalWords[i]) ? acc + 1 : acc
+    ), 0);
+    const details = matchFound ? {
+      wordIndices: matchedWords,
+      numPersonalNames: numFoundNames
+    } : null;
+    if (details && extraDetails && typeof extraDetails === 'object') {
+      if (extraDetails.fieldRanges && typeof extraDetails.fieldRanges === 'object') {
+        details.fieldRanges = { ...extraDetails.fieldRanges };
+      }
+    }
+    return {
+      match: matchFound,
+      details
+    };
+  };
+
+  // Symbol-aware transliteration search (raw-string mode):
+  // When include symbols is enabled and transliteration query contains symbols,
+  // allow matching against the raw transliteration string. If normalization query
+  // is also present, require both to match but do NOT require same word index.
+  const useRawTransliterationMode = includeSpecialSymbols && transliterationHasSymbol(transliterationQuery);
+  if (useRawTransliterationMode) {
+    const transliterationRanges = getRawTransliterationMatchRanges(transliterationQuery);
+    const transliterationMatches = transliterationRanges.length > 0;
+    if (!normalisationQuery) {
+      return {
+        match: transliterationMatches,
+        details: transliterationMatches ? {
+          fieldRanges: {
+            transliteration: transliterationRanges
+          }
+        } : null
+      };
+    }
+    findWindows(normalWords, normalisationQuery).forEach(win => acceptWindow(win));
+    if (!transliterationMatches || !matchFound) {
+      return { match: false, details: null };
+    }
+    return buildResultFromMatchedSet({
+      fieldRanges: {
+        transliteration: transliterationRanges
+      }
+    });
+  }
+
   if (normalisationQuery && transliterationQuery) {
     // Combined case: both queries must match starting at the same index.
     // Highlighted indices are the union of both windows.
@@ -454,20 +547,7 @@ const doWordSearch = (entry, ruleValue, searchDirection, searchMode, ignoreCase 
     findWindows(transliterationWords, transliterationQuery).forEach(win => acceptWindow(win));
   }
 
-  const matchedWords = [...matchedSet].sort((a, b) => a - b);
-  // Count unique personal names once from the deduped set of matched indices
-  // so that overlapping phrase windows do not inflate the count.
-  const numFoundNames = matchedWords.reduce((acc, i) => (
-    i < normalWords.length && isPersonalName(normalWords[i]) ? acc + 1 : acc
-  ), 0);
-
-  return {
-    match: matchFound,
-    details: matchFound ? {
-      wordIndices: matchedWords,
-      numPersonalNames: numFoundNames
-    } : null
-  };
+  return buildResultFromMatchedSet();
 };
 
 const searchCrossForm = (crosses, ruleValue) => {
@@ -713,7 +793,7 @@ const SYMBOL_AWARE_RULE_IDS = new Set([
   'normalization_norse_to_transliteration',
   'normalization_scandinavian_to_transliteration',
 ]);
-const SPECIAL_SYMBOL_PATTERN = /(&quot;|&lt;|&gt;|["<>|[\](){}^\u00b4?])/;
+const SPECIAL_SYMBOL_PATTERN = /(&quot;|&lt;|&gt;|["<>|[\](){}^\u00b4?+:\u00d7\u00b7\u00a4'÷¶])/;
 
 function trimToken(token) {
   return String(token || '').replace(/^[\s"'`.,;:!?()[\]{}<>]+|[\s"'`.,;:!?()[\]{}<>]+$/g, '');
