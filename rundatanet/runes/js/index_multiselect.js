@@ -2,6 +2,12 @@
 // display options are information which is displayed per inscription.
 const gUserSelectedDisplayKey = "userSelectedDisplay";
 const gShowHeadersKey = "showHeaders";
+const DEFAULT_SELECTED_DISPLAY_VALUES = [
+  'signature_text', 'transliteration', 'normalisation_scandinavian', 'normalisation_norse',
+  'english_translation', 'swedish_translation', 'found_location', 'parish', 'municipality', 'district', 'current_location',
+  'original_site', 'images', 'rune_type', 'carver', 'num_crosses', 'crosses', 'dating', 'style',
+  'material_type', 'material', 'objectInfo', 'references_combined', 'additional'
+];
 
 function storageAvailable(type) {
   let storage;
@@ -29,11 +35,8 @@ function storageAvailable(type) {
 }
 
 export function getUserSelectedDisplay() {
-  const defaults = ['signature_text', 'transliteration', 'english_translation', 'found_location',
-    'parish', 'municipality', 'district', 'current_location', 'images'];
-
   if (!storageAvailable('localStorage')) {
-    return defaults;
+    return DEFAULT_SELECTED_DISPLAY_VALUES;
   }
 
   try {
@@ -45,7 +48,7 @@ export function getUserSelectedDisplay() {
     console.error('Error while reading user selected display from local storage:', e);
   }
 
-  return defaults;
+  return DEFAULT_SELECTED_DISPLAY_VALUES;
 }
 
 export function saveUserSelectedDisplay(selectedValues = null) {
@@ -113,15 +116,8 @@ export function resortDisplayOptions() {
 }
 
 export function initMultiselect() {
-  const defaultSelectedValues = [
-    'signature_text', 'transliteration', 'normalisation_scandinavian', 'normalisation_norse',
-    'english_translation', 'swedish_translation', 'found_location', 'parish', 'municipality', 'district', 'current_location',
-    'original_site', 'images', 'rune_type', 'carver', 'num_crosses', 'crosses', 'dating', 'style',
-    'material_type', 'material', 'objectInfo', 'references_combined', 'additional'
-  ];
-
   const savedSelected = localStorage.getItem(gUserSelectedDisplayKey);
-  const selectedValues = savedSelected ? JSON.parse(savedSelected) : defaultSelectedValues;
+  const selectedValues = savedSelected ? JSON.parse(savedSelected) : DEFAULT_SELECTED_DISPLAY_VALUES;
   const savedShowHeaders = localStorage.getItem(gShowHeadersKey);
   const showHeaders = savedShowHeaders ? savedShowHeaders === 'true' : true;
 
@@ -158,7 +154,7 @@ export function initMultiselect() {
     const savedShowHeaders = localStorage.getItem(gShowHeadersKey);
     const showHeaders = savedShowHeaders ? savedShowHeaders === 'true' : true;
     const savedSelected = localStorage.getItem(gUserSelectedDisplayKey);
-    const selectedValues = savedSelected ? JSON.parse(savedSelected) : defaultSelectedValues;
+    const selectedValues = savedSelected ? JSON.parse(savedSelected) : DEFAULT_SELECTED_DISPLAY_VALUES;
     setMultiselectOptions(selectedValues, showHeaders);
   });
 
