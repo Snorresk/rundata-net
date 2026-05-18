@@ -52,6 +52,12 @@ export const schemaFieldsInfo = [
     },
   },
   {
+    schemaName: 'coordination',
+    text: {
+      en: 'Coordinates',
+    },
+  },
+  {
     schemaName: 'parish_code',
     text: {
       en: 'Parish code',
@@ -479,6 +485,20 @@ export function convertDbToKeyMap(db) {
 
     // Populate the textual cross form field so "Cross form" can render content.
     objSignature['cross_form'] = crossFormByMetaId[metaId] || "";
+
+    // Build coordination text for main display.
+    const hasOriginalCoordinates = objSignature.latitude && objSignature.longitude
+      && parseFloat(objSignature.latitude) !== 0 && parseFloat(objSignature.longitude) !== 0;
+    const hasCurrentCoordinates = objSignature.present_latitude && objSignature.present_longitude
+      && parseFloat(objSignature.present_latitude) !== 0 && parseFloat(objSignature.present_longitude) !== 0;
+    const coordinationParts = [];
+    if (hasOriginalCoordinates) {
+      coordinationParts.push(`Oldest known latitude and longitude: ${objSignature.latitude}, ${objSignature.longitude}`);
+    }
+    if (hasCurrentCoordinates) {
+      coordinationParts.push(`Current latitude and longitude: ${objSignature.present_latitude}, ${objSignature.present_longitude}`);
+    }
+    objSignature['coordination'] = coordinationParts.join(' | ');
 
     /////////////////////////////////////////
     // Handle exceptions for word searches
@@ -1113,6 +1133,23 @@ export function inscriptions2markup(inscriptions) {
           }
         }
         paragraph += '</tbody></table>';
+        continue;
+      }
+
+      if (columnName === "coordination") {
+        const lines = columnData
+          .split('|')
+          .map(item => item.trim())
+          .filter(item => item.length > 0);
+
+        if (lines.length === 0) {
+          if (showHeaders) {
+            paragraph += '<i>Absent, not in the database.</i>';
+          }
+          continue;
+        }
+
+        paragraph += `<span class="${cssStyle}">${lines.map(line => escapeHtml(line)).join('<br>')}</span>`;
         continue;
       }
 

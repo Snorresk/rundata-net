@@ -1201,13 +1201,20 @@ document.addEventListener('DOMContentLoaded', function() {
     gExportInProgress = true;
     showLoading();
 
-    // Create a mapping of column names to human-readable names
-    const userSelectedFields =  getUserSelectedDisplay();
-    const columns = userSelectedFields.concat(['latitude', 'longitude', 'present_latitude', 'present_longitude']);
+    // Create a mapping of column names to human-readable names.
+    // Export coordinates as two dedicated columns, not the combined display field.
+    const userSelectedFields = getUserSelectedDisplay().filter(field => field !== 'coordination');
+    const columns = userSelectedFields.concat(['latitude', 'present_latitude']);
     const columnMap = {};
 
     columns.forEach(column => {
-      columnMap[column] = getHumanName(column);
+      if (column === 'latitude') {
+        columnMap[column] = 'Oldest known coordinates';
+      } else if (column === 'present_latitude') {
+        columnMap[column] = 'Current coordinates';
+      } else {
+        columnMap[column] = getHumanName(column);
+      }
     });
 
     // Get the current search rules to include in the export

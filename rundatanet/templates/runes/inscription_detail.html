@@ -646,18 +646,6 @@
               {% if meta.original_site %}
               <div class="def-row"><dt class="def-term">Original site</dt><dd class="def-detail">{{ meta.original_site }}</dd></div>
               {% endif %}
-              {% if meta.latitude and meta.longitude and meta.latitude != 0 and meta.longitude != 0 %}
-              <div class="def-row">
-                <dt class="def-term">Oldest known coordinates</dt>
-                <dd class="def-detail">{{ meta.latitude }}, {{ meta.longitude }}</dd>
-              </div>
-              {% endif %}
-              {% if meta.present_latitude and meta.present_longitude and meta.present_latitude != 0 and meta.present_longitude != 0 %}
-              <div class="def-row">
-                <dt class="def-term">Current coordinates</dt>
-                <dd class="def-detail">{{ meta.present_latitude }}, {{ meta.present_longitude }}</dd>
-              </div>
-              {% endif %}
             </dl>
           </section>
 
@@ -672,6 +660,26 @@
             </dl>
           </section>
         </div>
+
+        {% if meta.latitude and meta.longitude and meta.latitude != 0 and meta.longitude != 0 or meta.present_latitude and meta.present_longitude and meta.present_latitude != 0 and meta.present_longitude != 0 %}
+        <section class="section">
+          <h2 class="section-title">Coordinations</h2>
+          <dl class="def-list">
+            {% if meta.latitude and meta.longitude and meta.latitude != 0 and meta.longitude != 0 %}
+            <div class="def-row">
+              <dt class="def-term">Oldest known latitude and longitude</dt>
+              <dd class="def-detail">{{ meta.latitude }}, {{ meta.longitude }}</dd>
+            </div>
+            {% endif %}
+            {% if meta.present_latitude and meta.present_longitude and meta.present_latitude != 0 and meta.present_longitude != 0 %}
+            <div class="def-row">
+              <dt class="def-term">Current latitude and longitude</dt>
+              <dd class="def-detail">{{ meta.present_latitude }}, {{ meta.present_longitude }}</dd>
+            </div>
+            {% endif %}
+          </dl>
+        </section>
+        {% endif %}
 
         {# ── Texts ── #}
         {% if data.runic_texts %}

@@ -82,6 +82,13 @@ function processDataForExcel(inscriptions, columns) {
       const columnName = columns[j];
       let colData = inscription[columnName];
 
+      // Coordinates in export should be two dedicated columns with plain values.
+      if (columnName === 'latitude') {
+        colData = formatCoordinates(inscription.latitude, inscription.longitude);
+      } else if (columnName === 'present_latitude') {
+        colData = formatCoordinates(inscription.present_latitude, inscription.present_longitude);
+      }
+
       // Special handling for null values
       if (colData === null || colData === undefined) {
         colData = '';
@@ -117,6 +124,15 @@ function processDataForExcel(inscriptions, columns) {
   }
 
   return result;
+}
+
+function formatCoordinates(latitude, longitude) {
+  const lat = Number(latitude);
+  const lon = Number(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat === 0 || lon === 0) {
+    return '';
+  }
+  return `${latitude}, ${longitude}`;
 }
 
 /**
