@@ -5,7 +5,7 @@ const gShowHeadersKey = "showHeaders";
 const DEFAULT_SELECTED_DISPLAY_VALUES = [
   'signature_text', 'transliteration', 'normalisation_scandinavian', 'normalisation_norse',
   'english_translation', 'swedish_translation', 'found_location', 'parish', 'municipality', 'district', 'current_location',
-  'original_site', 'images', 'rune_type', 'carver', 'num_crosses', 'crosses', 'dating', 'style',
+  'original_site', 'images', 'rune_type', 'carver', 'num_crosses', 'cross_form', 'dating', 'style',
   'material_type', 'material', 'objectInfo', 'references_combined', 'additional'
 ];
 
@@ -66,7 +66,9 @@ export function saveUserSelectedDisplay(selectedValues = null) {
 
 export function getUserSelectedFields() {
   const selectedValues = getUserSelectedDisplay();
-  return selectedValues.map(value => schemaFieldsInfo.find(prop => prop.schemaName === value));
+  return selectedValues
+    .map(value => schemaFieldsInfo.find(prop => prop.schemaName === value))
+    .filter(Boolean);
 }
 
 

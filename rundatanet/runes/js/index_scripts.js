@@ -174,12 +174,6 @@ export const schemaFieldsInfo = [
     },
   },
   {
-    schemaName: 'crosses',
-    text: {
-      en: 'Cross',
-    },
-  },
-  {
     schemaName: 'images',
     text: {
       en: 'Images',
@@ -445,6 +439,20 @@ export function convertDbToKeyMap(db) {
   const presentLongitudeColumn = columns.indexOf('present_longitude');
   const metaColumn = columns.indexOf('id');
   const wordColumns = ['transliteration', 'normalisation_norse', 'normalisation_scandinavian'];
+  const crossFormByMetaId = {};
+
+  // Textual cross-form data (used by "Cross form" display field).
+  // This view is expected to exist in normal DB builds; if not, we keep it empty.
+  try {
+    const crossFormContent = db.exec("SELECT meta_id, crosses_textual FROM meta_with_crosses_textual");
+    if (crossFormContent.length > 0) {
+      crossFormContent[0].values.forEach(([metaId, crossesTextual]) => {
+        crossFormByMetaId[metaId] = crossesTextual || "";
+      });
+    }
+  } catch (e) {
+    // no-op: leave crossFormByMetaId empty
+  }
 
   const allDbImages = fetchAllImages(db);
   let numDiffers = 0;
@@ -468,6 +476,9 @@ export function convertDbToKeyMap(db) {
         objSignature[`${columnName}_word_boundaries`] = getWordBoundaries(objSignature[`${columnName}_html`], true);
       }
     }
+
+    // Populate the textual cross form field so "Cross form" can render content.
+    objSignature['cross_form'] = crossFormByMetaId[metaId] || "";
 
     /////////////////////////////////////////
     // Handle exceptions for word searches
@@ -1050,17 +1061,18 @@ export function inscriptions2markup(inscriptions) {
         continue;
       }
 
-      if ((columnData == '' || columnData == null) && showHeaders) {
-        paragraph += '<i>Absent, not in the database.</i>';
-        continue;
-      }
-
-      if (columnName === "crosses") {
-        if (inscriptionData['num_crosses'] == 0) {
+      if (columnName === "cross_form") {
+        const hasCrossText = !!(columnData && columnData.trim() !== '');
+        if (!hasCrossText && inscriptionData['num_crosses'] == 0) {
           if (showHeaders) {
             paragraph += '<i>No crosses.</i>';
           }
           continue;
+        }
+
+        if (hasCrossText) {
+          paragraph += `<span class="${cssStyle}">${escapeHtml(columnData)}</span>`;
+          paragraph += '<br>';
         }
 
         paragraph += '<table class="crosses" border="1">';
@@ -1101,6 +1113,11 @@ export function inscriptions2markup(inscriptions) {
           }
         }
         paragraph += '</tbody></table>';
+        continue;
+      }
+
+      if ((columnData == '' || columnData == null) && showHeaders) {
+        paragraph += '<i>Absent, not in the database.</i>';
         continue;
       }
 

@@ -198,7 +198,7 @@ class TestInscriptionDetailView(TestCase):
         content = response.content.decode()
 
         assert 'id="detailMap"' in content
-        assert "Original coordinates" in content
+        assert "Oldest known coordinates" in content
         assert "Current coordinates" in content
         assert "Original or found location" in content
         assert "Current location" in content
