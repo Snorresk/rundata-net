@@ -24,11 +24,26 @@ export function initMap(divId, center = [56.607512, 16.439838], zoom = 8) {
   // add location control to global name space for testing only
   // on a production site, omit the "lc = "!
   L.control.locate({
+    locateOptions: {
+      enableHighAccuracy: true,
+      timeout: 12000,
+      maximumAge: 60000,
+    },
     strings: {
-      title: "My location"
+      title: "My location",
     }
   })
   .addTo(map);
+
+  map.on('locationerror', function(event) {
+    const details = getGeoLocationErrorDetails(event);
+    const message = `Geolocation error: ${details}`;
+    if (typeof showAlert === 'function') {
+      showAlert(message);
+    } else {
+      alert(message);
+    }
+  });
 
   const markers = L.markerClusterGroup({
     showCoverageOnHover: true,
@@ -41,6 +56,26 @@ export function initMap(divId, center = [56.607512, 16.439838], zoom = 8) {
   markers.addTo(map);
 
   return {map, markers};
+}
+
+function getGeoLocationErrorDetails(event) {
+  const code = event && typeof event.code === 'number' ? event.code : null;
+  const browserMessage = event && event.message ? String(event.message) : '';
+
+  if (code === 1) {
+    return 'permission denied. Allow location access for this site in browser settings and reload.';
+  }
+  if (code === 2) {
+    return 'position unavailable. Check GPS/network and try again.';
+  }
+  if (code === 3) {
+    return 'timeout. Move to better coverage and try again.';
+  }
+
+  if (browserMessage) {
+    return browserMessage;
+  }
+  return 'unknown issue. Check site permission and connection, then try again.';
 }
 
 export function onHideMapClicked(mapContainerId, menuItemId) {
