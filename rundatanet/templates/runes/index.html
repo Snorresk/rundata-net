@@ -222,6 +222,32 @@
         #builderContainer {
           display: none !important;
         }
+
+        body.mobile-map-fullscreen .rundata-navbar,
+        body.mobile-map-fullscreen #mainPanel,
+        body.mobile-map-fullscreen #aiAssistantContainer {
+          display: none !important;
+        }
+        body.mobile-map-fullscreen #mapDisplayWrapper {
+          position: fixed !important;
+          inset: 0 !important;
+          z-index: 5000 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          width: 100vw !important;
+          max-width: 100vw !important;
+          flex: none !important;
+        }
+        body.mobile-map-fullscreen #miniQueryBuilder,
+        body.mobile-map-fullscreen #mHideMap {
+          display: none !important;
+        }
+        body.mobile-map-fullscreen #mapDisplay {
+          height: 100vh !important;
+          min-height: 100vh !important;
+          max-height: 100vh !important;
+          margin: 0 !important;
+        }
       }
       #mapDisplayWrapper {
         position: relative;
@@ -615,7 +641,10 @@
             <label class="form-label" for="miniLocationInput">Any location</label>
             <input type="text" class="form-control form-control-sm" id="miniLocationInput" placeholder="e.g. Sigtuna">
           </div>
-          <button type="button" class="btn btn-success btn-sm" id="btnMiniSearch">Search</button>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-success btn-sm" id="btnMiniSearch">Search</button>
+            <button type="button" class="btn btn-danger btn-sm" id="btnMiniResetSearch">Delete search</button>
+          </div>
         </div>
         <button type="button" class="btn btn-outline-secondary btn-sm map-corner-toggle" id="mHideMap" aria-label="Hide map" title="Hide map">×</button>
         <div id="mapDisplay" class="my-fixed-height"></div>
@@ -1146,6 +1175,22 @@ function applyWindowAlignments() {
   alignTopButtonsToMainWindow();
 }
 
+function updateMobileFullscreenLayout() {
+  if (!window.matchMedia('(max-width: 767.98px)').matches) {
+    document.body.classList.remove('mobile-map-fullscreen');
+    return;
+  }
+  const mapEl = document.getElementById('mapDisplay');
+  const isFullscreen = !!(
+    mapEl && (
+      mapEl.classList.contains('leaflet-fullscreen-on') ||
+      mapEl.classList.contains('leaflet-pseudo-fullscreen') ||
+      document.fullscreenElement === mapEl
+    )
+  );
+  document.body.classList.toggle('mobile-map-fullscreen', isFullscreen);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   // Initialization happens in 3 steps:
   // 1. code here on page load
@@ -1181,6 +1226,7 @@ document.addEventListener('DOMContentLoaded', function() {
   gMyMap.on('fullscreenchange enterFullscreen exitFullscreen', function() {
     // Force tile/layout recalculation after fullscreen toggle to avoid grey bands.
     setTimeout(() => {
+      updateMobileFullscreenLayout();
       gMyMap.invalidateSize();
     }, 50);
   });
@@ -1195,8 +1241,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     applyWindowAlignments();
   });
+  updateMobileFullscreenLayout();
   applyWindowAlignments();
-  window.addEventListener('resize', applyWindowAlignments);
+  window.addEventListener('resize', () => {
+    updateMobileFullscreenLayout();
+    applyWindowAlignments();
+  });
 
   // Configure jsTree even before we have the data
   $("#jstree")
@@ -1306,6 +1356,9 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   document.getElementById('btnMiniSearch').addEventListener('click', function() {
     document.getElementById('btnSearch').click();
+  });
+  document.getElementById('btnMiniResetSearch').addEventListener('click', function() {
+    document.getElementById('btnResetSearch').click();
   });
   const resultsIoTitle = document.getElementById('divResultsIoLabel');
   const resultsExportSection = document.getElementById('resultsExportSection');

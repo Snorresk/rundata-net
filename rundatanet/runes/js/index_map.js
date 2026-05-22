@@ -6,8 +6,14 @@
 // Initialize the map on the user-provided div with a given center and zoom level
 // Default center is [56.607512, 16.439838] and default zoom is 8.
 export function initMap(divId, center = [56.607512, 16.439838], zoom = 8) {
+  const isMobile = isMobileDevice();
   const map = L.map(divId, {
     fullscreenControl: true,
+    // Use pseudo-fullscreen only on mobile to avoid desktop behavior changes.
+    fullscreenControlOptions: isMobile ? {
+      forcePseudoFullscreen: true,
+      pseudoFullscreen: true,
+    } : {},
   }).setView(center, zoom);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
