@@ -2,7 +2,7 @@
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 # More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
 
-name: Build and deploy Python app to Azure Web App - rundatanet
+name: Build and deploy Python app to Azure Web App - rundatanet-sk
 
 on:
   push:
@@ -35,12 +35,18 @@ jobs:
         with:
           name: python-app
 
+      - name: Login to Azure
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_4895EBF5D3AE4BDC820440B298035364 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_3999A98BF6384395B5406423B47C8F35 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_41AA8B472AD34FB39D78B7031B76D13A }}
+
       # Deploy the zip directly; no need to unpack it on the runner.
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'rundatanet'
+          app-name: 'rundatanet-sk'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_9BC9A973904F4593A99A1038DE223027 }}
           package: release.zip
