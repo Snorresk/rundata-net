@@ -58,17 +58,9 @@ function isMobileDevice() {
 }
 
 function getGeoIntentURL(lat, lng) {
-  if (typeof isSafari !== 'function') {
-    console.error('isSafari function is not defined');
-    throw new Error('isSafari function is not defined');
-  }
-
-  if (isSafari()) {
-    return `http://maps.apple.com/?daddr=${lat},${lng}`;
-  }
-  else {
-    return `geo:${lat},${lng}?q=${lat},${lng}`;
-  }
+  // Use Google Maps universal directions URL so mobile users (including iPhone)
+  // can open navigation consistently.
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
 }
 
 function inscription2marker(inscriptionData, lat, lon, leaflet=L) {
@@ -177,4 +169,3 @@ export function showMarkers({
     mapObject.fitBounds(markersLatLon);
   }
 }
-
