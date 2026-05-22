@@ -24,24 +24,40 @@ const optGroups = {
   "gr_more_info": "More information",
 };
 
+function ensureTextOptionsRow(rule) {
+  const $container = rule.$el.find('.rule-value-container');
+  let $row = $container.find('[data-text-options-row=rule]').first();
+  if ($row.length > 0) {
+    return $row;
+  }
+
+  const $personalModeInput = $container.find('[name$=_personalNamesMode]').first();
+  if ($personalModeInput.length > 0) {
+    $row = $personalModeInput.closest('.mt-2');
+    $row.attr('data-text-options-row', 'rule');
+    return $row;
+  }
+
+  $row = $('<div class="mt-2" data-text-options-row="rule"></div>');
+  $container.append($row);
+  return $row;
+}
+
 // QueryBuilder plugin for case-(in)sensitive search
 $.fn.queryBuilder.define('case-rule', function(options) {
   let self = this;
 
   // Bind events
   this.on('afterInit', function() {
-    self.$el.on('click.queryBuilder', '[data-case=rule]', function () {
+    self.$el.on('change.queryBuilder', '[data-case=rule]', function () {
       let $rule = $(this).closest($.fn.queryBuilder.constructor.selectors.rule_container);
       let rule = self.getModel($rule);
-      rule.ignoreCase = !rule.ignoreCase;
-      // console.log(`afterInit: ${rule.id}, ignoreCase: ${rule.ignoreCase}`);
-      // print rule configuration
-      // console.log(rule);
+      // Checked "match case" means case-sensitive search.
+      rule.ignoreCase = !$(this).is(':checked');
     });
 
     self.model.on('update', function(e, node, field) {
       if (node instanceof $.fn.queryBuilder.constructor.Rule && field === 'ignoreCase') {
-        // console.log(`update: ${node.id}, ignoreCase: ${node.ignoreCase}`);
         self.updateRuleCaseIgnore(node);
       }
     });
@@ -49,7 +65,8 @@ $.fn.queryBuilder.define('case-rule', function(options) {
 
   // Init case-sensitivity property
   this.on('afterAddRule', function(e, rule) {
-    rule.__.ignoreCase = false;
+    // Default behavior requested: ignore case.
+    rule.__.ignoreCase = true;
   });
 
   this.on('afterCreateRuleInput.filter', function(e, rule) {
@@ -60,34 +77,24 @@ $.fn.queryBuilder.define('case-rule', function(options) {
       'english_translation',
       'swedish_translation',
     ];
-    // Filters where case-insensitive search is the default.
-    const ignoreCaseByDefaultIds = [
-      'english_translation',
-      'swedish_translation',
-    ];
-    if (rule.filter && caseRuleFilterIds.includes(rule.filter.id)) {
-      rule.$el.find(cssSelectorPluginCaseRule).show();
-      if (ignoreCaseByDefaultIds.includes(rule.filter.id) && rule.ignoreCase !== true) {
-        rule.ignoreCase = true;
-      }
+    const shouldShow = rule.filter && caseRuleFilterIds.includes(rule.filter.id);
+    const $row = ensureTextOptionsRow(rule);
+    if ($row.find(cssSelectorPluginCaseRule).length === 0) {
+      $row.append(
+        `<div class="form-check form-check-inline" data-case-container="rule">
+          <input class="form-check-input" type="checkbox" data-case="rule" id="${rule.id}_matchCaseInput">
+          <label class="form-check-label" for="${rule.id}_matchCaseInput">Match case</label>
+        </div>`
+      );
+    }
+
+    if (shouldShow) {
+      $row.find(cssSelectorPluginCaseRule).show();
+      self.updateRuleCaseIgnore(rule);
     } else {
-      rule.$el.find(cssSelectorPluginCaseRule).hide();
+      $row.find(cssSelectorPluginCaseRule).hide();
     }
   });
-
-  // Modify templates
-  if (!options.disable_template) {
-    this.on('getRuleTemplate.filter', function(h) {
-      var $h = $($.parseHTML(h.value));
-      $h.find($.fn.queryBuilder.constructor.selectors.rule_actions).prepend(
-          '\n<button type="button" class="btn btn-xs btn-default" active data-case="rule">' +
-          '<i class="' + options.icon_checked + '"></i> ' +
-          '<span class="case-rule-text">' + self.translate('Match case') + '</span>' +
-          '</button>'
-      );
-      h.value = $h.prop('outerHTML');
-    });
-  }
 
   // Export "case-rule" to JSON
   this.on('ruleToJson.filter', function(e, rule) {
@@ -107,13 +114,13 @@ $.fn.queryBuilder.define('case-rule', function(options) {
     }
   });
 }, {
-  icon_checked: 'bi bi-check2-square',
-  disable_template: false
+  disable_template: true
 });
 
 $.fn.queryBuilder.constructor.utils.defineModelProperties($.fn.queryBuilder.constructor.Rule, ['ignoreCase']);
 
-const cssSelectorPluginCaseRule = $.fn.queryBuilder.constructor.selectors.rule_actions + ' [data-case=rule]';
+const cssSelectorPluginCaseRule = '[data-case-container=rule]';
+const cssSelectorPluginCaseRuleInput = cssSelectorPluginCaseRule + ' [data-case=rule]';
 
 $.fn.queryBuilder.extend({
   /**
@@ -123,9 +130,7 @@ $.fn.queryBuilder.extend({
    * @private
    */
   updateRuleCaseIgnore: function(rule) {
-      // console.log(`updateRuleCaseIgnore: ${rule.id}, ignoreCase: ${rule.ignoreCase}`);
-      rule.$el.find(cssSelectorPluginCaseRule + "> .case-rule-text")
-          .text(this.translate(rule.ignoreCase ? 'Ignore case' : 'Match case'));
+      rule.$el.find(cssSelectorPluginCaseRuleInput).prop('checked', !rule.ignoreCase);
 
       /**
        * After the rule's case selector has been modified
@@ -154,10 +159,10 @@ $.fn.queryBuilder.define('special-symbols-rule', function(options) {
   let self = this;
 
   this.on('afterInit', function() {
-    self.$el.on('click.queryBuilder', '[data-special-symbols=rule]', function() {
+    self.$el.on('change.queryBuilder', '[data-special-symbols=rule]', function() {
       let $rule = $(this).closest($.fn.queryBuilder.constructor.selectors.rule_container);
       let rule = self.getModel($rule);
-      rule.includeSpecialSymbols = !rule.includeSpecialSymbols;
+      rule.includeSpecialSymbols = $(this).is(':checked');
     });
 
     self.model.on('update', function(e, node, field) {
@@ -173,25 +178,24 @@ $.fn.queryBuilder.define('special-symbols-rule', function(options) {
   });
 
   this.on('afterCreateRuleInput.filter', function(e, rule) {
-    if (rule.filter && specialSymbolsFilterIds.includes(rule.filter.id)) {
-      rule.$el.find(cssSelectorPluginSpecialSymbolsRule).show();
+    const shouldShow = rule.filter && specialSymbolsFilterIds.includes(rule.filter.id);
+    const $row = ensureTextOptionsRow(rule);
+    if ($row.find(cssSelectorPluginSpecialSymbolsRule).length === 0) {
+      $row.append(
+        `<div class="form-check form-check-inline" data-special-symbols-container="rule">
+          <input class="form-check-input" type="checkbox" data-special-symbols="rule" id="${rule.id}_includeSymbolsInput">
+          <label class="form-check-label" for="${rule.id}_includeSymbolsInput">Include symbols</label>
+        </div>`
+      );
+    }
+
+    if (shouldShow) {
+      $row.find(cssSelectorPluginSpecialSymbolsRule).show();
+      self.updateRuleSpecialSymbols(rule);
     } else {
-      rule.$el.find(cssSelectorPluginSpecialSymbolsRule).hide();
+      $row.find(cssSelectorPluginSpecialSymbolsRule).hide();
     }
   });
-
-  if (!options.disable_template) {
-    this.on('getRuleTemplate.filter', function(h) {
-      var $h = $($.parseHTML(h.value));
-      $h.find($.fn.queryBuilder.constructor.selectors.rule_actions).prepend(
-          '\n<button type="button" class="btn btn-xs btn-default" data-special-symbols="rule">' +
-          '<i class="' + options.icon + '"></i> ' +
-          '<span class="special-symbols-rule-text">' + self.translate('Ignore symbols') + '</span>' +
-          '</button>'
-      );
-      h.value = $h.prop('outerHTML');
-    });
-  }
 
   this.on('ruleToJson.filter', function(e, rule) {
     e.value.includeSpecialSymbols = rule.includeSpecialSymbols;
@@ -201,18 +205,17 @@ $.fn.queryBuilder.define('special-symbols-rule', function(options) {
     e.value.includeSpecialSymbols = !!json.includeSpecialSymbols;
   });
 }, {
-  icon: 'bi bi-asterisk',
-  disable_template: false
+  disable_template: true
 });
 
 $.fn.queryBuilder.constructor.utils.defineModelProperties($.fn.queryBuilder.constructor.Rule, ['includeSpecialSymbols']);
 
-const cssSelectorPluginSpecialSymbolsRule = $.fn.queryBuilder.constructor.selectors.rule_actions + ' [data-special-symbols=rule]';
+const cssSelectorPluginSpecialSymbolsRule = '[data-special-symbols-container=rule]';
+const cssSelectorPluginSpecialSymbolsRuleInput = cssSelectorPluginSpecialSymbolsRule + ' [data-special-symbols=rule]';
 
 $.fn.queryBuilder.extend({
   updateRuleSpecialSymbols: function(rule) {
-    rule.$el.find(cssSelectorPluginSpecialSymbolsRule + ' > .special-symbols-rule-text')
-        .text(this.translate(rule.includeSpecialSymbols ? 'Include symbols' : 'Ignore symbols'));
+    rule.$el.find(cssSelectorPluginSpecialSymbolsRuleInput).prop('checked', !!rule.includeSpecialSymbols);
     this.trigger('rulesChanged');
   }
 });
@@ -579,15 +582,15 @@ function createWordSearchRule(config) {
           <div class="mt-2">
             <div class="form-check form-check-inline">
               <input class="form-check-input" type="radio" name="${name}_personalNamesMode" value="includeAll" id="${name}_includeAddInput" checked>
-              <label class="form-check-label" for="${name}_includeAddInput">Include personal names</label>
+              <label class="form-check-label" for="${name}_includeAddInput">Include names</label>
             </div>
             <div class="form-check form-check-inline">
               <input class="form-check-input" type="radio" name="${name}_personalNamesMode" value="excludeNames" id="${name}_excludeNamesInput">
-              <label class="form-check-label" for="${name}_excludeNamesInput">Exclude personal names</label>
+              <label class="form-check-label" for="${name}_excludeNamesInput">Exclude names</label>
             </div>
             <div class="form-check form-check-inline">
               <input class="form-check-input" type="radio" name="${name}_personalNamesMode" value="namesOnly" id="${name}_namesOnlyInput">
-              <label class="form-check-label" for="${name}_namesOnlyInput">Personal names only</label>
+              <label class="form-check-label" for="${name}_namesOnlyInput">Only names</label>
             </div>
           </div>
         </div>
@@ -720,7 +723,7 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
     prepareAutoComplete('swedish_translation', dbMap, getHumanName, { optgroup: 'gr_texts', operators: ["contains", "not_contains", "is_empty", 'is_not_empty'] }),
     {
       id: 'has_personal_name',
-      label: "Contains personal names",
+      label: "Contains names",
       field: 'num_names',
       optgroup: 'gr_texts',
       type: 'integer',

@@ -5,6 +5,7 @@ import {
   isPersonalName,
   prepareForComparison,
   splitPhraseTokens,
+  stripSpecialSymbols,
 } from './search_core.js';
 
 export {
@@ -378,6 +379,67 @@ const doWordSearch = (entry, ruleValue, searchDirection, searchMode, ignoreCase 
   const normalWords = entry[`${normalizationField}_words`];
   const transliterationWords = entry['transliteration_words'];
 
+  const hasEffectiveToken = (query) => {
+    if (query === null || query === undefined) return false;
+    const tokens = splitPhraseTokens(String(query));
+    if (tokens.length === 0) return false;
+    if (includeSpecialSymbols) return tokens.some(token => token.length > 0);
+    return tokens.some(token => stripSpecialSymbols(token).length > 0);
+  };
+
+  // If symbols are excluded and the query is made only of stripped symbols,
+  // prevent accidental "match everything" behavior via includes('').
+  if (normalisationQuery && !hasEffectiveToken(normalisationQuery)) {
+    return { match: false, details: null };
+  }
+  if (transliterationQuery && !hasEffectiveToken(transliterationQuery)) {
+    return { match: false, details: null };
+  }
+
+  const transliterationHasSymbol = (query) => {
+    if (query === null || query === undefined) return false;
+    return /(&quot;|&lt;|&gt;|["<>|[\](){}^\u00b4?+:\u00d7\u00b7\u00a4'÷¶])/.test(String(query));
+  };
+
+  const getRawTransliterationMatchRanges = (query) => {
+    if (query === null || query === undefined) return [];
+
+    const rawSource = String(entry.transliteration || '');
+    const preparedSource = prepareForComparison(rawSource, ignoreCase);
+    // Canonicalize query the same way phrase searches do:
+    // trim outer whitespace and collapse internal whitespace to single spaces.
+    // This ensures symbol contains-search also catches symbols at string edges.
+    const preparedQuery = prepareForComparison(
+      splitPhraseTokens(String(query)).join(' '),
+      ignoreCase
+    );
+    if (preparedQuery.length === 0) return [];
+
+    switch (searchMode) {
+      case 'exact':
+        return preparedSource === preparedQuery ? [[0, rawSource.length]] : [];
+      case 'beginsWith':
+        return preparedSource.startsWith(preparedQuery) ? [[0, preparedQuery.length]] : [];
+      case 'endsWith': {
+        if (!preparedSource.endsWith(preparedQuery)) return [];
+        const start = preparedSource.length - preparedQuery.length;
+        return [[start, start + preparedQuery.length]];
+      }
+      case 'includes':
+      default: {
+        const ranges = [];
+        let cursor = 0;
+        while (cursor <= preparedSource.length - preparedQuery.length) {
+          const start = preparedSource.indexOf(preparedQuery, cursor);
+          if (start === -1) break;
+          ranges.push([start, start + preparedQuery.length]);
+          cursor = start + preparedQuery.length;
+        }
+        return ranges;
+      }
+    }
+  };
+
   // Build matching windows for a single query against a word list.
   // Returns Map<startIndex, number[]> where value is the window of indices.
   // For single-word queries, windows are of length 1.
@@ -419,6 +481,55 @@ const doWordSearch = (entry, ruleValue, searchDirection, searchMode, ignoreCase 
     indices.forEach(i => matchedSet.add(i));
   };
 
+  const buildResultFromMatchedSet = (extraDetails = null) => {
+    const matchedWords = [...matchedSet].sort((a, b) => a - b);
+    const numFoundNames = matchedWords.reduce((acc, i) => (
+      i < normalWords.length && isPersonalName(normalWords[i]) ? acc + 1 : acc
+    ), 0);
+    const details = matchFound ? {
+      wordIndices: matchedWords,
+      numPersonalNames: numFoundNames
+    } : null;
+    if (details && extraDetails && typeof extraDetails === 'object') {
+      if (extraDetails.fieldRanges && typeof extraDetails.fieldRanges === 'object') {
+        details.fieldRanges = { ...extraDetails.fieldRanges };
+      }
+    }
+    return {
+      match: matchFound,
+      details
+    };
+  };
+
+  // Symbol-aware transliteration search (raw-string mode):
+  // When include symbols is enabled and transliteration query contains symbols,
+  // allow matching against the raw transliteration string. If normalization query
+  // is also present, require both to match but do NOT require same word index.
+  const useRawTransliterationMode = includeSpecialSymbols && transliterationHasSymbol(transliterationQuery);
+  if (useRawTransliterationMode) {
+    const transliterationRanges = getRawTransliterationMatchRanges(transliterationQuery);
+    const transliterationMatches = transliterationRanges.length > 0;
+    if (!normalisationQuery) {
+      return {
+        match: transliterationMatches,
+        details: transliterationMatches ? {
+          fieldRanges: {
+            transliteration: transliterationRanges
+          }
+        } : null
+      };
+    }
+    findWindows(normalWords, normalisationQuery).forEach(win => acceptWindow(win));
+    if (!transliterationMatches || !matchFound) {
+      return { match: false, details: null };
+    }
+    return buildResultFromMatchedSet({
+      fieldRanges: {
+        transliteration: transliterationRanges
+      }
+    });
+  }
+
   if (normalisationQuery && transliterationQuery) {
     // Combined case: both queries must match starting at the same index.
     // Highlighted indices are the union of both windows.
@@ -436,20 +547,7 @@ const doWordSearch = (entry, ruleValue, searchDirection, searchMode, ignoreCase 
     findWindows(transliterationWords, transliterationQuery).forEach(win => acceptWindow(win));
   }
 
-  const matchedWords = [...matchedSet].sort((a, b) => a - b);
-  // Count unique personal names once from the deduped set of matched indices
-  // so that overlapping phrase windows do not inflate the count.
-  const numFoundNames = matchedWords.reduce((acc, i) => (
-    i < normalWords.length && isPersonalName(normalWords[i]) ? acc + 1 : acc
-  ), 0);
-
-  return {
-    match: matchFound,
-    details: matchFound ? {
-      wordIndices: matchedWords,
-      numPersonalNames: numFoundNames
-    } : null
-  };
+  return buildResultFromMatchedSet();
 };
 
 const searchCrossForm = (crosses, ruleValue) => {
@@ -584,6 +682,43 @@ const searchCountryOrProvince = (entry, ruleValues) => {
   return { match: false };
 }
 
+function stripDiacritics(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function normalizeReferencesSearchValue(value, ignoreCase) {
+  // References often mix plain URLs and human labels; fold diacritics so
+  // "Fornvännen" can match "fornvannen.se" style URLs.
+  return stripDiacritics(prepareForComparison(value, ignoreCase));
+}
+
+function searchReferencesCombined(fieldValue, ruleValue, operatorName, rule) {
+  const ignoreCase = !!(rule && rule.ignoreCase);
+  const value = normalizeReferencesSearchValue(fieldValue, ignoreCase);
+  const query = normalizeReferencesSearchValue(ruleValue, ignoreCase);
+
+  switch (operatorName) {
+    case 'contains':
+      return { match: value.includes(query) };
+    case 'not_contains':
+      return { match: !value.includes(query) };
+    case 'begins_with':
+      return { match: value.startsWith(query) };
+    case 'not_begins_with':
+      return { match: !value.startsWith(query) };
+    case 'ends_with':
+      return { match: value.endsWith(query) };
+    case 'not_ends_with':
+      return { match: !value.endsWith(query) };
+    case 'equal':
+      return { match: value === query };
+    case 'not_equal':
+      return { match: value !== query };
+    default:
+      return { match: false };
+  }
+}
+
 const customSearchFunctions = {
   inscription_id: {
     in: (record, ruleValue, rule) => searchSignatureWrapper(record, ruleValue, operators.equal, false, !!rule.ignoreCase),
@@ -640,7 +775,136 @@ const customSearchFunctions = {
   },
   english_translation: buildTranslationSearchFunctions('english_translation'),
   swedish_translation: buildTranslationSearchFunctions('swedish_translation'),
+  references_combined: {
+    contains: (fieldValue, ruleValue, rule) => searchReferencesCombined(fieldValue, ruleValue, 'contains', rule),
+    not_contains: (fieldValue, ruleValue, rule) => searchReferencesCombined(fieldValue, ruleValue, 'not_contains', rule),
+    begins_with: (fieldValue, ruleValue, rule) => searchReferencesCombined(fieldValue, ruleValue, 'begins_with', rule),
+    not_begins_with: (fieldValue, ruleValue, rule) => searchReferencesCombined(fieldValue, ruleValue, 'not_begins_with', rule),
+    ends_with: (fieldValue, ruleValue, rule) => searchReferencesCombined(fieldValue, ruleValue, 'ends_with', rule),
+    not_ends_with: (fieldValue, ruleValue, rule) => searchReferencesCombined(fieldValue, ruleValue, 'not_ends_with', rule),
+    equal: (fieldValue, ruleValue, rule) => searchReferencesCombined(fieldValue, ruleValue, 'equal', rule),
+    not_equal: (fieldValue, ruleValue, rule) => searchReferencesCombined(fieldValue, ruleValue, 'not_equal', rule),
+  },
 };
+
+const TRANSLATION_FIELDS = new Set(['english_translation', 'swedish_translation']);
+const VALUELESS_OPERATORS = new Set(['is_empty', 'is_not_empty', 'is_null', 'is_not_null']);
+const SYMBOL_AWARE_RULE_IDS = new Set([
+  'normalization_norse_to_transliteration',
+  'normalization_scandinavian_to_transliteration',
+]);
+const SPECIAL_SYMBOL_PATTERN = /(&quot;|&lt;|&gt;|["<>|[\](){}^\u00b4?+:\u00d7\u00b7\u00a4'÷¶])/;
+
+function trimToken(token) {
+  return String(token || '').replace(/^[\s"'`.,;:!?()[\]{}<>]+|[\s"'`.,;:!?()[\]{}<>]+$/g, '');
+}
+
+function collectTokensFromRuleValue(value, outputMap) {
+  if (value === null || value === undefined) return;
+  if (Array.isArray(value)) {
+    value.forEach(v => collectTokensFromRuleValue(v, outputMap));
+    return;
+  }
+  if (typeof value === 'object') {
+    Object.values(value).forEach(v => collectTokensFromRuleValue(v, outputMap));
+    return;
+  }
+  const tokens = splitPhraseTokens(String(value)).map(trimToken).filter(Boolean);
+  tokens.forEach(token => {
+    const key = token.toLowerCase();
+    if (!outputMap.has(key)) {
+      outputMap.set(key, token);
+    }
+  });
+}
+
+function traverseTranslationRules(group, outputMap) {
+  if (!group || !Array.isArray(group.rules)) return;
+  group.rules.forEach(rule => {
+    if (rule && Array.isArray(rule.rules)) {
+      traverseTranslationRules(rule, outputMap);
+      return;
+    }
+    if (!rule || !TRANSLATION_FIELDS.has(rule.id)) return;
+    if (VALUELESS_OPERATORS.has(rule.operator)) return;
+    collectTokensFromRuleValue(rule.value, outputMap);
+  });
+}
+
+export function getTranslationSearchTokens(rules) {
+  const tokenMap = new Map();
+  traverseTranslationRules(rules, tokenMap);
+  return Array.from(tokenMap.values());
+}
+
+export function getTranslationSearchTokenCount(rules) {
+  return getTranslationSearchTokens(rules).length;
+}
+
+export function getTranslationOccurrenceCount(searchResults) {
+  if (!Array.isArray(searchResults)) {
+    return 0;
+  }
+
+  let totalOccurrences = 0;
+  for (const result of searchResults) {
+    const rangesByField = result?.matchDetails?.fieldRanges;
+    if (!rangesByField || typeof rangesByField !== 'object') {
+      continue;
+    }
+    ['english_translation', 'swedish_translation'].forEach(fieldName => {
+      const ranges = rangesByField[fieldName];
+      if (Array.isArray(ranges)) {
+        totalOccurrences += ranges.length;
+      }
+    });
+  }
+
+  return totalOccurrences;
+}
+
+function collectStringValues(value, output) {
+  if (value === null || value === undefined) return;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length > 0) output.push(trimmed);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach(v => collectStringValues(v, output));
+    return;
+  }
+  if (typeof value === 'object') {
+    Object.values(value).forEach(v => collectStringValues(v, output));
+  }
+}
+
+function findRuleNeedingIncludeSymbols(group) {
+  if (!group || !Array.isArray(group.rules)) return false;
+
+  for (const rule of group.rules) {
+    if (!rule) continue;
+    if (Array.isArray(rule.rules)) {
+      if (findRuleNeedingIncludeSymbols(rule)) return true;
+      continue;
+    }
+    if (!SYMBOL_AWARE_RULE_IDS.has(rule.id)) continue;
+    if (rule.includeSpecialSymbols) continue;
+    if (VALUELESS_OPERATORS.has(rule.operator)) continue;
+
+    const values = [];
+    collectStringValues(rule.value, values);
+    if (values.some(v => SPECIAL_SYMBOL_PATTERN.test(v))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function shouldSuggestIncludeSymbols(rules) {
+  return findRuleNeedingIncludeSymbols(rules);
+}
 
 
 

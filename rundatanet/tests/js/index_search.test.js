@@ -1,11 +1,129 @@
 import { test } from 'uvu';
 import * as assert from 'uvu/assert';
-import { doSearch, stripSpecialSymbols, getWordSearchFunction } from '../../runes/js/index_search.js';
+import { doSearch, stripSpecialSymbols, getWordSearchFunction, getTranslationSearchTokens, getTranslationSearchTokenCount, getTranslationOccurrenceCount, shouldSuggestIncludeSymbols } from '../../runes/js/index_search.js';
 import { mockDb } from './mockDb.js';
 import { convertDbToKeyMap, highlightWordsFromWordBoundaries } from '../../runes/js/index_scripts.js';
 
 // Process mockDb once at the module level
 const dbMap = convertDbToKeyMap(mockDb);
+
+test('getTranslationSearchTokens collects tokens from English/Swedish translation rules', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'english_translation',
+        field: 'english_translation',
+        operator: 'contains',
+        value: 'king stone',
+      },
+      {
+        id: 'swedish_translation',
+        field: 'swedish_translation',
+        operator: 'begins_with',
+        value: 'sten, konung',
+      },
+      {
+        id: 'signature_text',
+        field: 'signature_text',
+        operator: 'contains',
+        value: 'DR',
+      }
+    ],
+    valid: true
+  };
+
+  const tokens = getTranslationSearchTokens(rules);
+  assert.equal(tokens, ['king', 'stone', 'sten', 'konung']);
+  assert.is(getTranslationSearchTokenCount(rules), 4);
+});
+
+test('getTranslationSearchTokens ignores valueless translation operators', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'english_translation',
+        field: 'english_translation',
+        operator: 'is_not_empty',
+        value: null,
+      },
+      {
+        id: 'swedish_translation',
+        field: 'swedish_translation',
+        operator: 'is_empty',
+        value: null,
+      }
+    ],
+    valid: true
+  };
+
+  assert.equal(getTranslationSearchTokens(rules), []);
+  assert.is(getTranslationSearchTokenCount(rules), 0);
+});
+
+test('getTranslationOccurrenceCount sums translation field match ranges', () => {
+  const mockResults = [
+    {
+      matchDetails: {
+        fieldRanges: {
+          english_translation: [[0, 4], [10, 14]],
+          swedish_translation: [[2, 6]],
+        }
+      }
+    },
+    {
+      matchDetails: {
+        fieldRanges: {
+          english_translation: [[1, 5]],
+        }
+      }
+    },
+    {
+      matchDetails: {
+        fieldRanges: {
+          signature_text: [[0, 2]],
+        }
+      }
+    },
+    {}
+  ];
+
+  assert.is(getTranslationOccurrenceCount(mockResults), 4);
+});
+
+test('shouldSuggestIncludeSymbols returns true for symbol query when include symbols is off', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [{
+      id: 'normalization_norse_to_transliteration',
+      field: 'normalisation_norse',
+      data: { multiField: true },
+      operator: 'contains',
+      value: { normalization: '?', transliteration: '', names_mode: 'all' },
+      includeSpecialSymbols: false,
+    }],
+    valid: true,
+  };
+
+  assert.ok(shouldSuggestIncludeSymbols(rules));
+});
+
+test('shouldSuggestIncludeSymbols returns false when include symbols is on', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [{
+      id: 'normalization_norse_to_transliteration',
+      field: 'normalisation_norse',
+      operator: 'contains',
+      value: { normalization: '?', transliteration: '', names_mode: 'all' },
+      includeSpecialSymbols: true,
+    }],
+    valid: true,
+  };
+
+  assert.not.ok(shouldSuggestIncludeSymbols(rules));
+});
 
 // Test suite for highlightWordsFromWordBoundaries function
 test('highlightWordsFromWordBoundaries with single word', () => {
@@ -444,6 +562,46 @@ test('getWordSearchFunction includes mode preserves symbols when includeSpecialS
   assert.is(fn('[hello]world', 'helloworld'), false, 'includes with symbols kept should not match when query is only valid after stripping');
 });
 
+test('doSearch does not match all records for symbol-only query when include symbols is off', () => {
+  const records = [
+    {
+      id: 1,
+      signature_text: 'T 1',
+      normalisation_norse_words: ['foo'],
+      normalisation_scandinavian_words: ['foo'],
+      transliteration_words: ['foo'],
+      normalisation_norse_word_boundaries: [{ start: 0, end: 3, text: 'foo' }],
+      normalisation_scandinavian_word_boundaries: [{ start: 0, end: 3, text: 'foo' }],
+      transliteration_word_boundaries: [{ start: 0, end: 3, text: 'foo' }],
+    },
+    {
+      id: 2,
+      signature_text: 'T 2',
+      normalisation_norse_words: ['bar'],
+      normalisation_scandinavian_words: ['bar'],
+      transliteration_words: ['bar'],
+      normalisation_norse_word_boundaries: [{ start: 0, end: 3, text: 'bar' }],
+      normalisation_scandinavian_word_boundaries: [{ start: 0, end: 3, text: 'bar' }],
+      transliteration_word_boundaries: [{ start: 0, end: 3, text: 'bar' }],
+    },
+  ];
+  const rules = {
+    condition: 'AND',
+    rules: [{
+      id: 'normalization_norse_to_transliteration',
+      field: 'normalisation_norse',
+      data: { multiField: true },
+      operator: 'contains',
+      value: { normalization: '?', transliteration: '', names_mode: 'all' },
+      includeSpecialSymbols: false,
+      ignoreCase: false,
+    }],
+    valid: true,
+  };
+
+  assert.is(doSearch(rules, records).length, 0);
+});
+
 // ── doSearch – ignoreCase integration ─────────────────────────────────────────
 
 test('doSearch case-insensitive search finds results regardless of case', () => {
@@ -514,6 +672,7 @@ function makeWordSearchRecord({
     normalisation_norse_word_boundaries: norseWords.map((text, i) => ({ start: i, end: i + text.length, text })),
     normalisation_scandinavian_word_boundaries: sc.map((text, i) => ({ start: i, end: i + text.length, text })),
     transliteration_word_boundaries: tr.map((text, i) => ({ start: i, end: i + text.length, text })),
+    transliteration: tr.join(' '),
   };
 }
 
@@ -739,6 +898,77 @@ test('single-word query still works through the same code path (backwards compat
   const result = doSearch(rules, [rec]);
   assert.is(result.length, 1);
   assert.equal(result[0].matchDetails.wordIndices, [2]);
+});
+
+test('symbol-only transliteration query returns transliteration fieldRanges for highlighting', () => {
+  const rec = makeWordSearchRecord({
+    id: 'SYM_ONLY',
+    norseWords: ['alpha', 'beta'],
+    translitWords: ['foo', '×', 'bar', '×'],
+  });
+  rec.transliteration = 'foo × bar ×';
+
+  const rules = buildPhraseRule({
+    operator: 'contains',
+    transliteration: '×',
+    includeSpecialSymbols: true,
+  });
+  const result = doSearch(rules, [rec]);
+
+  assert.is(result.length, 1, 'Symbol query should match transliteration text');
+  assert.equal(
+    result[0].matchDetails.fieldRanges.transliteration,
+    [[4, 5], [10, 11]],
+    'All matching symbol occurrences should be returned as highlight ranges'
+  );
+});
+
+test('symbol contains with trailing whitespace still highlights terminal symbol occurrence', () => {
+  const rec = makeWordSearchRecord({
+    id: 'SYM_EDGE',
+    norseWords: ['alpha'],
+    translitWords: ['foo', '×', 'bar', '×'],
+  });
+  rec.transliteration = 'foo × bar ×';
+
+  const rules = buildPhraseRule({
+    operator: 'contains',
+    transliteration: '× ',
+    includeSpecialSymbols: true,
+  });
+  const result = doSearch(rules, [rec]);
+
+  assert.is(result.length, 1, 'Symbol contains-search should still match with trailing whitespace in query');
+  assert.equal(
+    result[0].matchDetails.fieldRanges.transliteration,
+    [[4, 5], [10, 11]],
+    'Terminal symbol should be highlighted even when query includes trailing whitespace'
+  );
+});
+
+test('normalization + symbol transliteration returns both wordIndices and transliteration ranges', () => {
+  const rec = makeWordSearchRecord({
+    id: 'SYM_COMBINED',
+    norseWords: ['stone', 'raised', 'memory'],
+    translitWords: ['foo', '×', 'bar'],
+  });
+  rec.transliteration = 'foo × bar';
+
+  const rules = buildPhraseRule({
+    operator: 'contains',
+    normalization: 'raised',
+    transliteration: '×',
+    includeSpecialSymbols: true,
+  });
+  const result = doSearch(rules, [rec]);
+
+  assert.is(result.length, 1, 'Combined query should match when both parts match');
+  assert.equal(result[0].matchDetails.wordIndices, [1], 'Normalization match details are preserved');
+  assert.equal(
+    result[0].matchDetails.fieldRanges.transliteration,
+    [[4, 5]],
+    'Transliteration symbol range should be present for rendering'
+  );
 });
 
 // ── Inscription-level integration tests (Öl 1) ────────────────────────────────

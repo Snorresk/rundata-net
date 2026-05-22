@@ -32,6 +32,9 @@ if "AZURE_POSTGRESQL_CONNECTIONSTRING" in env:
         "HOST": conn_str_params["host"],
         "USER": conn_str_params["user"],
         "PASSWORD": conn_str_params["password"],
+        # Azure Database for PostgreSQL requires TLS. Honor sslmode from the
+        # connection string if provided, otherwise default to "require".
+        "OPTIONS": {"sslmode": conn_str_params.get("sslmode", "require")},
     }
 else:
     DATABASES["default"] = env.db("DATABASE_URL")  # noqa F405

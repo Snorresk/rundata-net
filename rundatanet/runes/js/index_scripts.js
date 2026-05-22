@@ -52,6 +52,12 @@ export const schemaFieldsInfo = [
     },
   },
   {
+    schemaName: 'coordination',
+    text: {
+      en: 'Coordinates',
+    },
+  },
+  {
     schemaName: 'parish_code',
     text: {
       en: 'Parish code',
@@ -174,12 +180,6 @@ export const schemaFieldsInfo = [
     },
   },
   {
-    schemaName: 'crosses',
-    text: {
-      en: 'Cross',
-    },
-  },
-  {
     schemaName: 'images',
     text: {
       en: 'Images',
@@ -292,6 +292,45 @@ const transliterationWordsToSkip = {
 
 
 let gRenderInProgress = false;
+let gMainDisplayScrollTargetId = null;
+const NORMALISATION_COLUMNS = new Set(['normalisation_norse', 'normalisation_scandinavian']);
+const MAX_VISIBLE_IMAGE_LINKS = 10;
+
+export function setMainDisplayScrollTarget(signatureId) {
+  const parsedId = parseInt(signatureId, 10);
+  gMainDisplayScrollTargetId = Number.isNaN(parsedId) ? null : parsedId;
+}
+
+function scrollMainDisplayToSignature(selectedSignatureIds) {
+  const mainDisplay = document.getElementById('mainDisplay');
+  if (!mainDisplay) return;
+
+  let targetId = gMainDisplayScrollTargetId;
+  if (targetId === null && Array.isArray(selectedSignatureIds) && selectedSignatureIds.length > 0) {
+    const fallbackId = parseInt(selectedSignatureIds[selectedSignatureIds.length - 1], 10);
+    if (!Number.isNaN(fallbackId)) {
+      targetId = fallbackId;
+    }
+  }
+  if (targetId === null) return;
+
+  const targetArticle = mainDisplay.querySelector(`article[rundata-db-id="${targetId}"]`);
+  if (!targetArticle) {
+    gMainDisplayScrollTargetId = null;
+    return;
+  }
+
+  const top = Math.max(0, targetArticle.offsetTop - 4);
+  mainDisplay.scrollTo({ top, behavior: 'auto' });
+  gMainDisplayScrollTargetId = null;
+}
+
+function concealPersonalNameMarkersForDisplay(columnName, htmlValue) {
+  if (!NORMALISATION_COLUMNS.has(columnName)) {
+    return htmlValue;
+  }
+  return htmlValue.replace(/&quot;/g, '');
+}
 
 /**
  * Retrieves a human-readable name for a schema field in the specified language.
@@ -406,6 +445,20 @@ export function convertDbToKeyMap(db) {
   const presentLongitudeColumn = columns.indexOf('present_longitude');
   const metaColumn = columns.indexOf('id');
   const wordColumns = ['transliteration', 'normalisation_norse', 'normalisation_scandinavian'];
+  const crossFormByMetaId = {};
+
+  // Textual cross-form data (used by "Cross form" display field).
+  // This view is expected to exist in normal DB builds; if not, we keep it empty.
+  try {
+    const crossFormContent = db.exec("SELECT meta_id, crosses_textual FROM meta_with_crosses_textual");
+    if (crossFormContent.length > 0) {
+      crossFormContent[0].values.forEach(([metaId, crossesTextual]) => {
+        crossFormByMetaId[metaId] = crossesTextual || "";
+      });
+    }
+  } catch (e) {
+    // no-op: leave crossFormByMetaId empty
+  }
 
   const allDbImages = fetchAllImages(db);
   let numDiffers = 0;
@@ -429,6 +482,23 @@ export function convertDbToKeyMap(db) {
         objSignature[`${columnName}_word_boundaries`] = getWordBoundaries(objSignature[`${columnName}_html`], true);
       }
     }
+
+    // Populate the textual cross form field so "Cross form" can render content.
+    objSignature['cross_form'] = crossFormByMetaId[metaId] || "";
+
+    // Build coordination text for main display.
+    const hasOriginalCoordinates = objSignature.latitude && objSignature.longitude
+      && parseFloat(objSignature.latitude) !== 0 && parseFloat(objSignature.longitude) !== 0;
+    const hasCurrentCoordinates = objSignature.present_latitude && objSignature.present_longitude
+      && parseFloat(objSignature.present_latitude) !== 0 && parseFloat(objSignature.present_longitude) !== 0;
+    const coordinationParts = [];
+    if (hasOriginalCoordinates) {
+      coordinationParts.push(`Oldest known latitude and longitude: ${objSignature.latitude}, ${objSignature.longitude}`);
+    }
+    if (hasCurrentCoordinates) {
+      coordinationParts.push(`Current latitude and longitude: ${objSignature.present_latitude}, ${objSignature.present_longitude}`);
+    }
+    objSignature['coordination'] = coordinationParts.join(' | ');
 
     /////////////////////////////////////////
     // Handle exceptions for word searches
@@ -525,19 +595,46 @@ export function prepareSignumForDisplay({signature_text, lost, new_reading}) {
   return signature_text + additional;
 }
 
+function resolveUrlOrBlob(urlOrBlob) {
+  if (urlOrBlob.startsWith('http://') || urlOrBlob.startsWith('https://')) {
+    return urlOrBlob;
+  }
+  const blobBase = (typeof window !== "undefined" && window.BLOB_BASE_URL)
+    ? window.BLOB_BASE_URL
+    : "";
+  if (blobBase) {
+    return blobBase.replace(/\/$/, '') + '/' + urlOrBlob;
+  }
+  return urlOrBlob;
+}
+
 export function fetchAllImages(db) {
-  const content = db.exec("SELECT meta_id, link_url, direct_url FROM runes_imagelink");
+  let content = [];
+  try {
+    content = db.exec("SELECT meta_id, link_url, direct_url, info FROM runes_imagelink");
+  } catch (e) {
+    // Backwards compatibility with DB snapshots where `info` column is absent.
+    content = db.exec("SELECT meta_id, link_url, direct_url FROM runes_imagelink");
+  }
+  if (!content || content.length === 0) {
+    return {};
+  }
   const allRows = content[0].values;
+  const hasInfoColumn = content[0].columns.includes("info");
 
   let allImages = {};
 
   for (let i = 0; i < allRows.length; i++) {
     const row = allRows[i];
+    const indirect = row[1] || "";
+    const direct = row[2] || "";
+    const info = hasInfoColumn ? (row[3] || "") : "";
+
     const metaId = row[0];
     if (!allImages.hasOwnProperty(metaId)) {
       allImages[metaId] = {links: []};
     }
-    allImages[metaId].links.push({indirect: row[1], direct: row[2]});
+    allImages[metaId].links.push({indirect, direct, info});
   }
   return allImages;
 }
@@ -546,26 +643,47 @@ export function makeImagesMarkup(signatureImageLinks) {
   let directImages = "";
   let indirectImages = "";
 
-  // make image gallery of direct image links
-  const galleryLinks = signatureImageLinks.links.slice(0, 9);
-  const offsetIndirectImages = galleryLinks.length;
+  const escapeHtml = function (value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+  };
 
-  directImages = '<div class="container-fluid"><div class="row">';
-  galleryLinks.map(function (v, i) {
-    if (i % 3 == 0 && i !== 0) {
-      directImages += "</div><div class='row'>";
+  const imageSourceLabel = function (url) {
+    try {
+      const hostname = (new URL(url)).hostname.replace(/^www\./, "");
+      return hostname || url;
+    } catch {
+      return url;
     }
-    directImages += `<div class="col-md-4"><a href="${v.indirect}" contentEditable="false" target="_blank"><img src="${v.direct}" class="img-responsive"></a></div>`;
-  });
-  directImages += '</div></div>';
+  };
 
-  const indirectImagesLinks = signatureImageLinks.links.slice(offsetIndirectImages);
-  if (indirectImagesLinks.length > 0) {
-    indirectImages = '<ul>';
-    indirectImagesLinks.map(function (v, i) {
-      indirectImages += `<li><a href="${v.indirect}" contentEditable="false" target="_blank">${v.indirect}</a></li>`;
+  // Show up to 10 image links directly. If there are more, hide 11+ behind an expander.
+  const galleryLinks = signatureImageLinks.links.slice(0, MAX_VISIBLE_IMAGE_LINKS);
+  const hiddenLinks = signatureImageLinks.links.slice(MAX_VISIBLE_IMAGE_LINKS);
+
+  directImages = '<div class="rundata-image-gallery">';
+  galleryLinks.map(function (v) {
+    const indirectUrl = escapeHtml(v.indirect);
+    const directUrl = escapeHtml(v.direct);
+    const sourceLabel = escapeHtml(imageSourceLabel(v.indirect));
+    const infoText = (v.info || "").toString().trim();
+    const caption = infoText.length > 0
+      ? escapeHtml(infoText)
+      : `source: <a href="${indirectUrl}" contentEditable="false" target="_blank">${sourceLabel}</a>`;
+    directImages += `<figure class="rundata-image-item"><a href="${indirectUrl}" contentEditable="false" target="_blank" class="rundata-image-link"><img src="${directUrl}" class="rundata-image-avatar" alt="Inscription image"></a><figcaption class="rundata-image-source">${caption}</figcaption></figure>`;
+  });
+  directImages += '</div>';
+
+  if (hiddenLinks.length > 0) {
+    indirectImages = '<details class="rundata-more-image-links"><summary><span class="text-primary text-decoration-underline">Find more image links here</span></summary><ul>';
+    hiddenLinks.map(function (v) {
+      const indirectUrl = escapeHtml(v.indirect);
+      indirectImages += `<li><a href="${indirectUrl}" contentEditable="false" target="_blank">${indirectUrl}</a></li>`;
     });
-    indirectImages += '</ul>';
+    indirectImages += '</ul></details>';
   }
 
   return {directImages, indirectImages};
@@ -730,10 +848,15 @@ function renderSignatures() {
 
   try {
     const selectedSignatureIds = $('#jstree').jstree(true).get_selected();
-    const selectedSignatures = gViewModel.getInscriptions(selectedSignatureIds);
+    // When a search is active, render all active search hits in the main window.
+    // This ensures users can inspect the full result set without selecting each ID.
+    const selectedSignatures = (gViewModel && gViewModel.searchResults !== null)
+      ? gViewModel.getActiveInscriptions()
+      : gViewModel.getInscriptions(selectedSignatureIds);
 
     const html = inscriptions2markup(selectedSignatures);
     document.getElementById('mainDisplay').innerHTML = html.join('');
+    scrollMainDisplayToSignature(selectedSignatureIds);
   } catch (e) {
     console.error(`Error rendering signatures: ${e}`);
   } finally {
@@ -756,6 +879,70 @@ function escapeHtml(string) {
   return String(string).replace(/[&<>"'`=\/]/g, function (s) {
     return entityMap[s];
   });
+}
+
+/**
+ * Replace specific raw URLs inside a plain-text reference with labelled
+ * anchors, preserving surrounding citation text.
+ *
+ * Current mappings:
+ * - http://fornvannen.se/... -> "Fornvännen PDF"
+ * - http://kulturarvsdata.se/raa/samla/html/<number> -> "ATA Rapport"
+ *
+ * Returns null when no matching URL is found.
+ */
+function renderSpecialReferenceLinks(refText) {
+  const raw = String(refText || '');
+  const urlRules = [
+    {
+      regex: /http:\/\/fornvannen\.se\/[^\s;|]+/gi,
+      label: 'Fornvännen PDF',
+    },
+    {
+      regex: /http:\/\/kulturarvsdata\.se\/raa\/samla\/html\/\d+/gi,
+      label: 'ATA Rapport',
+    },
+  ];
+  const matches = [];
+  urlRules.forEach(rule => {
+    for (const match of raw.matchAll(rule.regex)) {
+      const start = match.index ?? -1;
+      if (start < 0) {
+        continue;
+      }
+      matches.push({
+        start,
+        end: start + match[0].length,
+        fullUrl: match[0],
+        label: rule.label,
+      });
+    }
+  });
+
+  if (matches.length === 0) {
+    return null;
+  }
+  matches.sort((a, b) => (a.start - b.start) || (b.end - a.end));
+
+  let result = '';
+  let lastIndex = 0;
+  for (const match of matches) {
+    if (match.start < lastIndex) {
+      // Skip overlaps, keeping the earliest non-overlapping match.
+      continue;
+    }
+    const fullUrl = match.fullUrl;
+    const cleanUrl = fullUrl.replace(/[),.;]+$/, '');
+    const trailing = fullUrl.slice(cleanUrl.length);
+
+    result += escapeHtml(raw.slice(lastIndex, match.start));
+    result += `<a href="${escapeHtml(cleanUrl)}" target="_blank" contenteditable="false">${escapeHtml(match.label)}</a>`;
+    result += escapeHtml(trailing);
+    lastIndex = match.end;
+  }
+
+  result += escapeHtml(raw.slice(lastIndex));
+  return result;
 }
 
 /**
@@ -875,34 +1062,37 @@ export function inscriptions2markup(inscriptions) {
           // early stop if no headers and no images
           continue;
         }
-        if (inscriptionData['directImages'].length == 0 && inscriptionData['indirectImages'].length > 0) {
+        if (inscriptionData['directImages'].length > 0) {
+          paragraph += inscriptionData['directImages'];
+          if (inscriptionData['indirectImages'].length > 0) {
+            // add image links as they have not been added yet
+            paragraph += '<br>' + inscriptionData['indirectImages'];
+          }
+          continue;
+        }
+        if (inscriptionData['indirectImages'].length > 0) {
           paragraph += inscriptionData['indirectImages'];
           continue;
         }
-        paragraph += inscriptionData['directImages'];
-        if (inscriptionData['indirectImages'].length > 0) {
-          // add image links as they have not been added yet
-          paragraph += '<br>' + inscriptionData['indirectImages'];
-        } else {
-          if (showHeaders) {
-            paragraph += '<i>No images.</i>';
-          }
+        if (showHeaders) {
+          paragraph += '<i>No images.</i>';
         }
 
         continue;
       }
 
-      if ((columnData == '' || columnData == null) && showHeaders) {
-        paragraph += '<i>Absent, not in the database.</i>';
-        continue;
-      }
-
-      if (columnName === "crosses") {
-        if (inscriptionData['num_crosses'] == 0) {
+      if (columnName === "cross_form") {
+        const hasCrossText = !!(columnData && columnData.trim() !== '');
+        if (!hasCrossText && inscriptionData['num_crosses'] == 0) {
           if (showHeaders) {
             paragraph += '<i>No crosses.</i>';
           }
           continue;
+        }
+
+        if (hasCrossText) {
+          paragraph += `<span class="${cssStyle}">${escapeHtml(columnData)}</span>`;
+          paragraph += '<br>';
         }
 
         paragraph += '<table class="crosses" border="1">';
@@ -946,6 +1136,28 @@ export function inscriptions2markup(inscriptions) {
         continue;
       }
 
+      if (columnName === "coordination") {
+        const lines = columnData
+          .split('|')
+          .map(item => item.trim())
+          .filter(item => item.length > 0);
+
+        if (lines.length === 0) {
+          if (showHeaders) {
+            paragraph += '<i>Absent, not in the database.</i>';
+          }
+          continue;
+        }
+
+        paragraph += `<span class="${cssStyle}">${lines.map(line => escapeHtml(line)).join('<br>')}</span>`;
+        continue;
+      }
+
+      if ((columnData == '' || columnData == null) && showHeaders) {
+        paragraph += '<i>Absent, not in the database.</i>';
+        continue;
+      }
+
       if (columnName == "references_combined") {
         if (columnData && columnData.trim() !== '') {
           const refs = columnData.split('|').map(r => r.trim()).filter(r => r.length > 0);
@@ -957,17 +1169,20 @@ export function inscriptions2markup(inscriptions) {
                 // Encoded link: "<label>:::<url-or-blob-filename>"
                 const label = ref.substring(0, sep);
                 const urlOrBlob = ref.substring(sep + 3);
-                // If the value is not an absolute URL it is a bare blob filename;
-                // prepend the configured base URL to make it a full link.
-                const url = (urlOrBlob.startsWith('http://') || urlOrBlob.startsWith('https://'))
-                  ? urlOrBlob
-                  : (window.BLOB_BASE_URL ? window.BLOB_BASE_URL.replace(/\/$/, '') + '/' + urlOrBlob : urlOrBlob);
+                const url = resolveUrlOrBlob(urlOrBlob);
                 paragraph += `<li><a href="${url}" target="_blank" contenteditable="false">${escapeHtml(label)}</a></li>`;
-              } else if (ref.includes('https://')) {
-                // Legacy unencoded URL (no label stored)
-                paragraph += `<li><a href="${ref}" target="_blank" contenteditable="false">${ref}</a></li>`;
               } else {
-                paragraph += `<li>${escapeHtml(ref)}</li>`;
+                const specialLinksMarkup = renderSpecialReferenceLinks(ref);
+                if (specialLinksMarkup !== null) {
+                  paragraph += `<li>${specialLinksMarkup}</li>`;
+                  return;
+                }
+                if (ref.includes('https://')) {
+                // Legacy unencoded URL (no label stored)
+                  paragraph += `<li><a href="${ref}" target="_blank" contenteditable="false">${ref}</a></li>`;
+                } else {
+                  paragraph += `<li>${escapeHtml(ref)}</li>`;
+                }
               }
             });
             paragraph += '</ul>';
@@ -1003,6 +1218,10 @@ export function inscriptions2markup(inscriptions) {
           }
         }
       }
+
+      // Keep personal-name markers in DB/search data, but hide them in
+      // rendered normalisation text shown in the main window.
+      columnData = concealPersonalNameMarkersForDisplay(columnName, columnData);
 
       if (columnData.indexOf(paragraphSymbol) !== -1) {
         const parts = columnData.split(paragraphSymbol);
@@ -1109,4 +1328,3 @@ export function hideLoading() {
 export function closeResultsIoModal() {
   $('#modalResultsIo').modal('hide');
 }
-

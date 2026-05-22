@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Search and explore thousands of Scandinavian runic inscriptions online. Rundata.info is a free web version of the Scandinavian Runic-text Data Base (Rundata).">
-    <title>Rundata-net: Search Scandinavian Runic Inscriptions Online</title>
+    <title>Rundata-net: Search Scandinavian Runic Inscriptions Online - sofia addition</title>
     {% get_from_settings 'CANONICAL_DOMAIN' as canonical_domain %}
     <link rel="canonical" href="https://{{ canonical_domain }}{{ request.path }}">
     {% get_from_settings 'USE_GA' as use_ga %}
@@ -163,10 +163,140 @@
         display: none;
       }
       .my-fixed-height {
+        height: clamp(320px, calc(100vh - 380px), 500px);
+        min-height: 320px;
         max-height: 500px;
-        min-height: 500px;
-        height: 500px;
-        margin-bottom: 15px;
+        margin-bottom: 10px;
+      }
+      .signatures-fixed-height {
+        height: clamp(250px, calc(100vh - 460px), 420px);
+        min-height: 250px;
+        max-height: 420px;
+      }
+      #mainDisplay {
+        padding: 5mm;
+        box-sizing: border-box;
+      }
+      @media (min-width: 768px) {
+        #leftPanel.left-panel-one-cm-narrow {
+          flex: 0 0 calc(16.666667% - 1cm);
+          max-width: calc(16.666667% - 1cm);
+          margin-left: 5mm;
+        }
+        #leftPanel.left-panel-one-cm-narrow {
+          margin-right: 3mm;
+        }
+        #mainPanel {
+          margin-right: 5mm;
+        }
+        #mapDisplayWrapper.map-two-cm-narrow {
+          flex: 0 0 calc(33.333333% - 2cm);
+          max-width: calc(33.333333% - 2cm);
+        }
+        #miniQueryBuilder {
+          display: none !important;
+        }
+      }
+      @media (max-width: 767.98px) {
+        /* Mobile: hide signatures list and stack map above main display */
+        #leftPanel {
+          display: none !important;
+        }
+        #mapDisplayWrapper {
+          order: 1;
+          width: 100%;
+          max-width: 100%;
+          flex: 0 0 100%;
+          padding-right: 0 !important;
+          margin-top: 0 !important;
+          margin-bottom: 8px;
+        }
+        #mainPanel {
+          order: 2;
+          width: 100%;
+          max-width: 100%;
+          flex: 0 0 100%;
+          margin-top: 0 !important;
+        }
+        #searchControlsRow,
+        #builderContainer {
+          display: none !important;
+        }
+
+        body.mobile-map-fullscreen .rundata-navbar,
+        body.mobile-map-fullscreen #mainPanel,
+        body.mobile-map-fullscreen #aiAssistantContainer {
+          display: none !important;
+        }
+        body.mobile-map-fullscreen #mapDisplayWrapper {
+          position: fixed !important;
+          inset: 0 !important;
+          z-index: 5000 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          width: 100vw !important;
+          max-width: 100vw !important;
+          flex: none !important;
+        }
+        body.mobile-map-fullscreen #miniQueryBuilder,
+        body.mobile-map-fullscreen #mHideMap {
+          display: none !important;
+        }
+        body.mobile-map-fullscreen #mapDisplay {
+          height: 100vh !important;
+          min-height: 100vh !important;
+          max-height: 100vh !important;
+          margin: 0 !important;
+        }
+      }
+      #mapDisplayWrapper {
+        position: relative;
+      }
+      #mapDisplayWrapper.map-hidden {
+        flex: 0 0 44px !important;
+        max-width: 44px !important;
+        min-width: 44px;
+        padding-right: 0 !important;
+      }
+      #mapDisplayWrapper.map-hidden #mapDisplay {
+        display: none;
+      }
+      #mapDisplayWrapper.map-hidden #miniQueryBuilder {
+        display: none;
+      }
+      .map-corner-toggle {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 500;
+        width: 30px;
+        height: 30px;
+        border-radius: 9999px;
+        line-height: 1;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+      }
+      .mini-query-builder {
+        border: 1px solid #d9dee3;
+        border-radius: 8px;
+        background: #f8f9fa;
+        padding: 8px;
+        padding-right: 44px;
+        margin-bottom: 8px;
+      }
+      .mini-query-builder .form-label {
+        font-size: 0.82rem;
+        margin-bottom: 0.2rem;
+      }
+      .mini-query-builder .form-control {
+        font-size: 0.9rem;
+      }
+      #mapDisplay.leaflet-pseudo-fullscreen,
+      #mapDisplay.leaflet-fullscreen-on {
+        margin: 0 !important;
       }
       .jstree-scrollable {
         overflow-y: scroll;
@@ -214,6 +344,45 @@
       .inscription-section {
         border-bottom: 2px solid #999;
       }
+      .rundata-image-gallery {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin: 0.3rem 0;
+      }
+      .rundata-image-item {
+        margin: 0;
+        width: 4.5cm;
+        max-width: 100%;
+      }
+      .rundata-image-link {
+        display: block;
+        width: 4.5cm;
+        height: 4.5cm;
+        max-width: 100%;
+        max-height: 4.5cm;
+        overflow: hidden;
+        border: 1px solid #d0d0d0;
+        border-radius: 0.375rem;
+        background: #fff;
+      }
+      .rundata-image-avatar {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .rundata-image-source {
+        margin-top: 0.15rem;
+        font-size: 0.72rem;
+        line-height: 1.2;
+        color: #666;
+        word-break: break-word;
+      }
+      .rundata-image-source a {
+        color: inherit;
+        text-decoration: underline;
+      }
       .transliteration {
         font-weight: bold;
       }
@@ -259,7 +428,41 @@
       .py-6 {
         padding-bottom: 9rem !important;
       }
-
+      .query-builder [data-delete="rule"],
+      .query-builder [data-delete="group"] {
+        display: none !important;
+      }
+      .query-builder .group-actions [data-add="rule"],
+      .query-builder .group-actions [data-add="group"] {
+        color: #fff !important;
+        background-color: #0d6efd !important;
+        border-color: #0d6efd !important;
+      }
+      .query-builder .group-actions [data-add="rule"]:hover,
+      .query-builder .group-actions [data-add="group"]:hover,
+      .query-builder .group-actions [data-add="rule"]:focus,
+      .query-builder .group-actions [data-add="group"]:focus {
+        color: #fff !important;
+        background-color: #0b5ed7 !important;
+        border-color: #0a58ca !important;
+      }
+      .query-builder [data-text-options-row="rule"] {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 0.35rem;
+        white-space: nowrap;
+        overflow-x: auto;
+        width: 100%;
+      }
+      .query-builder [data-text-options-row="rule"] .form-check {
+        margin-right: 0;
+        margin-bottom: 0;
+        flex: 0 0 auto;
+      }
+      .query-builder [data-text-options-row="rule"] .form-check-label {
+        font-size: 0.88rem;
+      }
     </style>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
@@ -333,47 +536,23 @@
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="navbarSupportedContent">
-        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Map
-            </a>
-            <ul class="dropdown-menu">
-              <li><a class="dropdown-item" href="#" id="mHideMap">Hide Map</a></li>
-              <li>
-                <div class="dropdown-item">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" value="" id="chkShowSelectedInscriptions" aria-label="Checkbox for showing selected inscriptions only">
-                    <label class="form-check-label" for="chkShowSelectedInscriptions">Show selected inscriptions only</label>
-                  </div>
-                </div>
-              </li>
-              <li>
-                <div class="dropdown-item"><div class="form-check">
-                  <input class="form-check-input" type="checkbox" value="" id="chkShowOriginalLocation" aria-label="Checkbox for showing original location">
-                  <label class="form-check-label" for="chkShowOriginalLocation">Show inscriptions based on original location</label>
-                </div></div>
-              </li>
-            </ul>
+        <ul class="navbar-nav mb-2 mb-lg-0">
+          <li class="nav-item"><a class="nav-link" href="{% url 'runes:about' %}" target="_blank">Read about Rundata-net</a></li>
+          <li class="nav-item"><a class="nav-link" href="http://rundata-net.rtfd.io/" target="_blank">Help</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'runes:references' %}" target="_blank">Bibliography</a></li>
+        </ul>
+        <ul id="topControlButtons" class="navbar-nav me-auto mb-2 mb-lg-0">
+          <li class="nav-item d-flex align-items-center ms-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#divFormatDialog">
+              Choose what to show about inscriptions in the main display
+            </button>
           </li>
-
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Import/Export
-            </a>
-            <ul class="dropdown-menu">
-              <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#containerRuleIo">Search parameters</a></li>
-              <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalResultsIo">Results</a></li>
-            </ul>
+          <li class="nav-item d-flex align-items-center ms-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#mapDisplayOptionsDialog">
+              Choose what to show on the map
+            </button>
           </li>
         </ul>
-        <form class="d-flex" role="about">
-          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <li class="nav-item"><a class="nav-link" href="{% url 'runes:about' %}" target="_blank">About</a></li>
-            <li class="nav-item"><a class="nav-link" href="http://rundata-net.rtfd.io/" target="_blank">Help</a></li>
-            <li class="nav-item"><a class="nav-link" href="{% url 'runes:references' %}" target="_blank">Bibliography</a></li>
-          </ul>
-        </form>
       </div>
     </div>
   </nav>
@@ -434,42 +613,46 @@
       <div class="col-md-4 p-0 bg-success">f</div>
     </div>-->
 
-    <div class="row">
-      <div id="leftPanel" class="col-md-2 col-sm-2 ps-0 d-flex flex-column my-fixed-height my-2 me-3 my-md-0 ms-md-2">
+    <div class="row align-items-start">
+      <div id="leftPanel" class="left-panel-one-cm-narrow col-md-2 col-sm-2 ps-0 d-flex flex-column my-2 my-md-0">
         <!--<select id="inpInscriptions" class="form-select flex-grow-1 mb-2" multiple></select>-->
-        <div id="jstree" class="overflow-scroll h-100"></div>
+        <div id="jstree" class="overflow-scroll signatures-fixed-height"></div>
+        <div class="mt-2 small">
+          <div>Number of inscriptions: <span id="outNumSignaturesFound">6815</span></div>
+          <div id="statsWordsRow"><span id="outNumWordsLabel">Number of words:</span> <span id="outNumWords">54852</span></div>
+          <div id="statsNamesRow"><span id="outNumFoundNamesLabel">Number of names:</span> <span id="outNumFoundNames">11318</span></div>
+          <div id="statsTokensRow" style="display:none;"><span id="outNumTokensLabel">Number of words:</span> <span id="outNumTokens">0</span></div>
+        </div>
         <!--<input type="text" class="form-control" id="txtQuickSearch" placeholder="Quick inscription selection, just type ID">-->
       </div>
 
-      <div id="mainDisplay" class="col my-fixed-height overflow-scroll border my-2 me-3 my-md-0 ms-md-2" contentEditable="true" autocomplete="off" autocorrect="off" spellcheck="false">
+      <div id="mainPanel" class="col my-2 my-md-0">
+        <div id="mainDisplay" class="my-fixed-height overflow-scroll border" contentEditable="true" autocomplete="off" autocorrect="off" spellcheck="false">
+        </div>
       </div>
 
-      <div id="mapDisplayWrapper" class="col-md-4 col-sm-2 ps-0 pe-3 pe-md-0 mt-3 mt-md-0">
+      <div id="mapDisplayWrapper" class="map-two-cm-narrow col-md-4 col-sm-2 ps-0 pe-3 pe-md-0 mt-3 mt-md-0">
+        <div id="miniQueryBuilder" class="mini-query-builder">
+          <div class="mb-2">
+            <label class="form-label" for="miniSignatureInput">Inscription ID signatures</label>
+            <input type="text" class="form-control form-control-sm" id="miniSignatureInput" placeholder="e.g. Sö 352 or Sö 352|U 212">
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="miniLocationInput">Any location</label>
+            <input type="text" class="form-control form-control-sm" id="miniLocationInput" placeholder="e.g. Sigtuna">
+          </div>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-success btn-sm" id="btnMiniSearch">Search</button>
+            <button type="button" class="btn btn-danger btn-sm" id="btnMiniResetSearch">Delete search</button>
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm map-corner-toggle" id="mHideMap" aria-label="Hide map" title="Hide map">×</button>
         <div id="mapDisplay" class="my-fixed-height"></div>
       </div>
     </div>
 
-    <div class="row">
-      <div class="col-md-auto">Number of inscriptions: <span id="outNumSignaturesFound">6815</span></div>
-      <div class="col-md-auto"><span id="outNumWordsLabel">Number of words:</span> <span id="outNumWords">0</span></div>
-      <div class="col-md-auto"><span id="outNumFoundNamesLabel">Number of personal names:</span> <span id="outNumFoundNames">0</span></div>
-    </div>
-    <div class="row">
-      <div class="col-xs-12">&nbsp;</div>
-    </div>
-
-    <form class="row pb-1 vertical-align" role="group">
-      <div class="col-md-2">
-        Control buttons:
-      </div>
-      <div class="col" aria-label="">
-        <button type="button" class="btn btn-default" data-bs-toggle="modal" data-bs-target="#divFormatDialog">Choose what to show about each inscription</button>
-      </div>
-    </form>
-
-    <section class="row vertical-align">
-      <div class="col-md-2">Copy symbol to clipboard:</div>
-      <div class="col-md-10">
+    <div id="searchControlsRow" class="row py-3" role="group" aria-label="">
+      <div id="searchControlsContainer" class="col d-flex flex-wrap justify-content-start align-items-start gap-2">
         <div class="btn-group flex-wrap" role="group">
           <button type="button" class="btn btn-default clip" id="btnOUmlautSmall">ö</button>
           <button type="button" class="btn btn-default clip" id="btnOUmlaut">Ö</button>
@@ -490,36 +673,34 @@
           <button type="button" class="btn btn-default clip" id="btnOhakeSmall">ô</button>
           <button type="button" class="btn btn-default clip" id="btnOhakeCapital">Ô</button>
         </div>
-      </div>
-    </section>
-
-    <div class="row py-3" role="group" aria-label="">
-      <div class="col-auto col-md-3 offset-md-2">
-        <button type="button" class="col-md-12 btn btn-success" id="btnSearch">Search</button>
-      </div>
-      <div class="col-auto col-md-2">
-        <button type="button" class="col-md-12 btn btn-default" id="btnResetSearch">Reset search</button>
-      </div>
-      <div class="col-auto col-md-2">
-        <button type="button" class="btn btn-default col-md-12" id="btnClearRules">Clear search parameters</button>
-      </div>
-    </div>
-
-    <div class="row mb-3">
-      <div class="col-2">
-        <span>Enter your search in natural language. For example, 'Sök på alla inskrifter som i sin translitterering innehåller ordet stan'</span>
-      </div>
-      <div class="col">
-        <textarea id="searchTextInput" class="form-control" rows="4" placeholder="Enter search query here..."></textarea>
-      </div>
-      <div class="col-2">
-        <button class="btn btn-success" type="button" id="btnText2Rules">Convert to search parameters</button>
+        <button type="button" class="btn btn-success px-4" id="btnSearch">Search</button>
+        <button type="button" class="btn btn-danger" id="btnResetSearch">Delete search</button>
+        <button type="button" class="btn btn-default" id="btnOpenSearchParameters" data-bs-toggle="modal" data-bs-target="#containerRuleIo">Search parameters</button>
+        <button type="button" class="btn btn-default" id="btnOpenImportId" data-bs-toggle="modal" data-bs-target="#modalResultsIo" data-results-mode="import">Import ID</button>
+        <button type="button" class="btn btn-default" id="btnOpenExportResults" data-bs-toggle="modal" data-bs-target="#modalResultsIo" data-results-mode="export">Export</button>
       </div>
     </div>
 
     <!-- pb-6 is our custom class to make more vertical space -->
-    <div class="row pb-6">
-      <div id="builder" class="col"></div>
+    <div class="row">
+      <div id="builderContainer" class="col">
+        <div id="builder"></div>
+      </div>
+    </div>
+    <div class="row mt-4 mb-3 pb-6">
+      <div id="aiAssistantContainer" class="col">
+        <div class="border border-warning rounded-3 p-3 bg-body-tertiary shadow-sm">
+          <div class="small text-muted mb-2">Let the AI assistent help you with your search: write your question in any language</div>
+          <div class="row g-2 align-items-start">
+            <div class="col">
+              <textarea id="searchTextInput" class="form-control" rows="4" placeholder="Enter search query here..."></textarea>
+            </div>
+            <div class="col-auto d-grid">
+              <button class="btn btn-warning" type="button" id="btnText2Rules">Convert to search</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -581,6 +762,27 @@
     </div>
   </div>
 
+  <div id="mapDisplayOptionsDialog" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="mapDisplayOptionsDialogLabel">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="mapDisplayOptionsDialogLabel">Choose What To Show On The Map</h4>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" value="" id="chkShowSelectedInscriptions" aria-label="Checkbox for showing selected inscriptions only">
+            <label class="form-check-label" for="chkShowSelectedInscriptions">Show selected inscriptions only</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="chkShowOriginalLocation" aria-label="Checkbox for showing original location">
+            <label class="form-check-label" for="chkShowOriginalLocation">Show inscriptions based on original location</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="containerRuleIo" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="containerRuleIoLabel">
     <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
@@ -629,23 +831,23 @@
         </div>
 
         <div class="modal-body">
-          <div class="row">
+          <div class="row" id="resultsExportSection">
             <div class="col-xs-offset-1 col-xs-10">
               <p>Export search results in Excel format by clicking <em>Export</em> button bellow.<br>Read more about exporting <a href="https://rundata-net.readthedocs.io/en/latest/getting-started/user_guide.html#importing-and-exporting-results">in the documentation</a>.</p>
               <button type="button" class="col-xs-3 btn btn-default" id="btnExportResults"><b>Export search results</b></button>
             </div>
           </div>
-          <div class="row">
+          <div class="row" id="resultsIoDivider">
             <div class="col-xs-12"><hr></div>
           </div>
 
-          <div class="row">
+          <div class="row" id="resultsImportSection">
             <div id="drop-area" class="col-xs-10 col-xs-offset-1">
               <form class="my-form" id="form-signature-import">
                 <div class="form-group">
                   <p>Import file with signatures by dragging and dropping it in highlighted area or by selecting it. Read more about the possible file formats <a href="https://rundata-net.readthedocs.io/en/latest/getting-started/user_guide.html#importing-and-exporting-results">in the documentation</a>.</p>
                   <label for="fileElem" class="button">Select a file</label>
-                  <input type="file" id="fileElem">
+                  <input type="file" id="fileElem" accept=".csv,.txt,.xlsx,.xls,.ods">
                 </div>
               </form>
             </div>
@@ -712,6 +914,7 @@ function isSafari() {
 <!-- end of query builder js -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
 <script type="text/javascript" src="{% static 'runes/index.min.js' %}"></script>
 
@@ -725,6 +928,132 @@ let gMarkersLayer = null;
 let inpQueryBuilder = "builder";
 let gViewModel = null; // Global view model for the runic inscriptions
 let gExportInProgress = false;
+let gTranslationOccurrenceCount = null;
+let gSearchHintMessage = null;
+const INCLUDE_SYMBOLS_HINT = 'Your query includes symbols. To search symbols, enable the "Include symbols" filter.';
+
+function findRuleById(rulesNode, ruleId) {
+  if (!rulesNode || !Array.isArray(rulesNode.rules)) {
+    return null;
+  }
+  for (const rule of rulesNode.rules) {
+    if (!rule) {
+      continue;
+    }
+    if (rule.id === ruleId) {
+      return rule;
+    }
+    if (Array.isArray(rule.rules)) {
+      const nested = findRuleById(rule, ruleId);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+  return null;
+}
+
+function syncMiniBuilderFromRules(rules) {
+  const signatureInput = document.getElementById('miniSignatureInput');
+  const locationInput = document.getElementById('miniLocationInput');
+  if (!signatureInput || !locationInput) {
+    return;
+  }
+
+  const signatureRule = findRuleById(rules, 'inscription_id');
+  const locationRule = findRuleById(rules, 'full_address');
+  signatureInput.value = signatureRule && signatureRule.value ? signatureRule.value : '';
+  locationInput.value = locationRule && locationRule.value ? locationRule.value : '';
+}
+
+function buildRulesFromMiniBuilder() {
+  const signatureInput = document.getElementById('miniSignatureInput');
+  const locationInput = document.getElementById('miniLocationInput');
+  if (!signatureInput || !locationInput) {
+    return null;
+  }
+
+  const signatureValue = signatureInput.value.trim();
+  const locationValue = locationInput.value.trim();
+  const rules = [];
+
+  if (signatureValue) {
+    rules.push({
+      id: 'inscription_id',
+      field: 'signature_text',
+      type: 'string',
+      input: 'text',
+      operator: signatureValue.includes('|') ? 'in_separated_list' : 'contains',
+      value: signatureValue,
+      ignoreCase: true,
+    });
+  }
+
+  if (locationValue) {
+    rules.push({
+      id: 'full_address',
+      field: 'full_address',
+      type: 'string',
+      input: 'text',
+      operator: 'contains',
+      value: locationValue,
+      ignoreCase: true,
+      includeSpecialSymbols: false,
+    });
+  }
+
+  if (rules.length === 0) {
+    return null;
+  }
+
+  return {
+    condition: 'AND',
+    rules: rules,
+    not: false,
+  };
+}
+
+function applyMiniBuilderRulesIfNeeded() {
+  const miniRules = buildRulesFromMiniBuilder();
+  if (!miniRules) {
+    return false;
+  }
+  $(`#${inpQueryBuilder}`).queryBuilder('setRules', miniRules, true);
+  return true;
+}
+
+function applyStatsDisplayMode() {
+  const wordsRow = document.getElementById('statsWordsRow');
+  const namesRow = document.getElementById('statsNamesRow');
+  const tokensRow = document.getElementById('statsTokensRow');
+
+  if (gTranslationOccurrenceCount !== null) {
+    wordsRow.style.display = 'none';
+    namesRow.style.display = 'none';
+    tokensRow.style.display = '';
+    document.getElementById('outNumTokens').textContent = gTranslationOccurrenceCount;
+    return;
+  }
+
+  wordsRow.style.display = '';
+  namesRow.style.display = '';
+  tokensRow.style.display = 'none';
+}
+
+function renderMainDisplayHintIfNeeded() {
+  if (!gSearchHintMessage) {
+    return;
+  }
+  if (!gViewModel || gViewModel.searchResults === null) {
+    return;
+  }
+  if (gViewModel.searchResults.size > 0) {
+    return;
+  }
+  document.getElementById('mainDisplay').innerHTML = `
+    <div class="alert alert-info m-2" role="status">${INCLUDE_SYMBOLS_HINT}</div>
+  `;
+}
 
 function getCrossUrl(crossName) {
   // It is important that staticBase is written in a file that is processed by the back-end.
@@ -746,6 +1075,7 @@ function onDbLoaded() {
 
   // populate jstree with data
   $('#jstree').jstree(true).refresh();
+  applyWindowAlignments();
 }
 
 /**
@@ -788,6 +1118,79 @@ function showMarkersWrapper({preserveMapArea = false} = {}) {
   });
 }
 
+function alignLowerSectionsToMainWindow() {
+  const mainDisplay = document.getElementById('mainDisplay');
+  const pageContainer = document.querySelector('.container-fluid');
+  const sections = [
+    document.getElementById('searchControlsContainer'),
+    document.getElementById('builderContainer'),
+    document.getElementById('aiAssistantContainer'),
+  ];
+  if (!mainDisplay || !pageContainer) {
+    return;
+  }
+
+  // Keep default mobile layout.
+  if (!window.matchMedia('(min-width: 768px)').matches) {
+    sections.forEach(el => {
+      if (!el) return;
+      el.style.marginLeft = '';
+      el.style.width = '';
+    });
+    return;
+  }
+
+  const mainLeft = mainDisplay.getBoundingClientRect().left;
+  const containerLeft = pageContainer.getBoundingClientRect().left;
+  const offset = Math.max(0, Math.round(mainLeft - containerLeft));
+
+  sections.forEach(el => {
+    if (!el) return;
+    el.style.marginLeft = `${offset}px`;
+    el.style.width = `calc(100% - ${offset}px)`;
+  });
+}
+
+function alignTopButtonsToMainWindow() {
+  const mainDisplay = document.getElementById('mainDisplay');
+  const topButtons = document.getElementById('topControlButtons');
+  const navContainer = document.querySelector('.rundata-navbar .container-fluid');
+  if (!mainDisplay || !topButtons || !navContainer) {
+    return;
+  }
+
+  if (!window.matchMedia('(min-width: 768px)').matches) {
+    topButtons.style.marginLeft = '';
+    return;
+  }
+
+  const mainLeft = mainDisplay.getBoundingClientRect().left;
+  const navLeft = navContainer.getBoundingClientRect().left;
+  const offset = Math.max(0, Math.round(mainLeft - navLeft));
+  topButtons.style.marginLeft = `${offset}px`;
+}
+
+function applyWindowAlignments() {
+  alignLowerSectionsToMainWindow();
+  alignTopButtonsToMainWindow();
+}
+
+function updateMobileFullscreenLayout() {
+  if (!window.matchMedia('(max-width: 767.98px)').matches) {
+    document.body.classList.remove('mobile-map-fullscreen');
+    return;
+  }
+  const mapEl = document.getElementById('mapDisplay');
+  const isFullscreen = !!(
+    mapEl && (
+      mapEl.classList.contains('leaflet-fullscreen-on') ||
+      mapEl.classList.contains('leaflet-pseudo-fullscreen') ||
+      document.fullscreenElement === mapEl
+    )
+  );
+  document.body.classList.toggle('mobile-map-fullscreen', isFullscreen);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   // Initialization happens in 3 steps:
   // 1. code here on page load
@@ -820,8 +1223,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
   initClipboardButtons();
   ({ map: gMyMap, markers: gMarkersLayer } = initMap("mapDisplay"));
+  gMyMap.on('fullscreenchange enterFullscreen exitFullscreen', function() {
+    // Force tile/layout recalculation after fullscreen toggle to avoid grey bands.
+    setTimeout(() => {
+      updateMobileFullscreenLayout();
+      gMyMap.invalidateSize();
+    }, 50);
+  });
   document.getElementById('mHideMap').addEventListener('click', function() {
-    onHideMapClicked('mapDisplayWrapper', 'mHideMap');
+    const mapWrapper = document.getElementById('mapDisplayWrapper');
+    const isHidden = mapWrapper.classList.toggle('map-hidden');
+    this.textContent = isHidden ? '+' : '×';
+    this.title = isHidden ? 'Show map' : 'Hide map';
+    this.setAttribute('aria-label', isHidden ? 'Show map' : 'Hide map');
+    if (!isHidden && gMyMap) {
+      setTimeout(() => gMyMap.invalidateSize(), 0);
+    }
+    applyWindowAlignments();
+  });
+  updateMobileFullscreenLayout();
+  applyWindowAlignments();
+  window.addEventListener('resize', () => {
+    updateMobileFullscreenLayout();
+    applyWindowAlignments();
   });
 
   // Configure jsTree even before we have the data
@@ -835,6 +1259,7 @@ document.addEventListener('DOMContentLoaded', function() {
   })
   .on('changed.jstree', (node, eventObj) => {
     if (eventObj.action == 'select_node') {
+      setMainDisplayScrollTarget(eventObj.node.id);
       if ($('#chkShowSelectedInscriptions').is(':checked')) {
         showMarkersWrapper();
       }
@@ -885,7 +1310,9 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log('Got rules from server:', data);
       if (data && data.rules) {
         console.log(data.rules);
-        $(`#${inpQueryBuilder}`).queryBuilder('setRules', JSON.parse(data.rules));
+        const parsedRules = JSON.parse(data.rules);
+        $(`#${inpQueryBuilder}`).queryBuilder('setRules', parsedRules);
+        syncMiniBuilderFromRules(parsedRules);
         // After successfully setting the rules, trigger the search
         document.getElementById('btnSearch').click();
       } else {
@@ -900,15 +1327,73 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   document.getElementById('btnSearch').addEventListener('click', function() {
+    applyMiniBuilderRulesIfNeeded();
     const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
+    if (shouldSuggestIncludeSymbols(rules)) {
+      gSearchHintMessage = INCLUDE_SYMBOLS_HINT;
+      gTranslationOccurrenceCount = null;
+      gViewModel.setSearchResults([]);
+      return;
+    }
+
+    gSearchHintMessage = null;
+    const hasTranslationWordSearch = getTranslationSearchTokenCount(rules) > 0;
     const results = doSearch(rules, gViewModel.getAllInscriptions().values());
+    gTranslationOccurrenceCount = hasTranslationWordSearch ? getTranslationOccurrenceCount(results) : null;
     //console.log(`Got ${results.length} results`);
     gViewModel.setSearchResults(results);
   });
 
   document.getElementById('btnResetSearch').addEventListener('click', function() {
+    gSearchHintMessage = null;
+    gTranslationOccurrenceCount = null;
     gViewModel.clearSearchResults();
+    $(`#${inpQueryBuilder}`).queryBuilder('reset');
+    const signatureInput = document.getElementById('miniSignatureInput');
+    const locationInput = document.getElementById('miniLocationInput');
+    if (signatureInput) signatureInput.value = '';
+    if (locationInput) locationInput.value = '';
   });
+  document.getElementById('btnMiniSearch').addEventListener('click', function() {
+    document.getElementById('btnSearch').click();
+  });
+  document.getElementById('btnMiniResetSearch').addEventListener('click', function() {
+    document.getElementById('btnResetSearch').click();
+  });
+  const resultsIoTitle = document.getElementById('divResultsIoLabel');
+  const resultsExportSection = document.getElementById('resultsExportSection');
+  const resultsImportSection = document.getElementById('resultsImportSection');
+  const resultsIoDivider = document.getElementById('resultsIoDivider');
+  const resultsIoModal = document.getElementById('modalResultsIo');
+
+  function setResultsIoMode(mode) {
+    const selectedMode = mode || 'both';
+    if (selectedMode === 'import') {
+      resultsIoTitle.textContent = 'Import signatures';
+      resultsExportSection.style.display = 'none';
+      resultsImportSection.style.display = '';
+      resultsIoDivider.style.display = 'none';
+      return;
+    }
+    if (selectedMode === 'export') {
+      resultsIoTitle.textContent = 'Export search results';
+      resultsExportSection.style.display = '';
+      resultsImportSection.style.display = 'none';
+      resultsIoDivider.style.display = 'none';
+      return;
+    }
+    resultsIoTitle.textContent = 'Export search results, import signatures';
+    resultsExportSection.style.display = '';
+    resultsImportSection.style.display = '';
+    resultsIoDivider.style.display = '';
+  }
+
+  resultsIoModal.addEventListener('show.bs.modal', function(event) {
+    const trigger = event.relatedTarget;
+    const requestedMode = trigger ? trigger.getAttribute('data-results-mode') : null;
+    setResultsIoMode(requestedMode);
+  });
+
   document.getElementById('btnRulesExport').addEventListener('click', function() {
     const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
     if (!$.isEmptyObject(rules)) {
@@ -918,11 +1403,8 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('btnRulesImport').addEventListener('click', function() {
     const rules = JSON.parse($('#ruleIo').val());
     $(`#${inpQueryBuilder}`).queryBuilder('setRules', rules, true);
+    syncMiniBuilderFromRules(rules);
   });
-  document.getElementById('btnClearRules').addEventListener('click', function() {
-    $(`#${inpQueryBuilder}`).queryBuilder('reset');
-  });
-
   // Export Excel button handler
   document.getElementById('btnExportResults').addEventListener('click', function() {
     if (gExportInProgress) {
@@ -931,13 +1413,20 @@ document.addEventListener('DOMContentLoaded', function() {
     gExportInProgress = true;
     showLoading();
 
-    // Create a mapping of column names to human-readable names
-    const userSelectedFields =  getUserSelectedDisplay();
-    const columns = userSelectedFields.concat(['latitude', 'longitude', 'present_latitude', 'present_longitude']);
+    // Create a mapping of column names to human-readable names.
+    // Export coordinates as two dedicated columns, not the combined display field.
+    const userSelectedFields = getUserSelectedDisplay().filter(field => field !== 'coordination');
+    const columns = userSelectedFields.concat(['latitude', 'present_latitude']);
     const columnMap = {};
 
     columns.forEach(column => {
-      columnMap[column] = getHumanName(column);
+      if (column === 'latitude') {
+        columnMap[column] = 'Oldest known coordinates';
+      } else if (column === 'present_latitude') {
+        columnMap[column] = 'Current coordinates';
+      } else {
+        columnMap[column] = getHumanName(column);
+      }
     });
 
     // Get the current search rules to include in the export
@@ -997,6 +1486,9 @@ document.addEventListener('DOMContentLoaded', function() {
     $('#jstree').jstree(true).refresh(false, true);
     showMarkersWrapper();
     calcWordsAndPersonalNames(data.model.getActiveInscriptions());
+    applyStatsDisplayMode();
+    renderMainDisplayHintIfNeeded();
+    applyWindowAlignments();
   });
 
   initDragAndDrop();

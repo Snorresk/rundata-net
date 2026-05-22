@@ -417,12 +417,16 @@
 
       /* ── images ── */
       .image-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        display: flex;
+        flex-wrap: wrap;
         gap: 12px;
         margin: 0;
         padding: 0;
         list-style: none;
+      }
+      .image-grid li {
+        width: 4.5cm;
+        max-width: 100%;
       }
       .image-grid a {
         display: block;
@@ -434,15 +438,19 @@
       }
       .image-grid img {
         display: block;
-        width: 100%;
-        aspect-ratio: 4/3;
+        width: 4.5cm;
+        height: 4.5cm;
+        max-width: 100%;
         object-fit: cover;
+        aspect-ratio: 1/1;
       }
-      .image-grid span {
+      .image-grid .image-source {
         display: block;
-        padding: 6px 8px;
-        font-size: 0.85rem;
+        padding: 4px 2px 0;
+        font-size: 0.72rem;
+        line-height: 1.2;
         color: var(--ink-light);
+        word-break: break-word;
       }
 
       /* ── footer ── */
@@ -573,22 +581,14 @@
       </header>
 
       <dl class="meta-ribbon">
-        {% if meta.found_location %}
         <div class="meta-item">
-          <dt>Found</dt>
-          <dd>{{ meta.found_location }}</dd>
+          <dt>Lost?</dt>
+          <dd>{% if meta.lost %}Yes{% else %}No{% endif %}</dd>
         </div>
-        {% endif %}
-        {% if meta.current_location %}
+        {% if meta.objectInfo %}
         <div class="meta-item">
-          <dt>Current</dt>
-          <dd>{{ meta.current_location }}</dd>
-        </div>
-        {% endif %}
-        {% if meta.dating %}
-        <div class="meta-item">
-          <dt>Dating</dt>
-          <dd>{{ meta.dating }}</dd>
+          <dt>Object</dt>
+          <dd>{{ meta.objectInfo }}</dd>
         </div>
         {% endif %}
         {% if meta.materialType or meta.material %}
@@ -597,10 +597,10 @@
           <dd>{% if meta.materialType %}{{ meta.materialType }}{% endif %}{% if meta.materialType and meta.material %}, {% endif %}{% if meta.material %}{{ meta.material }}{% endif %}</dd>
         </div>
         {% endif %}
-        {% if meta.rune_type %}
+        {% if meta.dating %}
         <div class="meta-item">
-          <dt>Rune type</dt>
-          <dd>{{ meta.rune_type }}</dd>
+          <dt>Dating</dt>
+          <dd>{{ meta.dating }}</dd>
         </div>
         {% endif %}
       </dl>
@@ -646,60 +646,40 @@
               {% if meta.original_site %}
               <div class="def-row"><dt class="def-term">Original site</dt><dd class="def-detail">{{ meta.original_site }}</dd></div>
               {% endif %}
-              {% if meta.latitude and meta.longitude and meta.latitude != 0 and meta.longitude != 0 %}
-              <div class="def-row">
-                <dt class="def-term">Original coordinates</dt>
-                <dd class="def-detail">{{ meta.latitude }}, {{ meta.longitude }}</dd>
-              </div>
-              {% endif %}
-              {% if meta.present_latitude and meta.present_longitude and meta.present_latitude != 0 and meta.present_longitude != 0 %}
-              <div class="def-row">
-                <dt class="def-term">Current coordinates</dt>
-                <dd class="def-detail">{{ meta.present_latitude }}, {{ meta.present_longitude }}</dd>
-              </div>
-              {% endif %}
-              {% if meta.parish_code %}
-              <div class="def-row"><dt class="def-term">Parish code</dt><dd class="def-detail">{{ meta.parish_code }}</dd></div>
-              {% endif %}
             </dl>
           </section>
 
           <section class="section">
             <h2 class="section-title">Classification</h2>
             <dl class="def-list">
-              {% if meta.rune_type %}
-              <div class="def-row"><dt class="def-term">Rune type</dt><dd class="def-detail">{{ meta.rune_type }}</dd></div>
-              {% endif %}
-              {% if meta.dating %}
-              <div class="def-row"><dt class="def-term">Dating</dt><dd class="def-detail">{{ meta.dating }}</dd></div>
-              {% endif %}
-              {% if meta.year_from or meta.year_to %}
-              <div class="def-row">
-                <dt class="def-term">Year range</dt>
-                <dd class="def-detail">{% if meta.year_from %}{{ meta.year_from }}{% endif %}{% if meta.year_from and meta.year_to %} – {% endif %}{% if meta.year_to %}{{ meta.year_to }}{% endif %}</dd>
-              </div>
-              {% endif %}
-              {% if meta.style %}
-              <div class="def-row"><dt class="def-term">Style</dt><dd class="def-detail">{{ meta.style }}</dd></div>
-              {% endif %}
-              {% if meta.carver %}
-              <div class="def-row"><dt class="def-term">Carver</dt><dd class="def-detail">{{ meta.carver }}</dd></div>
-              {% endif %}
-              {% if meta.materialType %}
-              <div class="def-row"><dt class="def-term">Material type</dt><dd class="def-detail">{{ meta.materialType }}</dd></div>
-              {% endif %}
-              {% if meta.material %}
-              <div class="def-row"><dt class="def-term">Material</dt><dd class="def-detail">{{ meta.material }}</dd></div>
-              {% endif %}
-              {% if meta.objectInfo %}
-              <div class="def-row"><dt class="def-term">Object</dt><dd class="def-detail">{{ meta.objectInfo }}</dd></div>
-              {% endif %}
-              {% if data.crosses %}
-              <div class="def-row"><dt class="def-term">Crosses</dt><dd class="def-detail">{{ data.crosses }}</dd></div>
-              {% endif %}
+              <div class="def-row"><dt class="def-term">Carver</dt><dd class="def-detail">{% if meta.carver %}{{ meta.carver }}{% else %}—{% endif %}</dd></div>
+              <div class="def-row"><dt class="def-term">Number of crosses</dt><dd class="def-detail">{{ meta.crosses.count }}</dd></div>
+              <div class="def-row"><dt class="def-term">Cross form</dt><dd class="def-detail">{% if data.crosses %}{{ data.crosses }}{% else %}—{% endif %}</dd></div>
+              <div class="def-row"><dt class="def-term">Rune type</dt><dd class="def-detail">{% if meta.rune_type %}{{ meta.rune_type }}{% else %}—{% endif %}</dd></div>
+              <div class="def-row"><dt class="def-term">Style</dt><dd class="def-detail">{% if meta.style %}{{ meta.style }}{% else %}—{% endif %}</dd></div>
             </dl>
           </section>
         </div>
+
+        {% if meta.latitude and meta.longitude and meta.latitude != 0 and meta.longitude != 0 or meta.present_latitude and meta.present_longitude and meta.present_latitude != 0 and meta.present_longitude != 0 %}
+        <section class="section">
+          <h2 class="section-title">Coordinations</h2>
+          <dl class="def-list">
+            {% if meta.latitude and meta.longitude and meta.latitude != 0 and meta.longitude != 0 %}
+            <div class="def-row">
+              <dt class="def-term">Oldest known latitude and longitude</dt>
+              <dd class="def-detail">{{ meta.latitude }}, {{ meta.longitude }}</dd>
+            </div>
+            {% endif %}
+            {% if meta.present_latitude and meta.present_longitude and meta.present_latitude != 0 and meta.present_longitude != 0 %}
+            <div class="def-row">
+              <dt class="def-term">Current latitude and longitude</dt>
+              <dd class="def-detail">{{ meta.present_latitude }}, {{ meta.present_longitude }}</dd>
+            </div>
+            {% endif %}
+          </dl>
+        </section>
+        {% endif %}
 
         {# ── Texts ── #}
         {% if data.runic_texts %}
@@ -759,8 +739,8 @@
                 {% if img.direct_url %}
                 <img src="{{ img.direct_url }}" alt="Image of {{ signature }}">
                 {% endif %}
-                <span>{% if img.direct_url %}View{% else %}Open{% endif %}</span>
               </a>
+              <span class="image-source">source: {{ img.link_url }}</span>
             </li>
             {% endfor %}
           </ul>

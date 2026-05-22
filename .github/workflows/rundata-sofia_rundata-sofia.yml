@@ -1,0 +1,54 @@
+# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
+# More GitHub Actions for Azure: https://github.com/Azure/actions
+# More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
+
+name: Deploy rundata-sofia
+
+on:
+  push:
+    branches:
+      - rundata-sofia
+  workflow_dispatch:
+
+jobs:
+  call-npm-test:
+    name: NPM Test
+    uses: ./.github/workflows/npm-test-template.yml
+
+  call-python-test:
+    name: Python Test
+    uses: ./.github/workflows/python-test-template.yml
+
+  build:
+    name: Build
+    needs: [call-npm-test, call-python-test]
+    uses: ./.github/workflows/build-template.yml
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      id-token: write #This is required for requesting the JWT
+      contents: read #This is required for actions/checkout
+
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v8
+        with:
+          name: python-app
+
+      - name: Login to Azure
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5D17DFAFD02B4665B2A4BD6D01A304A4 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_88C7D032B4574C99A85A8B0B36E9682E }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_CC5973B1BC954CDDB7235E4D2314C6DC }}
+
+      # Deploy the zip directly; no need to unpack it on the runner.
+      - name: 'Deploy to Azure Web App'
+        uses: azure/webapps-deploy@v3
+        id: deploy-to-webapp
+        with:
+          app-name: 'rundata-sofia'
+          slot-name: 'Production'
+          package: release.zip

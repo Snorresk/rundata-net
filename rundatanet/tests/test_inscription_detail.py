@@ -181,8 +181,9 @@ class TestInscriptionDetailView(TestCase):
         response = self.client.get(url)
         content = response.content.decode()
         assert 'id="detailMap"' not in content
-        assert "Original coordinates" not in content
-        assert "Current coordinates" not in content
+        assert "Coordinations" not in content
+        assert "Oldest known latitude and longitude" not in content
+        assert "Current latitude and longitude" not in content
 
     def test_map_renders_both_location_sets(self):
         self.meta.latitude = 59.123456
@@ -198,8 +199,9 @@ class TestInscriptionDetailView(TestCase):
         content = response.content.decode()
 
         assert 'id="detailMap"' in content
-        assert "Original coordinates" in content
-        assert "Current coordinates" in content
+        assert "Coordinations" in content
+        assert "Oldest known latitude and longitude" in content
+        assert "Current latitude and longitude" in content
         assert "Original or found location" in content
         assert "Current location" in content
         assert "59.123456, 17.654321" in content
@@ -217,7 +219,8 @@ class TestInscriptionDetailView(TestCase):
         content = response.content.decode()
 
         assert 'id="detailMap"' in content
-        assert "Current coordinates" in content
+        assert "Coordinations" in content
+        assert "Current latitude and longitude" in content
         assert "58.765432, 16.234567" in content
         assert "Regional museum" in content
 

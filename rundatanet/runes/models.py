@@ -80,7 +80,8 @@ class Reference(models.Model):
     """A single bibliographic reference entry.
 
     Text references are plain bibliographic strings, e.g. 'SRI 1 plansch IV fig. 3'.
-    Link references are URLs with a human-readable label, e.g. label='Riksarkivet'.
+    Link references are URLs with a human-readable label, e.g.
+    label='Swedish Runic Bibliography'.
     In the flat DB view, links are encoded as '<label>:::<url>' so the frontend and
     export layer can recover the display name without pattern-matching on the URL.
     """

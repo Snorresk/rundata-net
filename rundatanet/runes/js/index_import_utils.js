@@ -12,14 +12,23 @@ function handleFiles(files) {
   }
   var fileReader = new FileReader();
   var file = files[0]; // be sure to take just a single file
+  const isExcelImport = isExcelFile(file);
   fileReader.onloadend = function(evt) {
     if (evt.target.readyState == FileReader.DONE) {
       $('#loading-sub-text').html('This dialog will disappear once data is ready');
       showLoading();
-      setTimeout(importSignaturesHandler, 10, evt.target.result);
+      if (isExcelImport) {
+        setTimeout(importSignaturesFromExcel, 10, evt.target.result);
+      } else {
+        setTimeout(importSignaturesFromText, 10, evt.target.result);
+      }
     }
   }
-  fileReader.readAsText(file);
+  if (isExcelImport) {
+    fileReader.readAsArrayBuffer(file);
+  } else {
+    fileReader.readAsText(file);
+  }
 }
 
 function handleDrop(e) {
@@ -45,7 +54,7 @@ function unhighlight(e) {
 
 // Import list of signatures provided from a file
 // Function argument fileContent is the actual file content.
-function importSignaturesHandler(fileContent) {
+function importSignaturesFromText(fileContent) {
   if (fileContent === null) {
     return;
   }
@@ -56,63 +65,129 @@ function importSignaturesHandler(fileContent) {
   }
 
   const csvData = Papa.parse(fileContent);
-  let numLines = csvData.data.length;
-  let firstDataRow = 0;
-  let signatureColumn = 0;
-  let multiline = false;
-  let numEntries = 0;
-  let values = [];
+  const values = extractValuesFromRows(csvData.data);
+  applyImportedSignatures(values);
+}
 
-  if (numLines == 2) {
-    // check if csvData.data[1] is a string or array
-    if (typeof csvData.data[1] === 'string') {
-      if (csvData.data[1].trim().length == 0) {
-        numLines = 1;
-      }
-    } else {
-      if (csvData.data[1][0].trim().length == 0) {
-        numLines = 1;
-      }
-    }
+function importSignaturesFromExcel(arrayBuffer) {
+  if (typeof XLSX === 'undefined') {
+    alert('Excel import is not available right now. Please try CSV/TXT format.');
+    hideLoading();
+    return;
+  }
+  if (arrayBuffer === null) {
+    return;
   }
 
-  if (numLines > 1) {
-    let signatureCandidate = csvData.data[0].findIndex(item => 'signature' === item.toLowerCase());
-    if (signatureCandidate != -1) {
-      firstDataRow = 1;
-      signatureColumn = signatureCandidate;
+  try {
+    const workbook = readWorkbookWithFallbacks(arrayBuffer);
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+      alert('No worksheet found in this Excel file.');
+      hideLoading();
+      return;
     }
+    let values = [];
+    for (const sheetName of workbook.SheetNames) {
+      const currentSheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(currentSheet, {
+        header: 1,
+        raw: false,
+        defval: '',
+      });
+      values = extractValuesFromRows(rows);
+      if (values.length > 0) {
+        break;
+      }
+    }
+    applyImportedSignatures(values);
+  } catch (error) {
+    console.error('Failed to parse Excel import', error);
+    alert(`Could not read this Excel file. Please check the file and try again.\n\nDetails: ${formatImportError(error)}`);
+    hideLoading();
+  }
+}
 
-    numEntries = csvData.data.length;
-    for (var i = firstDataRow; i < numEntries; i++) {
-      // iterate over rows
-      if (!csvData.data[i][signatureColumn] || csvData.data[i][signatureColumn].trim().length == 0) {
-        continue;
-      }
-      values.push(csvData.data[i][signatureColumn].trim());
-    }
-  } else {
-    // single line, treat every value as a signature
-    numEntries = csvData.data[0].length;
-    for (var i = 0; i < numEntries; i++) {
-      // iterate over columns
-      if (!csvData.data[0][i] || csvData.data[0][i].trim().length == 0) {
-        continue;
-      }
-      values.push(csvData.data[0][i].trim());
+function readWorkbookWithFallbacks(arrayBuffer) {
+  const uint8 = new Uint8Array(arrayBuffer);
+  const readers = [
+    { label: 'array/uint8', fn: () => XLSX.read(uint8, { type: 'array' }) },
+    { label: 'array/arrayBuffer', fn: () => XLSX.read(arrayBuffer, { type: 'array' }) },
+    { label: 'buffer/uint8', fn: () => XLSX.read(uint8, { type: 'buffer' }) },
+    {
+      label: 'binary-string',
+      fn: () => {
+        const binary = arrayBufferToBinaryString(arrayBuffer);
+        return XLSX.read(binary, { type: 'binary' });
+      },
+    },
+    {
+      label: 'base64',
+      fn: () => {
+        const base64 = arrayBufferToBase64(arrayBuffer);
+        return XLSX.read(base64, { type: 'base64' });
+      },
+    },
+  ];
+
+  const failures = [];
+  for (const reader of readers) {
+    try {
+      return reader.fn();
+    } catch (error) {
+      failures.push(`[${reader.label}] ${formatImportError(error)}`);
     }
   }
+  throw new Error(`Unable to parse workbook. Tried: ${failures.join(' | ')}`);
+}
 
-  // Concatenate values into a string with '|' as separator
-  values = values.join('|');
+function arrayBufferToBinaryString(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return binary;
+}
+
+function arrayBufferToBase64(arrayBuffer) {
+  return btoa(arrayBufferToBinaryString(arrayBuffer));
+}
+
+function formatImportError(error) {
+  if (!error) {
+    return 'Unknown error';
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error.message) {
+    return error.message;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch (_) {
+    return String(error);
+  }
+}
+
+function applyImportedSignatures(values) {
+  if (!values || values.length === 0) {
+    alert('No signatures or IDs were found in the imported file.');
+    hideLoading();
+    return;
+  }
+  const uniqueValues = [...new Set(values)];
+  const joinedValues = uniqueValues.join('|');
 
   var rule = [{
-    id: "signature_text",
+    id: "inscription_id",
     field: "signature_text",
     type: "string",
     input: "text",
     operator: "in_separated_list",
-    value: values,
+    value: joinedValues,
     ignoreCase: false,
   }];
 
@@ -127,6 +202,51 @@ function importSignaturesHandler(fileContent) {
   hideLoading();
   // After importing signatures, automatically trigger the search
   document.getElementById('btnSearch').click();
+}
+
+function normalizeCellValue(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value).trim();
+}
+
+function extractValuesFromRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return [];
+  }
+
+  const headerCandidates = new Set(['signature', 'signature_text', 'id', 'inscription_id']);
+  const firstRow = Array.isArray(rows[0]) ? rows[0] : [rows[0]];
+  let signatureColumn = 0;
+  let firstDataRow = 0;
+
+  const headerIndex = firstRow.findIndex(item => headerCandidates.has(normalizeCellValue(item).toLowerCase()));
+  if (headerIndex !== -1) {
+    signatureColumn = headerIndex;
+    firstDataRow = 1;
+  }
+
+  const values = [];
+  for (let i = firstDataRow; i < rows.length; i++) {
+    const row = Array.isArray(rows[i]) ? rows[i] : [rows[i]];
+    const candidate = normalizeCellValue(row[signatureColumn]);
+    if (candidate.length === 0) {
+      continue;
+    }
+    values.push(candidate);
+  }
+
+  return values;
+}
+
+function isExcelFile(file) {
+  const excelExtPattern = /\.(xlsx|xls|xlsm|xlsb|ods)$/i;
+  if (file && file.name && excelExtPattern.test(file.name)) {
+    return true;
+  }
+  const mime = (file && file.type) ? file.type : '';
+  return mime.includes('spreadsheetml') || mime.includes('ms-excel') || mime.includes('opendocument.spreadsheet');
 }
 
 export function initDragAndDrop() {

@@ -39,7 +39,7 @@ test('makeImagesMarkup() function', async () => {
       }
     ],
   };
-  const expectedDirect = `<div class="container-fluid"><div class="row"><div class="col-md-4"><a href="${images.links[0].indirect}" contentEditable="false" target="_blank"><img src="${images.links[0].direct}" class="img-responsive"></a></div></div></div>`;
+  const expectedDirect = `<div class="rundata-image-gallery"><figure class="rundata-image-item"><a href="${images.links[0].indirect}" contentEditable="false" target="_blank" class="rundata-image-link"><img src="${images.links[0].direct}" class="rundata-image-avatar" alt="Inscription image"></a><figcaption class="rundata-image-source">source: <a href="${images.links[0].indirect}" contentEditable="false" target="_blank">example.com</a></figcaption></figure></div>`;
   const results = makeImagesMarkup(images);
   assert.is(results.directImages, expectedDirect, `The direct images markup should be: ${expectedDirect}`);
   assert.is(results.indirectImages, '', `The indirect images markup should be empty when no indirect-only images exist`);
