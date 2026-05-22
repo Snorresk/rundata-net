@@ -21,6 +21,9 @@ jobs:
     environment:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+    permissions:
+      id-token: write   # required by azure/login for OIDC federated auth
+      contents: read # This is required for actions/checkout
 
     # One-time Azure App Service configuration required for this deploy flow
     # (set via Portal → Configuration, or `az webapp config ...`):
