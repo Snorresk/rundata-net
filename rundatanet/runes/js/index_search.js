@@ -657,15 +657,27 @@ function buildTranslationSearchFunctions(fieldName) {
   };
 }
 
+const SWEDISH_AREA_CODES = new Set([
+  'Öl', 'Ög', 'Sö', 'Sm', 'Vg', 'U', 'Vs', 'Nä', 'Vr', 'Gs',
+  'Hs', 'M', 'Ån', 'D', 'Hr', 'J', 'Lp', 'Ds', 'Bo', 'G', 'SE'
+]);
+
+function getSignatureAreaCode(signatureText) {
+  const signature = String(signatureText || '').trim();
+  if (!signature) return '';
+  const firstSpace = signature.indexOf(' ');
+  return firstSpace === -1 ? signature : signature.slice(0, firstSpace);
+}
+
 const searchCountryOrProvince = (entry, ruleValues) => {
-  for (let i = 0; i < ruleValues.length; i++) {
-    // let areaCode = ruleValues[i];
-    if (ruleValues[i] == 'all_sweden') {
-      const areaCodes = ['Öl ', 'Ög ', 'Sö ', 'Sm ', 'Vg ', 'U ', 'Vs ', 'Nä ', 'Vr ', 'Gs ', 'Hs ', 'M ', 'Ån ', 'D ', 'Hr ', 'J ', 'Lp ', 'Ds ', 'Bo ', 'G ', 'SE ', 'Bo'];
-      for (let j = 0; j < areaCodes.length; j++) {
-        if (operators.begins_with(entry['signature_text'], areaCodes[j])) {
-          return { match: true };
-        }
+  const signatureAreaCode = getSignatureAreaCode(entry['signature_text']);
+  const normalizedRuleValues = Array.isArray(ruleValues) ? ruleValues : [ruleValues];
+  for (let i = 0; i < normalizedRuleValues.length; i++) {
+    const ruleCode = String(normalizedRuleValues[i] || '').trim();
+    if (!ruleCode) continue;
+    if (ruleCode === 'all_sweden') {
+      if (SWEDISH_AREA_CODES.has(signatureAreaCode)) {
+        return { match: true };
       }
       const districts = ['Skåne', 'Halland', 'Blekinge'];
       for (let j = 0; j < districts.length; j++) {
@@ -673,9 +685,9 @@ const searchCountryOrProvince = (entry, ruleValues) => {
           return { match: true };
         }
       }
-      return { match: false };
+      continue;
     }
-    if (operators.begins_with(entry['signature_text'], ruleValues[i])) {
+    if (signatureAreaCode === ruleCode) {
       return { match: true };
     }
   }

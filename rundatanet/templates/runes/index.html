@@ -699,6 +699,7 @@
               <button class="btn btn-warning" type="button" id="btnText2Rules">Convert to search</button>
             </div>
           </div>
+          <div id="aiAssistantAlert" class="alert d-none mt-2 mb-0" role="alert" aria-live="assertive"></div>
         </div>
       </div>
     </div>
@@ -916,7 +917,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260531-countryfix"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -931,6 +932,50 @@ let gExportInProgress = false;
 let gTranslationOccurrenceCount = null;
 let gSearchHintMessage = null;
 const INCLUDE_SYMBOLS_HINT = 'Your query includes symbols. To search symbols, enable the "Include symbols" filter.';
+
+function hideAiAssistantAlert() {
+  const alertObj = document.getElementById('aiAssistantAlert');
+  if (!alertObj) {
+    return;
+  }
+  alertObj.classList.add('d-none');
+  alertObj.classList.remove('alert-warning', 'alert-danger');
+  alertObj.textContent = '';
+}
+
+function showAiAssistantAlert(message, level = 'warning') {
+  const alertObj = document.getElementById('aiAssistantAlert');
+  if (!alertObj) {
+    return;
+  }
+  alertObj.classList.remove('d-none', 'alert-warning', 'alert-danger');
+  alertObj.classList.add(level === 'danger' ? 'alert-danger' : 'alert-warning');
+  alertObj.textContent = message;
+}
+
+const AI_SYMBOL_AWARE_RULE_IDS = new Set([
+  'normalization_norse_to_transliteration',
+  'normalization_scandinavian_to_transliteration',
+]);
+
+function applyAiRuleDefaults(rulesNode) {
+  if (!rulesNode || !Array.isArray(rulesNode.rules)) {
+    return;
+  }
+
+  rulesNode.rules.forEach(rule => {
+    if (!rule) {
+      return;
+    }
+    if (Array.isArray(rule.rules)) {
+      applyAiRuleDefaults(rule);
+      return;
+    }
+    if (rule.id && AI_SYMBOL_AWARE_RULE_IDS.has(rule.id)) {
+      rule.includeSpecialSymbols = true;
+    }
+  });
+}
 
 function findRuleById(rulesNode, ruleId) {
   if (!rulesNode || !Array.isArray(rulesNode.rules)) {
@@ -1289,7 +1334,12 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
-    showLoading("Converting your search query to search parameters");
+    hideAiAssistantAlert();
+    showLoading("Converting your search query to search parameters (up to 20 seconds)");
+
+    const REQUEST_TIMEOUT_MS = 20000;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     // Send the text to the API endpoint
     fetch('api/txt2rules', {
@@ -1298,6 +1348,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ text: text }),
+      signal: controller.signal,
     })
     .then(response => {
       if (!response.ok) {
@@ -1306,23 +1357,34 @@ document.addEventListener('DOMContentLoaded', function() {
       return response.json();
     })
     .then(data => {
-      hideLoading();
       console.log('Got rules from server:', data);
+      if (data && data.error) {
+        showAiAssistantAlert(data.error, 'warning');
+        return;
+      }
       if (data && data.rules) {
         console.log(data.rules);
         const parsedRules = JSON.parse(data.rules);
+        applyAiRuleDefaults(parsedRules);
         $(`#${inpQueryBuilder}`).queryBuilder('setRules', parsedRules);
         syncMiniBuilderFromRules(parsedRules);
         // After successfully setting the rules, trigger the search
         document.getElementById('btnSearch').click();
       } else {
-        showAlert('The server could not generate search rules from your text');
+        showAiAssistantAlert('The server could not generate search rules from your text.', 'warning');
       }
     })
     .catch(error => {
-      hideLoading();
       console.error('Error:', error);
-      showAlert('Failed to process your search query. Please try again.');
+      if (error.name === 'AbortError') {
+        showAiAssistantAlert('AI request timed out after 20 seconds. Please try again.', 'warning');
+        return;
+      }
+      showAiAssistantAlert('Failed to process your search query. Please try again.', 'danger');
+    })
+    .finally(() => {
+      window.clearTimeout(timeoutId);
+      hideLoading();
     });
   });
 

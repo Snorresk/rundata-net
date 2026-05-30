@@ -358,6 +358,52 @@ testSingleRuleSearch({
   multiField: true,
 });
 
+test('inscription_country "N" (Norway) should not match "Nä" (Närke)', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'inscription_country',
+        field: 'signature_text',
+        type: 'string',
+        input: 'text',
+        operator: 'in',
+        value: ['N'],
+        data: { multiField: true }
+      }
+    ],
+    not: false,
+    valid: true
+  };
+
+  const result = doSearch(rules, dbMap.values());
+  const hasNarke = result.some(item => String(item.signature_text || '').startsWith('Nä '));
+  assert.not.ok(hasNarke, 'Norway filter should not include Närke signatures');
+});
+
+test('inscription_country string value "N " should not match "Nä" (Närke)', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'inscription_country',
+        field: 'signature_text',
+        type: 'string',
+        input: 'text',
+        operator: 'in',
+        value: 'N ',
+        data: { multiField: true }
+      }
+    ],
+    not: false,
+    valid: true
+  };
+
+  const result = doSearch(rules, dbMap.values());
+  const hasNarke = result.some(item => String(item.signature_text || '').startsWith('Nä '));
+  assert.not.ok(hasNarke, 'Norway string code should not include Närke signatures');
+});
+
 
 testSingleRuleSearch({
   field: 'carver',
