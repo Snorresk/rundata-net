@@ -4,7 +4,7 @@ import { inscriptions2markers } from '../../runes/js/index_map.js';
 
 const mockLeaflet = {
   marker: (latlng, options) => {
-      return {
+      const markerObj = {
         _latlng: latlng,
         options: options,
         getLatLng: () => {
@@ -13,14 +13,11 @@ const mockLeaflet = {
             lng: latlng[1]
           }
         },
-        bindTooltip: (txt, options) => {
-          return {
-            txt: txt,
-            options: options,
-            openTooltip: () => {}
-          };
-        }
-      }
+        bindPopup: () => markerObj,
+        bindTooltip: () => markerObj,
+        openTooltip: () => markerObj,
+      };
+      return markerObj;
   }
 };
 

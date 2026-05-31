@@ -222,6 +222,16 @@
         #builderContainer {
           display: none !important;
         }
+        #mapDisplayWrapper.map-hidden {
+          flex: 0 0 100% !important;
+          max-width: 100% !important;
+          min-width: 0;
+          padding-right: 0 !important;
+        }
+        #mapDisplayWrapper.map-hidden #miniQueryBuilder {
+          display: block;
+          margin-bottom: 0;
+        }
 
         body.mobile-map-fullscreen .rundata-navbar,
         body.mobile-map-fullscreen #mainPanel,
@@ -252,23 +262,25 @@
       #mapDisplayWrapper {
         position: relative;
       }
-      #mapDisplayWrapper.map-hidden {
-        flex: 0 0 44px !important;
-        max-width: 44px !important;
-        min-width: 44px;
-        padding-right: 0 !important;
+      @media (min-width: 768px) {
+        #mapDisplayWrapper.map-hidden {
+          flex: 0 0 44px !important;
+          max-width: 44px !important;
+          min-width: 44px;
+          padding-right: 0 !important;
+        }
       }
       #mapDisplayWrapper.map-hidden #mapDisplay {
         display: none;
       }
-      #mapDisplayWrapper.map-hidden #miniQueryBuilder {
-        display: none;
+      .map-display-container {
+        position: relative;
       }
       .map-corner-toggle {
         position: absolute;
         top: 8px;
         right: 8px;
-        z-index: 500;
+        z-index: 1200;
         width: 30px;
         height: 30px;
         border-radius: 9999px;
@@ -634,20 +646,22 @@
       <div id="mapDisplayWrapper" class="map-two-cm-narrow col-md-4 col-sm-2 ps-0 pe-3 pe-md-0 mt-3 mt-md-0">
         <div id="miniQueryBuilder" class="mini-query-builder">
           <div class="mb-2">
-            <label class="form-label" for="miniSignatureInput">Inscription ID signatures</label>
-            <input type="text" class="form-control form-control-sm" id="miniSignatureInput" placeholder="e.g. Sö 352 or Sö 352|U 212">
+            <label class="form-label" for="miniSearchInput">Write ID numbers or any location</label>
+            <input type="text" class="form-control form-control-sm" id="miniSearchInput">
           </div>
           <div class="mb-2">
-            <label class="form-label" for="miniLocationInput">Any location</label>
-            <input type="text" class="form-control form-control-sm" id="miniLocationInput" placeholder="e.g. Sigtuna">
+            <label class="form-label" for="miniRunicTextInput">Search in runic texts</label>
+            <input type="text" class="form-control form-control-sm" id="miniRunicTextInput">
           </div>
           <div class="d-flex gap-2">
             <button type="button" class="btn btn-success btn-sm" id="btnMiniSearch">Search</button>
             <button type="button" class="btn btn-danger btn-sm" id="btnMiniResetSearch">Delete search</button>
           </div>
         </div>
-        <button type="button" class="btn btn-outline-secondary btn-sm map-corner-toggle" id="mHideMap" aria-label="Hide map" title="Hide map">×</button>
-        <div id="mapDisplay" class="my-fixed-height"></div>
+        <div id="mapDisplayContainer" class="map-display-container">
+          <button type="button" class="btn btn-outline-secondary btn-sm map-corner-toggle" id="mHideMap" aria-label="Hide map" title="Hide map">×</button>
+          <div id="mapDisplay" class="my-fixed-height"></div>
+        </div>
       </div>
     </div>
 
@@ -691,12 +705,12 @@
       <div id="aiAssistantContainer" class="col">
         <div class="border border-warning rounded-3 p-3 bg-body-tertiary shadow-sm">
           <div class="small text-muted mb-2">Let the AI assistent help you with your search: write your question in any language</div>
-          <div class="row g-2 align-items-start">
-            <div class="col">
+          <div class="row g-2">
+            <div class="col-12">
               <textarea id="searchTextInput" class="form-control" rows="4" placeholder="Enter search query here..."></textarea>
             </div>
-            <div class="col-auto d-grid">
-              <button class="btn btn-warning" type="button" id="btnText2Rules">Convert to search</button>
+            <div class="col-12 d-grid">
+              <button class="btn btn-warning" type="button" id="btnText2Rules">Convert to search parameters</button>
             </div>
           </div>
           <div id="aiAssistantAlert" class="alert d-none mt-2 mb-0" role="alert" aria-live="assertive"></div>
@@ -917,7 +931,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260531-countryfix"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260531-runicmini2"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -999,51 +1013,77 @@ function findRuleById(rulesNode, ruleId) {
 }
 
 function syncMiniBuilderFromRules(rules) {
-  const signatureInput = document.getElementById('miniSignatureInput');
-  const locationInput = document.getElementById('miniLocationInput');
-  if (!signatureInput || !locationInput) {
+  const miniSearchInput = document.getElementById('miniSearchInput');
+  const miniRunicTextInput = document.getElementById('miniRunicTextInput');
+  if (!miniSearchInput || !miniRunicTextInput) {
     return;
   }
 
   const signatureRule = findRuleById(rules, 'inscription_id');
   const locationRule = findRuleById(rules, 'full_address');
-  signatureInput.value = signatureRule && signatureRule.value ? signatureRule.value : '';
-  locationInput.value = locationRule && locationRule.value ? locationRule.value : '';
+  const runicTextRule = findRuleById(rules, 'search_runic_texts');
+  miniSearchInput.value = '';
+  miniRunicTextInput.value = '';
+  if (signatureRule && signatureRule.value) {
+    miniSearchInput.value = signatureRule.value;
+  } else if (locationRule && locationRule.value) {
+    miniSearchInput.value = locationRule.value;
+  }
+  if (runicTextRule && runicTextRule.value) {
+    miniRunicTextInput.value = runicTextRule.value;
+  }
 }
 
 function buildRulesFromMiniBuilder() {
-  const signatureInput = document.getElementById('miniSignatureInput');
-  const locationInput = document.getElementById('miniLocationInput');
-  if (!signatureInput || !locationInput) {
+  const miniSearchInput = document.getElementById('miniSearchInput');
+  const miniRunicTextInput = document.getElementById('miniRunicTextInput');
+  if (!miniSearchInput || !miniRunicTextInput) {
     return null;
   }
 
-  const signatureValue = signatureInput.value.trim();
-  const locationValue = locationInput.value.trim();
+  const idLocationValue = miniSearchInput.value.trim();
+  const runicTextValue = miniRunicTextInput.value.trim();
   const rules = [];
 
-  if (signatureValue) {
+  if (idLocationValue) {
     rules.push({
-      id: 'inscription_id',
-      field: 'signature_text',
-      type: 'string',
-      input: 'text',
-      operator: signatureValue.includes('|') ? 'in_separated_list' : 'contains',
-      value: signatureValue,
-      ignoreCase: true,
+      condition: 'OR',
+      rules: [
+        {
+          id: 'inscription_id',
+          field: 'signature_text',
+          type: 'string',
+          input: 'text',
+          operator: idLocationValue.includes('|') ? 'in_separated_list' : 'contains',
+          value: idLocationValue,
+          ignoreCase: true,
+        },
+        {
+          id: 'full_address',
+          field: 'full_address',
+          type: 'string',
+          input: 'text',
+          operator: 'contains',
+          value: idLocationValue,
+          ignoreCase: true,
+          includeSpecialSymbols: false,
+        }
+      ],
+      not: false,
     });
   }
 
-  if (locationValue) {
+  if (runicTextValue) {
     rules.push({
-      id: 'full_address',
-      field: 'full_address',
+      id: 'search_runic_texts',
+      field: 'normalisation_norse',
       type: 'string',
       input: 'text',
       operator: 'contains',
-      value: locationValue,
+      value: runicTextValue,
       ignoreCase: true,
-      includeSpecialSymbols: false,
+      includeSpecialSymbols: true,
+      data: { multiField: true },
     });
   }
 
@@ -1391,6 +1431,7 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('btnSearch').addEventListener('click', function() {
     applyMiniBuilderRulesIfNeeded();
     const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
+    syncMiniBuilderFromRules(rules);
     if (shouldSuggestIncludeSymbols(rules)) {
       gSearchHintMessage = INCLUDE_SYMBOLS_HINT;
       gTranslationOccurrenceCount = null;
@@ -1411,13 +1452,26 @@ document.addEventListener('DOMContentLoaded', function() {
     gTranslationOccurrenceCount = null;
     gViewModel.clearSearchResults();
     $(`#${inpQueryBuilder}`).queryBuilder('reset');
-    const signatureInput = document.getElementById('miniSignatureInput');
-    const locationInput = document.getElementById('miniLocationInput');
-    if (signatureInput) signatureInput.value = '';
-    if (locationInput) locationInput.value = '';
+    const miniSearchInput = document.getElementById('miniSearchInput');
+    const miniRunicTextInput = document.getElementById('miniRunicTextInput');
+    if (miniSearchInput) miniSearchInput.value = '';
+    if (miniRunicTextInput) miniRunicTextInput.value = '';
   });
   document.getElementById('btnMiniSearch').addEventListener('click', function() {
     document.getElementById('btnSearch').click();
+  });
+  ['miniSearchInput', 'miniRunicTextInput'].forEach((fieldId) => {
+    const field = document.getElementById(fieldId);
+    if (!field) {
+      return;
+    }
+    field.addEventListener('keydown', function(event) {
+      if (event.key !== 'Enter') {
+        return;
+      }
+      event.preventDefault();
+      document.getElementById('btnSearch').click();
+    });
   });
   document.getElementById('btnMiniResetSearch').addEventListener('click', function() {
     document.getElementById('btnResetSearch').click();
