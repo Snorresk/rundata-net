@@ -291,6 +291,11 @@
         justify-content: center;
         font-size: 1.1rem;
       }
+      @media (max-width: 767.98px) {
+        body.display-options-open #mHideMap {
+          display: none !important;
+        }
+      }
       .mini-query-builder {
         border: 1px solid #d9dee3;
         border-radius: 8px;
@@ -352,6 +357,26 @@
           }
         }
       }
+      @media (max-width: 767.98px) {
+        .display-options-checklist {
+          max-height: 52vh;
+          overflow-y: auto;
+          border: 1px solid #dee2e6;
+          border-radius: 0.5rem;
+          padding: 0.75rem;
+          background: #fff;
+        }
+        .display-options-group + .display-options-group {
+          margin-top: 0.85rem;
+          padding-top: 0.85rem;
+          border-top: 1px solid #e9ecef;
+        }
+        .display-options-group-title {
+          font-size: 0.9rem;
+          font-weight: 600;
+          margin-bottom: 0.35rem;
+        }
+      }
 
       .inscription-section {
         border-bottom: 2px solid #999;
@@ -384,6 +409,18 @@
         height: 100%;
         object-fit: cover;
       }
+      .rundata-image-fallback {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.5rem;
+        text-align: center;
+        font-size: 0.78rem;
+        color: #555;
+        background: #f7f7f7;
+      }
       .rundata-image-source {
         margin-top: 0.15rem;
         font-size: 0.72rem;
@@ -394,6 +431,24 @@
       .rundata-image-source a {
         color: inherit;
         text-decoration: underline;
+      }
+      @media (max-width: 767.98px) {
+        .rundata-image-gallery {
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scroll-snap-type: x mandatory;
+          padding-bottom: 0.25rem;
+        }
+        .rundata-image-item {
+          flex: 0 0 auto;
+          width: min(72vw, 4.5cm);
+          scroll-snap-align: start;
+        }
+        .rundata-image-link,
+        .rundata-image-avatar {
+          width: 100%;
+        }
       }
       .transliteration {
         font-weight: bold;
@@ -475,6 +530,35 @@
       .query-builder [data-text-options-row="rule"] .form-check-label {
         font-size: 0.88rem;
       }
+      @media (max-width: 767.98px) {
+        #topControlButtons {
+          width: 100%;
+          margin-top: 0.25rem;
+        }
+        #topControlButtons .nav-item {
+          width: 100%;
+          margin-left: 0 !important;
+          align-items: stretch !important;
+        }
+        #topControlButtons .top-control-link {
+          width: 100%;
+          text-align: left;
+          background: transparent;
+          border: 0;
+          border-radius: 0;
+          color: var(--bs-nav-link-color);
+          padding: var(--bs-nav-link-padding-y) var(--bs-nav-link-padding-x);
+          font-size: var(--bs-nav-link-font-size);
+          font-weight: var(--bs-nav-link-font-weight);
+        }
+        #topControlButtons .top-control-link:hover,
+        #topControlButtons .top-control-link:focus {
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+          color: var(--bs-nav-link-hover-color);
+        }
+      }
     </style>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
@@ -555,12 +639,12 @@
         </ul>
         <ul id="topControlButtons" class="navbar-nav me-auto mb-2 mb-lg-0">
           <li class="nav-item d-flex align-items-center ms-2">
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#divFormatDialog">
+            <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#divFormatDialog">
               Choose what to show about inscriptions in the main display
             </button>
           </li>
           <li class="nav-item d-flex align-items-center ms-2">
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#mapDisplayOptionsDialog">
+            <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#mapDisplayOptionsDialog">
               Choose what to show on the map
             </button>
           </li>
@@ -731,41 +815,46 @@
             <p class="col alert alert-danger hidden" role="alert" id="formatDialogAlertObj"></p>
           </div>
           <div class="row" style="padding-left: 1em; padding-right: 1em;">
-            <div class="col"><p>Here you can select which properties are shown on the main display when an inscription is selected. List on the left contains properties available for selection.
-            List on the right contains properties selected for display.</p>
+            <div class="col"><p>Here you can select which properties are shown on the main display when an inscription is selected.</p>
+            <p class="d-none d-md-block">List on the left contains properties available for selection. List on the right contains properties selected for display.</p>
             <p>Check <em>Display headers</em> checkbox if you want to see property name as long as it's value. If unchecked, only the value is displayed.</p>
             </div>
           </div>
           <div class="row">
-            <div class="col-sm-5">
-              <select name="from[]" id="multiselect" class="form-control" size="8" multiple="multiple"></select>
+            <div class="col-12 d-none d-md-block">
               <div class="row">
-                <form role="form" class="col-sm-6">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="chkDisplayHeaders" checked>
-                    <label class="form-check-label" for="chkDisplayHeaders">Display headers</label>
+                <div class="col-sm-5">
+                  <select name="from[]" id="multiselect" class="form-control" size="8" multiple="multiple"></select>
+                </div>
+                <div class="col-sm-2">
+                  <button type="button" id="multiselect_rightAll" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-double-right"></i></button>
+                  <button type="button" id="multiselect_rightSelected" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-right"></i></button>
+                  <button type="button" id="multiselect_leftSelected" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-left"></i></button>
+                  <button type="button" id="multiselect_leftAll" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-double-left"></i></button>
+                </div>
+                <div class="col-sm-5">
+                  <select name="to[]" id="multiselect_to" class="form-control" size="8" multiple="multiple"></select>
+                  <div class="row mt-2">
+                    <div class="col-sm-6">
+                      <button type="button" id="multiselect_move_up" class="btn btn-secondary btn-block w-100"><i class="bi bi-chevron-up"></i></button>
+                    </div>
+                    <div class="col-sm-6">
+                      <button type="button" id="multiselect_move_down" class="btn btn-secondary btn-block w-100"><i class="bi bi-chevron-down"></i></button>
+                    </div>
                   </div>
-                </form>
-              </div>
-            </div>
-
-            <div class="col-sm-2">
-              <button type="button" id="multiselect_rightAll" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-double-right"></i></button>
-              <button type="button" id="multiselect_rightSelected" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-right"></i></button>
-              <button type="button" id="multiselect_leftSelected" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-left"></i></button>
-              <button type="button" id="multiselect_leftAll" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-double-left"></i></button>
-            </div>
-
-            <div class="col-sm-5">
-              <select name="to[]" id="multiselect_to" class="form-control" size="8" multiple="multiple"></select>
-              <div class="row mt-2">
-                <div class="col-sm-6">
-                  <button type="button" id="multiselect_move_up" class="btn btn-secondary btn-block w-100"><i class="bi bi-chevron-up"></i></button>
-                </div>
-                <div class="col-sm-6">
-                  <button type="button" id="multiselect_move_down" class="btn btn-secondary btn-block w-100"><i class="bi bi-chevron-down"></i></button>
                 </div>
               </div>
+            </div>
+            <div class="col-12 d-md-none">
+              <div id="displayOptionsChecklist" class="display-options-checklist"></div>
+            </div>
+            <div class="col-12 mt-2">
+              <form role="form">
+                <div class="form-check mb-0">
+                  <input class="form-check-input" type="checkbox" id="chkDisplayHeaders" checked>
+                  <label class="form-check-label" for="chkDisplayHeaders">Display headers</label>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -931,7 +1020,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260531-runicmini2"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260531-no-anylocation-default"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -1012,6 +1101,23 @@ function findRuleById(rulesNode, ruleId) {
   return null;
 }
 
+function miniRuleValueToText(value) {
+  if (Array.isArray(value)) {
+    return value.join('|');
+  }
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value);
+}
+
+function parseIdQueryTokens(value) {
+  return String(value || '')
+    .split(/[|,;\n]+/)
+    .map(v => v.trim())
+    .filter(v => v.length > 0);
+}
+
 function syncMiniBuilderFromRules(rules) {
   const miniSearchInput = document.getElementById('miniSearchInput');
   const miniRunicTextInput = document.getElementById('miniRunicTextInput');
@@ -1025,12 +1131,12 @@ function syncMiniBuilderFromRules(rules) {
   miniSearchInput.value = '';
   miniRunicTextInput.value = '';
   if (signatureRule && signatureRule.value) {
-    miniSearchInput.value = signatureRule.value;
+    miniSearchInput.value = miniRuleValueToText(signatureRule.value);
   } else if (locationRule && locationRule.value) {
-    miniSearchInput.value = locationRule.value;
+    miniSearchInput.value = miniRuleValueToText(locationRule.value);
   }
   if (runicTextRule && runicTextRule.value) {
-    miniRunicTextInput.value = runicTextRule.value;
+    miniRunicTextInput.value = miniRuleValueToText(runicTextRule.value);
   }
 }
 
@@ -1046,6 +1152,16 @@ function buildRulesFromMiniBuilder() {
   const rules = [];
 
   if (idLocationValue) {
+    const idTokens = parseIdQueryTokens(idLocationValue);
+    const idRule = idTokens.length > 1
+      ? {
+        operator: 'in_separated_list',
+        value: idTokens.join('|'),
+      }
+      : {
+        operator: 'in',
+        value: [idLocationValue],
+      };
     rules.push({
       condition: 'OR',
       rules: [
@@ -1054,8 +1170,8 @@ function buildRulesFromMiniBuilder() {
           field: 'signature_text',
           type: 'string',
           input: 'text',
-          operator: idLocationValue.includes('|') ? 'in_separated_list' : 'contains',
-          value: idLocationValue,
+          operator: idRule.operator,
+          value: idRule.value,
           ignoreCase: true,
         },
         {
@@ -1302,7 +1418,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   initMultiselect();
 
-  $('#multiselect').on('displayUpdated', () => {
+  $('#multiselect, #displayOptionsChecklist').on('displayUpdated', () => {
     displaySignatureInfo();
   });
 
@@ -1509,6 +1625,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const requestedMode = trigger ? trigger.getAttribute('data-results-mode') : null;
     setResultsIoMode(requestedMode);
   });
+
+  const displayOptionsDialog = document.getElementById('divFormatDialog');
+  if (displayOptionsDialog) {
+    displayOptionsDialog.addEventListener('show.bs.modal', function() {
+      document.body.classList.add('display-options-open');
+    });
+    displayOptionsDialog.addEventListener('hidden.bs.modal', function() {
+      document.body.classList.remove('display-options-open');
+    });
+  }
 
   document.getElementById('btnRulesExport').addEventListener('click', function() {
     const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');

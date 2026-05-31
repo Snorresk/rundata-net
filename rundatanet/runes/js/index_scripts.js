@@ -642,6 +642,9 @@ export function fetchAllImages(db) {
 export function makeImagesMarkup(signatureImageLinks) {
   let directImages = "";
   let indirectImages = "";
+  const isMobileViewport = typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(max-width: 767.98px)').matches;
 
   const escapeHtml = function (value) {
     return String(value)
@@ -660,9 +663,12 @@ export function makeImagesMarkup(signatureImageLinks) {
     }
   };
 
-  // Show up to 10 image links directly. If there are more, hide 11+ behind an expander.
-  const galleryLinks = signatureImageLinks.links.slice(0, MAX_VISIBLE_IMAGE_LINKS);
-  const hiddenLinks = signatureImageLinks.links.slice(MAX_VISIBLE_IMAGE_LINKS);
+  const galleryLinks = isMobileViewport
+    ? signatureImageLinks.links
+    : signatureImageLinks.links.slice(0, MAX_VISIBLE_IMAGE_LINKS);
+  const hiddenLinks = isMobileViewport
+    ? []
+    : signatureImageLinks.links.slice(MAX_VISIBLE_IMAGE_LINKS);
 
   directImages = '<div class="rundata-image-gallery">';
   galleryLinks.map(function (v) {
@@ -673,11 +679,14 @@ export function makeImagesMarkup(signatureImageLinks) {
     const caption = infoText.length > 0
       ? escapeHtml(infoText)
       : `source: <a href="${indirectUrl}" contentEditable="false" target="_blank">${sourceLabel}</a>`;
-    directImages += `<figure class="rundata-image-item"><a href="${indirectUrl}" contentEditable="false" target="_blank" class="rundata-image-link"><img src="${directUrl}" class="rundata-image-avatar" alt="Inscription image"></a><figcaption class="rundata-image-source">${caption}</figcaption></figure>`;
+    const imageContent = (!isMobileViewport || directUrl)
+      ? `<img src="${directUrl}" class="rundata-image-avatar" alt="Inscription image">`
+      : '<div class="rundata-image-fallback">Open image link</div>';
+    directImages += `<figure class="rundata-image-item"><a href="${indirectUrl}" contentEditable="false" target="_blank" class="rundata-image-link">${imageContent}</a><figcaption class="rundata-image-source">${caption}</figcaption></figure>`;
   });
   directImages += '</div>';
 
-  if (hiddenLinks.length > 0) {
+  if (!isMobileViewport && hiddenLinks.length > 0) {
     indirectImages = '<details class="rundata-more-image-links"><summary><span class="text-primary text-decoration-underline">Find more image links here</span></summary><ul>';
     hiddenLinks.map(function (v) {
       const indirectUrl = escapeHtml(v.indirect);
