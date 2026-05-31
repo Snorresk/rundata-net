@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Filter Tester</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    pre { white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <main class="container py-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+      <h1 class="h4 mb-0">AI Filter Tester</h1>
+      <a class="btn btn-outline-secondary btn-sm" href="/">Back to Search</a>
+    </div>
+
+    <p class="text-muted">
+      Use this page to manually test how AI converts natural language into query-builder rules.
+    </p>
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-body">
+        <label for="queryInput" class="form-label fw-semibold">Natural-language query</label>
+        <textarea id="queryInput" class="form-control mb-3" rows="4" placeholder="Example: Find all inscriptions from Proto-Norse period in Norway"></textarea>
+        <div class="d-flex flex-wrap gap-2">
+          <button id="runBtn" class="btn btn-primary" type="button">Run txt2rules</button>
+          <button id="clearBtn" class="btn btn-outline-secondary" type="button">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="statusAlert" class="alert d-none" role="alert" aria-live="assertive"></div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-header fw-semibold">Parsed Rules JSON</div>
+          <div class="card-body">
+            <pre id="parsedOutput" class="mb-0 text-body-secondary">No response yet.</pre>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-header fw-semibold">Raw API Response</div>
+          <div class="card-body">
+            <pre id="rawOutput" class="mb-0 text-body-secondary">No response yet.</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const queryInput = document.getElementById('queryInput');
+    const runBtn = document.getElementById('runBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const parsedOutput = document.getElementById('parsedOutput');
+    const rawOutput = document.getElementById('rawOutput');
+    const statusAlert = document.getElementById('statusAlert');
+
+    function setStatus(message, level) {
+      statusAlert.classList.remove('d-none', 'alert-success', 'alert-warning', 'alert-danger', 'alert-info');
+      statusAlert.classList.add(`alert-${level}`);
+      statusAlert.textContent = message;
+    }
+
+    function clearStatus() {
+      statusAlert.classList.add('d-none');
+      statusAlert.classList.remove('alert-success', 'alert-warning', 'alert-danger', 'alert-info');
+      statusAlert.textContent = '';
+    }
+
+    async function runTxt2Rules() {
+      const query = queryInput.value.trim();
+      if (!query) {
+        setStatus('Please enter a query first.', 'warning');
+        return;
+      }
+
+      clearStatus();
+      parsedOutput.textContent = 'Loading...';
+      rawOutput.textContent = 'Loading...';
+      runBtn.disabled = true;
+
+      const timeoutMs = 20000;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const response = await fetch('/api/txt2rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: query }),
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const payload = await response.json();
+        rawOutput.textContent = JSON.stringify(payload, null, 2);
+
+        if (payload.error) {
+          setStatus(`AI returned error: ${payload.error}`, 'warning');
+          parsedOutput.textContent = 'No parsed rules (error returned).';
+          return;
+        }
+
+        try {
+          const parsedRules = payload.rules ? JSON.parse(payload.rules) : null;
+          parsedOutput.textContent = parsedRules
+            ? JSON.stringify(parsedRules, null, 2)
+            : 'Empty rules response.';
+          setStatus('Rules generated successfully.', 'success');
+        } catch (parseErr) {
+          parsedOutput.textContent = `Failed to parse rules JSON:\n${String(parseErr)}`;
+          setStatus('Response received, but rules were not valid JSON.', 'danger');
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          setStatus(`Request timed out after ${timeoutMs / 1000} seconds.`, 'warning');
+        } else {
+          setStatus(`Request failed: ${String(err.message || err)}`, 'danger');
+        }
+        parsedOutput.textContent = 'No parsed rules.';
+        rawOutput.textContent = 'No raw response.';
+      } finally {
+        clearTimeout(timeoutId);
+        runBtn.disabled = false;
+      }
+    }
+
+    runBtn.addEventListener('click', runTxt2Rules);
+    queryInput.addEventListener('keydown', (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        runTxt2Rules();
+      }
+    });
+    clearBtn.addEventListener('click', () => {
+      queryInput.value = '';
+      parsedOutput.textContent = 'No response yet.';
+      rawOutput.textContent = 'No response yet.';
+      clearStatus();
+    });
+  </script>
+</body>
+</html>
