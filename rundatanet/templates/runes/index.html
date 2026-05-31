@@ -222,6 +222,16 @@
         #builderContainer {
           display: none !important;
         }
+        #mapDisplayWrapper.map-hidden {
+          flex: 0 0 100% !important;
+          max-width: 100% !important;
+          min-width: 0;
+          padding-right: 0 !important;
+        }
+        #mapDisplayWrapper.map-hidden #miniQueryBuilder {
+          display: block;
+          margin-bottom: 0;
+        }
 
         body.mobile-map-fullscreen .rundata-navbar,
         body.mobile-map-fullscreen #mainPanel,
@@ -252,23 +262,25 @@
       #mapDisplayWrapper {
         position: relative;
       }
-      #mapDisplayWrapper.map-hidden {
-        flex: 0 0 44px !important;
-        max-width: 44px !important;
-        min-width: 44px;
-        padding-right: 0 !important;
+      @media (min-width: 768px) {
+        #mapDisplayWrapper.map-hidden {
+          flex: 0 0 44px !important;
+          max-width: 44px !important;
+          min-width: 44px;
+          padding-right: 0 !important;
+        }
       }
       #mapDisplayWrapper.map-hidden #mapDisplay {
         display: none;
       }
-      #mapDisplayWrapper.map-hidden #miniQueryBuilder {
-        display: none;
+      .map-display-container {
+        position: relative;
       }
       .map-corner-toggle {
         position: absolute;
         top: 8px;
         right: 8px;
-        z-index: 500;
+        z-index: 1200;
         width: 30px;
         height: 30px;
         border-radius: 9999px;
@@ -278,6 +290,11 @@
         align-items: center;
         justify-content: center;
         font-size: 1.1rem;
+      }
+      @media (max-width: 767.98px) {
+        body.display-options-open #mHideMap {
+          display: none !important;
+        }
       }
       .mini-query-builder {
         border: 1px solid #d9dee3;
@@ -340,6 +357,26 @@
           }
         }
       }
+      @media (max-width: 767.98px) {
+        .display-options-checklist {
+          max-height: 52vh;
+          overflow-y: auto;
+          border: 1px solid #dee2e6;
+          border-radius: 0.5rem;
+          padding: 0.75rem;
+          background: #fff;
+        }
+        .display-options-group + .display-options-group {
+          margin-top: 0.85rem;
+          padding-top: 0.85rem;
+          border-top: 1px solid #e9ecef;
+        }
+        .display-options-group-title {
+          font-size: 0.9rem;
+          font-weight: 600;
+          margin-bottom: 0.35rem;
+        }
+      }
 
       .inscription-section {
         border-bottom: 2px solid #999;
@@ -372,6 +409,18 @@
         height: 100%;
         object-fit: cover;
       }
+      .rundata-image-fallback {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.5rem;
+        text-align: center;
+        font-size: 0.78rem;
+        color: #555;
+        background: #f7f7f7;
+      }
       .rundata-image-source {
         margin-top: 0.15rem;
         font-size: 0.72rem;
@@ -382,6 +431,24 @@
       .rundata-image-source a {
         color: inherit;
         text-decoration: underline;
+      }
+      @media (max-width: 767.98px) {
+        .rundata-image-gallery {
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scroll-snap-type: x mandatory;
+          padding-bottom: 0.25rem;
+        }
+        .rundata-image-item {
+          flex: 0 0 auto;
+          width: min(72vw, 4.5cm);
+          scroll-snap-align: start;
+        }
+        .rundata-image-link,
+        .rundata-image-avatar {
+          width: 100%;
+        }
       }
       .transliteration {
         font-weight: bold;
@@ -463,6 +530,35 @@
       .query-builder [data-text-options-row="rule"] .form-check-label {
         font-size: 0.88rem;
       }
+      @media (max-width: 767.98px) {
+        #topControlButtons {
+          width: 100%;
+          margin-top: 0.25rem;
+        }
+        #topControlButtons .nav-item {
+          width: 100%;
+          margin-left: 0 !important;
+          align-items: stretch !important;
+        }
+        #topControlButtons .top-control-link {
+          width: 100%;
+          text-align: left;
+          background: transparent;
+          border: 0;
+          border-radius: 0;
+          color: var(--bs-nav-link-color);
+          padding: var(--bs-nav-link-padding-y) var(--bs-nav-link-padding-x);
+          font-size: var(--bs-nav-link-font-size);
+          font-weight: var(--bs-nav-link-font-weight);
+        }
+        #topControlButtons .top-control-link:hover,
+        #topControlButtons .top-control-link:focus {
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+          color: var(--bs-nav-link-hover-color);
+        }
+      }
     </style>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
@@ -543,12 +639,12 @@
         </ul>
         <ul id="topControlButtons" class="navbar-nav me-auto mb-2 mb-lg-0">
           <li class="nav-item d-flex align-items-center ms-2">
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#divFormatDialog">
+            <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#divFormatDialog">
               Choose what to show about inscriptions in the main display
             </button>
           </li>
           <li class="nav-item d-flex align-items-center ms-2">
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#mapDisplayOptionsDialog">
+            <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#mapDisplayOptionsDialog">
               Choose what to show on the map
             </button>
           </li>
@@ -634,20 +730,22 @@
       <div id="mapDisplayWrapper" class="map-two-cm-narrow col-md-4 col-sm-2 ps-0 pe-3 pe-md-0 mt-3 mt-md-0">
         <div id="miniQueryBuilder" class="mini-query-builder">
           <div class="mb-2">
-            <label class="form-label" for="miniSignatureInput">Inscription ID signatures</label>
-            <input type="text" class="form-control form-control-sm" id="miniSignatureInput" placeholder="e.g. Sö 352 or Sö 352|U 212">
+            <label class="form-label" for="miniSearchInput">Write ID numbers or any location</label>
+            <input type="text" class="form-control form-control-sm" id="miniSearchInput">
           </div>
           <div class="mb-2">
-            <label class="form-label" for="miniLocationInput">Any location</label>
-            <input type="text" class="form-control form-control-sm" id="miniLocationInput" placeholder="e.g. Sigtuna">
+            <label class="form-label" for="miniRunicTextInput">Search in runic texts</label>
+            <input type="text" class="form-control form-control-sm" id="miniRunicTextInput">
           </div>
           <div class="d-flex gap-2">
             <button type="button" class="btn btn-success btn-sm" id="btnMiniSearch">Search</button>
             <button type="button" class="btn btn-danger btn-sm" id="btnMiniResetSearch">Delete search</button>
           </div>
         </div>
-        <button type="button" class="btn btn-outline-secondary btn-sm map-corner-toggle" id="mHideMap" aria-label="Hide map" title="Hide map">×</button>
-        <div id="mapDisplay" class="my-fixed-height"></div>
+        <div id="mapDisplayContainer" class="map-display-container">
+          <button type="button" class="btn btn-outline-secondary btn-sm map-corner-toggle" id="mHideMap" aria-label="Hide map" title="Hide map">×</button>
+          <div id="mapDisplay" class="my-fixed-height"></div>
+        </div>
       </div>
     </div>
 
@@ -691,14 +789,15 @@
       <div id="aiAssistantContainer" class="col">
         <div class="border border-warning rounded-3 p-3 bg-body-tertiary shadow-sm">
           <div class="small text-muted mb-2">Let the AI assistent help you with your search: write your question in any language</div>
-          <div class="row g-2 align-items-start">
-            <div class="col">
+          <div class="row g-2">
+            <div class="col-12">
               <textarea id="searchTextInput" class="form-control" rows="4" placeholder="Enter search query here..."></textarea>
             </div>
-            <div class="col-auto d-grid">
-              <button class="btn btn-warning" type="button" id="btnText2Rules">Convert to search</button>
+            <div class="col-12 d-grid">
+              <button class="btn btn-warning" type="button" id="btnText2Rules">Convert to search parameters</button>
             </div>
           </div>
+          <div id="aiAssistantAlert" class="alert d-none mt-2 mb-0" role="alert" aria-live="assertive"></div>
         </div>
       </div>
     </div>
@@ -716,41 +815,46 @@
             <p class="col alert alert-danger hidden" role="alert" id="formatDialogAlertObj"></p>
           </div>
           <div class="row" style="padding-left: 1em; padding-right: 1em;">
-            <div class="col"><p>Here you can select which properties are shown on the main display when an inscription is selected. List on the left contains properties available for selection.
-            List on the right contains properties selected for display.</p>
+            <div class="col"><p>Here you can select which properties are shown on the main display when an inscription is selected.</p>
+            <p class="d-none d-md-block">List on the left contains properties available for selection. List on the right contains properties selected for display.</p>
             <p>Check <em>Display headers</em> checkbox if you want to see property name as long as it's value. If unchecked, only the value is displayed.</p>
             </div>
           </div>
           <div class="row">
-            <div class="col-sm-5">
-              <select name="from[]" id="multiselect" class="form-control" size="8" multiple="multiple"></select>
+            <div class="col-12 d-none d-md-block">
               <div class="row">
-                <form role="form" class="col-sm-6">
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="chkDisplayHeaders" checked>
-                    <label class="form-check-label" for="chkDisplayHeaders">Display headers</label>
+                <div class="col-sm-5">
+                  <select name="from[]" id="multiselect" class="form-control" size="8" multiple="multiple"></select>
+                </div>
+                <div class="col-sm-2">
+                  <button type="button" id="multiselect_rightAll" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-double-right"></i></button>
+                  <button type="button" id="multiselect_rightSelected" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-right"></i></button>
+                  <button type="button" id="multiselect_leftSelected" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-left"></i></button>
+                  <button type="button" id="multiselect_leftAll" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-double-left"></i></button>
+                </div>
+                <div class="col-sm-5">
+                  <select name="to[]" id="multiselect_to" class="form-control" size="8" multiple="multiple"></select>
+                  <div class="row mt-2">
+                    <div class="col-sm-6">
+                      <button type="button" id="multiselect_move_up" class="btn btn-secondary btn-block w-100"><i class="bi bi-chevron-up"></i></button>
+                    </div>
+                    <div class="col-sm-6">
+                      <button type="button" id="multiselect_move_down" class="btn btn-secondary btn-block w-100"><i class="bi bi-chevron-down"></i></button>
+                    </div>
                   </div>
-                </form>
-              </div>
-            </div>
-
-            <div class="col-sm-2">
-              <button type="button" id="multiselect_rightAll" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-double-right"></i></button>
-              <button type="button" id="multiselect_rightSelected" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-right"></i></button>
-              <button type="button" id="multiselect_leftSelected" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-left"></i></button>
-              <button type="button" id="multiselect_leftAll" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-double-left"></i></button>
-            </div>
-
-            <div class="col-sm-5">
-              <select name="to[]" id="multiselect_to" class="form-control" size="8" multiple="multiple"></select>
-              <div class="row mt-2">
-                <div class="col-sm-6">
-                  <button type="button" id="multiselect_move_up" class="btn btn-secondary btn-block w-100"><i class="bi bi-chevron-up"></i></button>
-                </div>
-                <div class="col-sm-6">
-                  <button type="button" id="multiselect_move_down" class="btn btn-secondary btn-block w-100"><i class="bi bi-chevron-down"></i></button>
                 </div>
               </div>
+            </div>
+            <div class="col-12 d-md-none">
+              <div id="displayOptionsChecklist" class="display-options-checklist"></div>
+            </div>
+            <div class="col-12 mt-2">
+              <form role="form">
+                <div class="form-check mb-0">
+                  <input class="form-check-input" type="checkbox" id="chkDisplayHeaders" checked>
+                  <label class="form-check-label" for="chkDisplayHeaders">Display headers</label>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -916,7 +1020,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260531-no-anylocation-default"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -931,6 +1035,50 @@ let gExportInProgress = false;
 let gTranslationOccurrenceCount = null;
 let gSearchHintMessage = null;
 const INCLUDE_SYMBOLS_HINT = 'Your query includes symbols. To search symbols, enable the "Include symbols" filter.';
+
+function hideAiAssistantAlert() {
+  const alertObj = document.getElementById('aiAssistantAlert');
+  if (!alertObj) {
+    return;
+  }
+  alertObj.classList.add('d-none');
+  alertObj.classList.remove('alert-warning', 'alert-danger');
+  alertObj.textContent = '';
+}
+
+function showAiAssistantAlert(message, level = 'warning') {
+  const alertObj = document.getElementById('aiAssistantAlert');
+  if (!alertObj) {
+    return;
+  }
+  alertObj.classList.remove('d-none', 'alert-warning', 'alert-danger');
+  alertObj.classList.add(level === 'danger' ? 'alert-danger' : 'alert-warning');
+  alertObj.textContent = message;
+}
+
+const AI_SYMBOL_AWARE_RULE_IDS = new Set([
+  'normalization_norse_to_transliteration',
+  'normalization_scandinavian_to_transliteration',
+]);
+
+function applyAiRuleDefaults(rulesNode) {
+  if (!rulesNode || !Array.isArray(rulesNode.rules)) {
+    return;
+  }
+
+  rulesNode.rules.forEach(rule => {
+    if (!rule) {
+      return;
+    }
+    if (Array.isArray(rule.rules)) {
+      applyAiRuleDefaults(rule);
+      return;
+    }
+    if (rule.id && AI_SYMBOL_AWARE_RULE_IDS.has(rule.id)) {
+      rule.includeSpecialSymbols = true;
+    }
+  });
+}
 
 function findRuleById(rulesNode, ruleId) {
   if (!rulesNode || !Array.isArray(rulesNode.rules)) {
@@ -953,52 +1101,105 @@ function findRuleById(rulesNode, ruleId) {
   return null;
 }
 
+function miniRuleValueToText(value) {
+  if (Array.isArray(value)) {
+    return value.join('|');
+  }
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value);
+}
+
+function parseIdQueryTokens(value) {
+  return String(value || '')
+    .split(/[|,;\n]+/)
+    .map(v => v.trim())
+    .filter(v => v.length > 0);
+}
+
 function syncMiniBuilderFromRules(rules) {
-  const signatureInput = document.getElementById('miniSignatureInput');
-  const locationInput = document.getElementById('miniLocationInput');
-  if (!signatureInput || !locationInput) {
+  const miniSearchInput = document.getElementById('miniSearchInput');
+  const miniRunicTextInput = document.getElementById('miniRunicTextInput');
+  if (!miniSearchInput || !miniRunicTextInput) {
     return;
   }
 
   const signatureRule = findRuleById(rules, 'inscription_id');
   const locationRule = findRuleById(rules, 'full_address');
-  signatureInput.value = signatureRule && signatureRule.value ? signatureRule.value : '';
-  locationInput.value = locationRule && locationRule.value ? locationRule.value : '';
+  const runicTextRule = findRuleById(rules, 'search_runic_texts');
+  miniSearchInput.value = '';
+  miniRunicTextInput.value = '';
+  if (signatureRule && signatureRule.value) {
+    miniSearchInput.value = miniRuleValueToText(signatureRule.value);
+  } else if (locationRule && locationRule.value) {
+    miniSearchInput.value = miniRuleValueToText(locationRule.value);
+  }
+  if (runicTextRule && runicTextRule.value) {
+    miniRunicTextInput.value = miniRuleValueToText(runicTextRule.value);
+  }
 }
 
 function buildRulesFromMiniBuilder() {
-  const signatureInput = document.getElementById('miniSignatureInput');
-  const locationInput = document.getElementById('miniLocationInput');
-  if (!signatureInput || !locationInput) {
+  const miniSearchInput = document.getElementById('miniSearchInput');
+  const miniRunicTextInput = document.getElementById('miniRunicTextInput');
+  if (!miniSearchInput || !miniRunicTextInput) {
     return null;
   }
 
-  const signatureValue = signatureInput.value.trim();
-  const locationValue = locationInput.value.trim();
+  const idLocationValue = miniSearchInput.value.trim();
+  const runicTextValue = miniRunicTextInput.value.trim();
   const rules = [];
 
-  if (signatureValue) {
+  if (idLocationValue) {
+    const idTokens = parseIdQueryTokens(idLocationValue);
+    const idRule = idTokens.length > 1
+      ? {
+        operator: 'in_separated_list',
+        value: idTokens.join('|'),
+      }
+      : {
+        operator: 'in',
+        value: [idLocationValue],
+      };
     rules.push({
-      id: 'inscription_id',
-      field: 'signature_text',
-      type: 'string',
-      input: 'text',
-      operator: signatureValue.includes('|') ? 'in_separated_list' : 'contains',
-      value: signatureValue,
-      ignoreCase: true,
+      condition: 'OR',
+      rules: [
+        {
+          id: 'inscription_id',
+          field: 'signature_text',
+          type: 'string',
+          input: 'text',
+          operator: idRule.operator,
+          value: idRule.value,
+          ignoreCase: true,
+        },
+        {
+          id: 'full_address',
+          field: 'full_address',
+          type: 'string',
+          input: 'text',
+          operator: 'contains',
+          value: idLocationValue,
+          ignoreCase: true,
+          includeSpecialSymbols: false,
+        }
+      ],
+      not: false,
     });
   }
 
-  if (locationValue) {
+  if (runicTextValue) {
     rules.push({
-      id: 'full_address',
-      field: 'full_address',
+      id: 'search_runic_texts',
+      field: 'normalisation_norse',
       type: 'string',
       input: 'text',
       operator: 'contains',
-      value: locationValue,
+      value: runicTextValue,
       ignoreCase: true,
-      includeSpecialSymbols: false,
+      includeSpecialSymbols: true,
+      data: { multiField: true },
     });
   }
 
@@ -1217,7 +1418,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   initMultiselect();
 
-  $('#multiselect').on('displayUpdated', () => {
+  $('#multiselect, #displayOptionsChecklist').on('displayUpdated', () => {
     displaySignatureInfo();
   });
 
@@ -1289,7 +1490,12 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
-    showLoading("Converting your search query to search parameters");
+    hideAiAssistantAlert();
+    showLoading("Converting your search query to search parameters (up to 20 seconds)");
+
+    const REQUEST_TIMEOUT_MS = 20000;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     // Send the text to the API endpoint
     fetch('api/txt2rules', {
@@ -1298,6 +1504,7 @@ document.addEventListener('DOMContentLoaded', function() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ text: text }),
+      signal: controller.signal,
     })
     .then(response => {
       if (!response.ok) {
@@ -1306,29 +1513,41 @@ document.addEventListener('DOMContentLoaded', function() {
       return response.json();
     })
     .then(data => {
-      hideLoading();
       console.log('Got rules from server:', data);
+      if (data && data.error) {
+        showAiAssistantAlert(data.error, 'warning');
+        return;
+      }
       if (data && data.rules) {
         console.log(data.rules);
         const parsedRules = JSON.parse(data.rules);
+        applyAiRuleDefaults(parsedRules);
         $(`#${inpQueryBuilder}`).queryBuilder('setRules', parsedRules);
         syncMiniBuilderFromRules(parsedRules);
         // After successfully setting the rules, trigger the search
         document.getElementById('btnSearch').click();
       } else {
-        showAlert('The server could not generate search rules from your text');
+        showAiAssistantAlert('The server could not generate search rules from your text.', 'warning');
       }
     })
     .catch(error => {
-      hideLoading();
       console.error('Error:', error);
-      showAlert('Failed to process your search query. Please try again.');
+      if (error.name === 'AbortError') {
+        showAiAssistantAlert('AI request timed out after 20 seconds. Please try again.', 'warning');
+        return;
+      }
+      showAiAssistantAlert('Failed to process your search query. Please try again.', 'danger');
+    })
+    .finally(() => {
+      window.clearTimeout(timeoutId);
+      hideLoading();
     });
   });
 
   document.getElementById('btnSearch').addEventListener('click', function() {
     applyMiniBuilderRulesIfNeeded();
     const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
+    syncMiniBuilderFromRules(rules);
     if (shouldSuggestIncludeSymbols(rules)) {
       gSearchHintMessage = INCLUDE_SYMBOLS_HINT;
       gTranslationOccurrenceCount = null;
@@ -1349,13 +1568,26 @@ document.addEventListener('DOMContentLoaded', function() {
     gTranslationOccurrenceCount = null;
     gViewModel.clearSearchResults();
     $(`#${inpQueryBuilder}`).queryBuilder('reset');
-    const signatureInput = document.getElementById('miniSignatureInput');
-    const locationInput = document.getElementById('miniLocationInput');
-    if (signatureInput) signatureInput.value = '';
-    if (locationInput) locationInput.value = '';
+    const miniSearchInput = document.getElementById('miniSearchInput');
+    const miniRunicTextInput = document.getElementById('miniRunicTextInput');
+    if (miniSearchInput) miniSearchInput.value = '';
+    if (miniRunicTextInput) miniRunicTextInput.value = '';
   });
   document.getElementById('btnMiniSearch').addEventListener('click', function() {
     document.getElementById('btnSearch').click();
+  });
+  ['miniSearchInput', 'miniRunicTextInput'].forEach((fieldId) => {
+    const field = document.getElementById(fieldId);
+    if (!field) {
+      return;
+    }
+    field.addEventListener('keydown', function(event) {
+      if (event.key !== 'Enter') {
+        return;
+      }
+      event.preventDefault();
+      document.getElementById('btnSearch').click();
+    });
   });
   document.getElementById('btnMiniResetSearch').addEventListener('click', function() {
     document.getElementById('btnResetSearch').click();
@@ -1393,6 +1625,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const requestedMode = trigger ? trigger.getAttribute('data-results-mode') : null;
     setResultsIoMode(requestedMode);
   });
+
+  const displayOptionsDialog = document.getElementById('divFormatDialog');
+  if (displayOptionsDialog) {
+    displayOptionsDialog.addEventListener('show.bs.modal', function() {
+      document.body.classList.add('display-options-open');
+    });
+    displayOptionsDialog.addEventListener('hidden.bs.modal', function() {
+      document.body.classList.remove('display-options-open');
+    });
+  }
 
   document.getElementById('btnRulesExport').addEventListener('click', function() {
     const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');

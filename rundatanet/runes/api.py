@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any, Optional
 
+from azure.core.exceptions import ServiceResponseTimeoutError
 from django.conf import settings
 from ninja import NinjaAPI, Schema
 
@@ -66,6 +67,12 @@ def txt2rules(request, data: TextRequest):
 
         # Here you would call the function to convert text to rules
         resp = TextResponse(rules=llm_response)
+    except ServiceResponseTimeoutError as e:
+        logger.warning("Timed out while converting text to rules: %s", str(e), exc_info=True)
+        resp = TextResponse(
+            rules="",
+            error="AI request timed out after 20 seconds. Please try again, or simplify the query."
+        )
     except Exception as e:
         # Handle the exception and return an error response
         logger.error(f"Error converting text to rules: {str(e)}", exc_info=True)

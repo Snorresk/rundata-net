@@ -657,15 +657,157 @@ function buildTranslationSearchFunctions(fieldName) {
   };
 }
 
+const englishTranslationSearchFunctions = buildTranslationSearchFunctions('english_translation');
+const swedishTranslationSearchFunctions = buildTranslationSearchFunctions('swedish_translation');
+
+function mergeFieldRanges(target, incoming) {
+  if (!incoming || typeof incoming !== 'object') {
+    return;
+  }
+
+  Object.entries(incoming).forEach(([fieldName, ranges]) => {
+    if (!Array.isArray(ranges)) {
+      return;
+    }
+
+    const existing = target[fieldName] || [];
+    const seen = new Set(existing.map(range => `${range[0]},${range[1]}`));
+    const merged = existing.slice();
+    ranges.forEach(range => {
+      if (!Array.isArray(range) || range.length < 2) {
+        return;
+      }
+      const key = `${range[0]},${range[1]}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(range);
+      }
+    });
+    target[fieldName] = merged;
+  });
+}
+
+function countPersonalNamesByWordIndices(entry, wordIndices) {
+  const normalWords = Array.isArray(entry.normalisation_norse_words) ? entry.normalisation_norse_words : [];
+  return wordIndices.reduce((acc, index) => {
+    if (index >= normalWords.length) {
+      return acc;
+    }
+    return isPersonalName(normalWords[index]) ? acc + 1 : acc;
+  }, 0);
+}
+
+function searchRunicTextsCombined(entry, ruleValue, operatorName, rule) {
+  const operatorToSearchMode = {
+    contains: 'includes',
+    equal: 'exact',
+    begins_with: 'beginsWith',
+    ends_with: 'endsWith',
+  };
+  const searchMode = operatorToSearchMode[operatorName];
+  if (!searchMode) {
+    return { match: false };
+  }
+
+  const query = String(ruleValue || '').trim();
+  if (!query) {
+    return { match: false };
+  }
+
+  const ignoreCase = !!(rule && rule.ignoreCase);
+  const includeSpecialSymbols = !!(rule && rule.includeSpecialSymbols);
+  const wordsFromNorse = doWordSearch(
+    entry,
+    { normalization: query, transliteration: '', names_mode: 'includeAll' },
+    'norseToTransliteration',
+    searchMode,
+    ignoreCase,
+    includeSpecialSymbols
+  );
+  const wordsFromScandinavian = doWordSearch(
+    entry,
+    { normalization: query, transliteration: '', names_mode: 'includeAll' },
+    'scandinavianToTransliteration',
+    searchMode,
+    ignoreCase,
+    includeSpecialSymbols
+  );
+  const wordsFromTransliteration = doWordSearch(
+    entry,
+    { normalization: '', transliteration: query, names_mode: 'includeAll' },
+    'norseToTransliteration',
+    searchMode,
+    ignoreCase,
+    includeSpecialSymbols
+  );
+  const englishMatch = englishTranslationSearchFunctions[operatorName](entry.english_translation, query, rule);
+  const swedishMatch = swedishTranslationSearchFunctions[operatorName](entry.swedish_translation, query, rule);
+
+  const candidates = [
+    wordsFromNorse,
+    wordsFromScandinavian,
+    wordsFromTransliteration,
+    englishMatch,
+    swedishMatch,
+  ];
+
+  const matchingCandidates = candidates.filter(candidate => candidate && candidate.match);
+  if (matchingCandidates.length === 0) {
+    return { match: false };
+  }
+
+  const wordIndexSet = new Set();
+  const fieldRanges = {};
+  matchingCandidates.forEach(candidate => {
+    const details = candidate.details;
+    if (!details || typeof details !== 'object') {
+      return;
+    }
+    if (Array.isArray(details.wordIndices)) {
+      details.wordIndices.forEach(index => wordIndexSet.add(index));
+    }
+    if (details.fieldRanges && typeof details.fieldRanges === 'object') {
+      mergeFieldRanges(fieldRanges, details.fieldRanges);
+    }
+  });
+
+  const mergedDetails = {};
+  if (wordIndexSet.size > 0) {
+    const wordIndices = Array.from(wordIndexSet).sort((a, b) => a - b);
+    mergedDetails.wordIndices = wordIndices;
+    mergedDetails.numPersonalNames = countPersonalNamesByWordIndices(entry, wordIndices);
+  }
+  if (Object.keys(fieldRanges).length > 0) {
+    mergedDetails.fieldRanges = fieldRanges;
+  }
+
+  return {
+    match: true,
+    details: Object.keys(mergedDetails).length > 0 ? mergedDetails : null,
+  };
+}
+
+const SWEDISH_AREA_CODES = new Set([
+  'Öl', 'Ög', 'Sö', 'Sm', 'Vg', 'U', 'Vs', 'Nä', 'Vr', 'Gs',
+  'Hs', 'M', 'Ån', 'D', 'Hr', 'J', 'Lp', 'Ds', 'Bo', 'G', 'SE'
+]);
+
+function getSignatureAreaCode(signatureText) {
+  const signature = String(signatureText || '').trim();
+  if (!signature) return '';
+  const firstSpace = signature.indexOf(' ');
+  return firstSpace === -1 ? signature : signature.slice(0, firstSpace);
+}
+
 const searchCountryOrProvince = (entry, ruleValues) => {
-  for (let i = 0; i < ruleValues.length; i++) {
-    // let areaCode = ruleValues[i];
-    if (ruleValues[i] == 'all_sweden') {
-      const areaCodes = ['Öl ', 'Ög ', 'Sö ', 'Sm ', 'Vg ', 'U ', 'Vs ', 'Nä ', 'Vr ', 'Gs ', 'Hs ', 'M ', 'Ån ', 'D ', 'Hr ', 'J ', 'Lp ', 'Ds ', 'Bo ', 'G ', 'SE ', 'Bo'];
-      for (let j = 0; j < areaCodes.length; j++) {
-        if (operators.begins_with(entry['signature_text'], areaCodes[j])) {
-          return { match: true };
-        }
+  const signatureAreaCode = getSignatureAreaCode(entry['signature_text']);
+  const normalizedRuleValues = Array.isArray(ruleValues) ? ruleValues : [ruleValues];
+  for (let i = 0; i < normalizedRuleValues.length; i++) {
+    const ruleCode = String(normalizedRuleValues[i] || '').trim();
+    if (!ruleCode) continue;
+    if (ruleCode === 'all_sweden') {
+      if (SWEDISH_AREA_CODES.has(signatureAreaCode)) {
+        return { match: true };
       }
       const districts = ['Skåne', 'Halland', 'Blekinge'];
       for (let j = 0; j < districts.length; j++) {
@@ -673,9 +815,9 @@ const searchCountryOrProvince = (entry, ruleValues) => {
           return { match: true };
         }
       }
-      return { match: false };
+      continue;
     }
-    if (operators.begins_with(entry['signature_text'], ruleValues[i])) {
+    if (signatureAreaCode === ruleCode) {
       return { match: true };
     }
   }
@@ -763,6 +905,12 @@ const customSearchFunctions = {
       return doWordSearch(fieldValue, ruleValue, 'scandinavianToTransliteration', 'endsWith', !!rule.ignoreCase, !!rule.includeSpecialSymbols);
     },
   },
+  search_runic_texts: {
+    contains: (fieldValue, ruleValue, rule) => searchRunicTextsCombined(fieldValue, ruleValue, 'contains', rule),
+    equal: (fieldValue, ruleValue, rule) => searchRunicTextsCombined(fieldValue, ruleValue, 'equal', rule),
+    begins_with: (fieldValue, ruleValue, rule) => searchRunicTextsCombined(fieldValue, ruleValue, 'begins_with', rule),
+    ends_with: (fieldValue, ruleValue, rule) => searchRunicTextsCombined(fieldValue, ruleValue, 'ends_with', rule),
+  },
   cross_form: {
     cross_form: searchCrossForm,
   },
@@ -773,8 +921,8 @@ const customSearchFunctions = {
       return { match: !result.match };
     },
   },
-  english_translation: buildTranslationSearchFunctions('english_translation'),
-  swedish_translation: buildTranslationSearchFunctions('swedish_translation'),
+  english_translation: englishTranslationSearchFunctions,
+  swedish_translation: swedishTranslationSearchFunctions,
   references_combined: {
     contains: (fieldValue, ruleValue, rule) => searchReferencesCombined(fieldValue, ruleValue, 'contains', rule),
     not_contains: (fieldValue, ruleValue, rule) => searchReferencesCombined(fieldValue, ruleValue, 'not_contains', rule),

@@ -10,6 +10,9 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+MODEL_CONNECTION_TIMEOUT_SECONDS = 5
+MODEL_READ_TIMEOUT_SECONDS = 20
+
 
 def clean_llm_response(llm_response: str) -> str:
     if "<|fim_suffix|>" in llm_response:
@@ -57,6 +60,9 @@ def inference(user_msg: str, api_token: Optional[str] = None) -> str:
         presence_penalty=0.0,
         frequency_penalty=0.0,
         model=model_name,
+        connection_timeout=MODEL_CONNECTION_TIMEOUT_SECONDS,
+        read_timeout=MODEL_READ_TIMEOUT_SECONDS,
+        retry_total=0,
     )
     logger.debug(f"Raw LLM response: {response.choices[0].message.content}")
 

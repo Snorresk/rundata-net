@@ -358,6 +358,52 @@ testSingleRuleSearch({
   multiField: true,
 });
 
+test('inscription_country "N" (Norway) should not match "Nä" (Närke)', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'inscription_country',
+        field: 'signature_text',
+        type: 'string',
+        input: 'text',
+        operator: 'in',
+        value: ['N'],
+        data: { multiField: true }
+      }
+    ],
+    not: false,
+    valid: true
+  };
+
+  const result = doSearch(rules, dbMap.values());
+  const hasNarke = result.some(item => String(item.signature_text || '').startsWith('Nä '));
+  assert.not.ok(hasNarke, 'Norway filter should not include Närke signatures');
+});
+
+test('inscription_country string value "N " should not match "Nä" (Närke)', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'inscription_country',
+        field: 'signature_text',
+        type: 'string',
+        input: 'text',
+        operator: 'in',
+        value: 'N ',
+        data: { multiField: true }
+      }
+    ],
+    not: false,
+    valid: true
+  };
+
+  const result = doSearch(rules, dbMap.values());
+  const hasNarke = result.some(item => String(item.signature_text || '').startsWith('Nä '));
+  assert.not.ok(hasNarke, 'Norway string code should not include Närke signatures');
+});
+
 
 testSingleRuleSearch({
   field: 'carver',
@@ -1179,6 +1225,84 @@ function buildTranslationRule({ id, operator, value, ignoreCase = false }) {
     valid: true,
   };
 }
+
+function buildRunicTextsRule({ operator, value, ignoreCase = false, includeSpecialSymbols = false }) {
+  return {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'search_runic_texts',
+        field: 'normalisation_norse',
+        type: 'string',
+        operator,
+        value,
+        data: { multiField: true },
+        ignoreCase,
+        includeSpecialSymbols,
+      }
+    ],
+    not: false,
+    valid: true,
+  };
+}
+
+test('search_runic_texts: matches transliteration token and returns wordIndices', () => {
+  const records = [
+    makeWordSearchRecord({
+      id: 'RT1',
+      norseWords: ['foo'],
+      scandinavianWords: ['bar'],
+      translitWords: ['kuni'],
+    }),
+  ];
+  const rules = buildRunicTextsRule({ operator: 'contains', value: 'kuni' });
+  const result = doSearch(rules, records);
+
+  assert.is(result.length, 1);
+  assert.equal(result[0].matchDetails.wordIndices, [0]);
+});
+
+test('search_runic_texts: matches English translation and returns fieldRanges', () => {
+  const records = [
+    {
+      ...makeWordSearchRecord({
+        id: 'RT2',
+        norseWords: ['foo'],
+        scandinavianWords: ['foo'],
+        translitWords: ['foo'],
+      }),
+      english_translation: 'stone',
+      swedish_translation: '',
+    },
+  ];
+  const rules = buildRunicTextsRule({ operator: 'contains', value: 'stone' });
+  const result = doSearch(rules, records);
+
+  assert.is(result.length, 1);
+  assert.equal(result[0].matchDetails.fieldRanges.english_translation, [[0, 5]]);
+  assert.not.ok(result[0].matchDetails.wordIndices);
+});
+
+test('search_runic_texts: merges wordIndices and translation ranges when both match', () => {
+  const records = [
+    {
+      ...makeWordSearchRecord({
+        id: 'RT3',
+        norseWords: ['kuni'],
+        scandinavianWords: ['foo'],
+        translitWords: ['foo'],
+      }),
+      english_translation: 'kuni',
+      swedish_translation: '',
+    },
+  ];
+  const rules = buildRunicTextsRule({ operator: 'contains', value: 'kuni' });
+  const result = doSearch(rules, records);
+
+  assert.is(result.length, 1);
+  assert.equal(result[0].matchDetails.wordIndices, [0]);
+  assert.equal(result[0].matchDetails.fieldRanges.english_translation, [[0, 4]]);
+});
 
 test('translation contains: finds a single occurrence and records its range', () => {
   const records = [
