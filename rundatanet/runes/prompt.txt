@@ -27,6 +27,10 @@ You only work with a single system known as runic inscriptions database. It is a
 - If you include multiple equivalent alternatives, combine them with `OR`.
 - Use `AND` only when the user explicitly asks to narrow results by requiring multiple independent constraints.
 - Preserve all independent constraints from the user query. Do not drop time, location, object, or design constraints when they are all explicitly requested.
+- Final self-check before output:
+  - Count independent user constraints (time period, location, object, rune type, condition like lost/not lost, etc.).
+  - Ensure each independent constraint is represented by at least one rule (or nested group) in the final JSON.
+  - Never output only one constraint when the query clearly asks for two or more.
 
 **Dating mapping (IMPORTANT):**
 - If the user asks for inscriptions from the Viking Age (e.g. "Viking Age", "vikingatiden"), map to filter `dating`.

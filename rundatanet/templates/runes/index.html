@@ -695,11 +695,13 @@
             <div class="col">
               <textarea id="searchTextInput" class="form-control" rows="4" placeholder="Enter search query here..."></textarea>
             </div>
-            <div class="col-auto d-grid">
+            <div class="col-auto d-grid gap-2">
               <button class="btn btn-warning" type="button" id="btnText2Rules">Convert to search</button>
+              <button class="btn btn-outline-warning" type="button" id="btnAiResponseMode">Response mode</button>
             </div>
           </div>
           <div id="aiAssistantAlert" class="alert d-none mt-2 mb-0" role="alert" aria-live="assertive"></div>
+          <div id="aiAssistantResponse" class="alert alert-info d-none mt-2 mb-0" role="status" aria-live="polite"></div>
         </div>
       </div>
     </div>
@@ -939,7 +941,7 @@ function hideAiAssistantAlert() {
     return;
   }
   alertObj.classList.add('d-none');
-  alertObj.classList.remove('alert-warning', 'alert-danger');
+  alertObj.classList.remove('alert-warning', 'alert-danger', 'alert-info');
   alertObj.textContent = '';
 }
 
@@ -948,9 +950,33 @@ function showAiAssistantAlert(message, level = 'warning') {
   if (!alertObj) {
     return;
   }
-  alertObj.classList.remove('d-none', 'alert-warning', 'alert-danger');
-  alertObj.classList.add(level === 'danger' ? 'alert-danger' : 'alert-warning');
+  alertObj.classList.remove('d-none', 'alert-warning', 'alert-danger', 'alert-info');
+  if (level === 'danger') {
+    alertObj.classList.add('alert-danger');
+  } else if (level === 'info') {
+    alertObj.classList.add('alert-info');
+  } else {
+    alertObj.classList.add('alert-warning');
+  }
   alertObj.textContent = message;
+}
+
+function hideAiAssistantResponse() {
+  const responseObj = document.getElementById('aiAssistantResponse');
+  if (!responseObj) {
+    return;
+  }
+  responseObj.classList.add('d-none');
+  responseObj.textContent = '';
+}
+
+function showAiAssistantResponse(message) {
+  const responseObj = document.getElementById('aiAssistantResponse');
+  if (!responseObj) {
+    return;
+  }
+  responseObj.classList.remove('d-none');
+  responseObj.textContent = message;
 }
 
 const AI_SYMBOL_AWARE_RULE_IDS = new Set([
@@ -1335,6 +1361,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     hideAiAssistantAlert();
+    hideAiAssistantResponse();
     showLoading("Converting your search query to search parameters (up to 20 seconds)");
 
     const REQUEST_TIMEOUT_MS = 20000;
@@ -1388,8 +1415,73 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
+  document.getElementById('btnAiResponseMode').addEventListener('click', function() {
+    const text = document.getElementById('searchTextInput').value;
+    if (!text.trim()) {
+      showAlert('Please enter a question first', 'danger');
+      return;
+    }
+
+    hideAiAssistantAlert();
+    hideAiAssistantResponse();
+    showLoading("Generating response from database (up to 20 seconds)");
+
+    const REQUEST_TIMEOUT_MS = 20000;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    fetch('api/ai-answer', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text: text }),
+      signal: controller.signal,
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      return response.json();
+    })
+    .then(data => {
+      if (!data || (!data.answer && !data.error)) {
+        showAiAssistantAlert('The server could not generate a response.', 'warning');
+        return;
+      }
+
+      if (data.error && !data.answer) {
+        showAiAssistantAlert(data.error, 'warning');
+        return;
+      }
+
+      const lines = [];
+      if (data.answer) {
+        lines.push(data.answer);
+      }
+      if (typeof data.matched_inscriptions === 'number') {
+        lines.push(`Matched inscriptions: ${data.matched_inscriptions}`);
+      }
+      if (data.metadata && typeof data.metadata.unique_carver_count === 'number') {
+        lines.push(`Distinct carvers: ${data.metadata.unique_carver_count}`);
+      }
+      showAiAssistantResponse(lines.join('\n'));
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      if (error.name === 'AbortError') {
+        showAiAssistantAlert('Response mode timed out after 20 seconds. Please try again.', 'warning');
+        return;
+      }
+      showAiAssistantAlert('Failed to generate response. Please try again.', 'danger');
+    })
+    .finally(() => {
+      window.clearTimeout(timeoutId);
+      hideLoading();
+    });
+  });
+
   document.getElementById('btnSearch').addEventListener('click', function() {
-    applyMiniBuilderRulesIfNeeded();
     const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
     if (shouldSuggestIncludeSymbols(rules)) {
       gSearchHintMessage = INCLUDE_SYMBOLS_HINT;
@@ -1417,6 +1509,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (locationInput) locationInput.value = '';
   });
   document.getElementById('btnMiniSearch').addEventListener('click', function() {
+    applyMiniBuilderRulesIfNeeded();
     document.getElementById('btnSearch').click();
   });
   document.getElementById('btnMiniResetSearch').addEventListener('click', function() {
