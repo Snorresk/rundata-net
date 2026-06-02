@@ -34,6 +34,7 @@ sitemaps = {
 app_name = "runes"
 urlpatterns = [
     path("", TemplateView.as_view(template_name="runes/index.html"), name="index"),
+    path("ai-tester/", TemplateView.as_view(template_name="runes/ai_tester.html"), name="ai_tester"),
     path("v1", TemplateView.as_view(template_name="runes/index_old.html"), name="index_v1"),
     # path('master', views.master),
     path("about/", TemplateView.as_view(template_name="runes/about.html"), name="about"),
