@@ -1226,6 +1226,84 @@ function buildTranslationRule({ id, operator, value, ignoreCase = false }) {
   };
 }
 
+function buildRunicTextsRule({ operator, value, ignoreCase = false, includeSpecialSymbols = false }) {
+  return {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'search_runic_texts',
+        field: 'normalisation_norse',
+        type: 'string',
+        operator,
+        value,
+        data: { multiField: true },
+        ignoreCase,
+        includeSpecialSymbols,
+      }
+    ],
+    not: false,
+    valid: true,
+  };
+}
+
+test('search_runic_texts: matches transliteration token and returns wordIndices', () => {
+  const records = [
+    makeWordSearchRecord({
+      id: 'RT1',
+      norseWords: ['foo'],
+      scandinavianWords: ['bar'],
+      translitWords: ['kuni'],
+    }),
+  ];
+  const rules = buildRunicTextsRule({ operator: 'contains', value: 'kuni' });
+  const result = doSearch(rules, records);
+
+  assert.is(result.length, 1);
+  assert.equal(result[0].matchDetails.wordIndices, [0]);
+});
+
+test('search_runic_texts: matches English translation and returns fieldRanges', () => {
+  const records = [
+    {
+      ...makeWordSearchRecord({
+        id: 'RT2',
+        norseWords: ['foo'],
+        scandinavianWords: ['foo'],
+        translitWords: ['foo'],
+      }),
+      english_translation: 'stone',
+      swedish_translation: '',
+    },
+  ];
+  const rules = buildRunicTextsRule({ operator: 'contains', value: 'stone' });
+  const result = doSearch(rules, records);
+
+  assert.is(result.length, 1);
+  assert.equal(result[0].matchDetails.fieldRanges.english_translation, [[0, 5]]);
+  assert.not.ok(result[0].matchDetails.wordIndices);
+});
+
+test('search_runic_texts: merges wordIndices and translation ranges when both match', () => {
+  const records = [
+    {
+      ...makeWordSearchRecord({
+        id: 'RT3',
+        norseWords: ['kuni'],
+        scandinavianWords: ['foo'],
+        translitWords: ['foo'],
+      }),
+      english_translation: 'kuni',
+      swedish_translation: '',
+    },
+  ];
+  const rules = buildRunicTextsRule({ operator: 'contains', value: 'kuni' });
+  const result = doSearch(rules, records);
+
+  assert.is(result.length, 1);
+  assert.equal(result[0].matchDetails.wordIndices, [0]);
+  assert.equal(result[0].matchDetails.fieldRanges.english_translation, [[0, 4]]);
+});
+
 test('translation contains: finds a single occurrence and records its range', () => {
   const records = [
     makeTranslationRecord({ id: 'T1', english: 'Bjorn raised this stone' }),

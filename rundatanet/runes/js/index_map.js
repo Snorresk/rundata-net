@@ -104,7 +104,20 @@ function getGeoIntentURL(lat, lng) {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
 }
 
-function inscription2marker(inscriptionData, lat, lon, leaflet=L) {
+function isLostInscription(inscriptionData) {
+  const value = inscriptionData && inscriptionData.lost;
+  if (value === true || value === 1 || value === '1') {
+    return true;
+  }
+  return false;
+}
+
+function hasCurrentLocationInfo(inscriptionData) {
+  const currentLocation = inscriptionData && inscriptionData.current_location;
+  return String(currentLocation || '').trim().length > 0;
+}
+
+function inscription2marker(inscriptionData, lat, lon, locationType = 'found', leaflet=L) {
   // Inscriptions have two sets of latitude and longitude values: one for the
   // original location and one for the present location. We will always create two
   // markers for each inscription. This means that even if the present location is
@@ -118,13 +131,28 @@ function inscription2marker(inscriptionData, lat, lon, leaflet=L) {
     id: inscriptionData.id,
   });
   let popupText = `${inscriptionData.signature_text}<br>`;
-  if (isMobileDevice()) {
-    popupText += `<a href="${getGeoIntentURL(lat, lon)}" target="_self">Drive here!</a>`;
+  const warningTexts = [];
+  const confirmTexts = [];
+  if (isLostInscription(inscriptionData)) {
+    warningTexts.push('Warning: this inscription is lost.');
+    confirmTexts.push('Are you sure you want to drive here? The inscription is lost!');
+  }
+  if (locationType === 'found' && hasCurrentLocationInfo(inscriptionData)) {
+    warningTexts.push('Warning: this inscription is moved.');
+    confirmTexts.push('Are you sure you want to drive to Found location? The inscription is moved! Check its current location.');
+  }
+  warningTexts.forEach(text => {
+    popupText += `<span style="color:#b94a48;font-weight:600;">${text}</span><br>`;
+  });
+  const destinationUrl = getGeoIntentURL(lat, lon);
+  if (confirmTexts.length > 0) {
+    const confirmText = confirmTexts.join('\n');
+    popupText += `<a href="${destinationUrl}" target="_self" onclick="return window.confirm('${confirmText}')">Drive here!</a>`;
+  } else {
+    popupText += `<a href="${destinationUrl}" target="_self">Drive here!</a>`;
   }
   // Tooltip is simple and is always on, popup supports HTML and is opened  /closed by user
-  if (isMobileDevice()) {
-    marker.bindPopup(popupText, {autoClose: false});
-  }
+  marker.bindPopup(popupText, {autoClose: false});
   marker.bindTooltip(inscriptionData.signature_text, {permanent: true}).openTooltip();
 
   return marker;
@@ -149,7 +177,7 @@ export function inscriptions2markers(dbMap, leaflet=L) {
     const found_lon = parseFloat(inscriptionData.longitude) || 0.0;
     const present_lat = parseFloat(inscriptionData.present_latitude) || 0.0;
     const present_lon = parseFloat(inscriptionData.present_longitude) || 0.0;
-    const marker_found = inscription2marker(inscriptionData, found_lat, found_lon, leaflet);
+    const marker_found = inscription2marker(inscriptionData, found_lat, found_lon, 'found', leaflet);
     if (!marker_found) {
       return;
     }
@@ -158,7 +186,7 @@ export function inscriptions2markers(dbMap, leaflet=L) {
     }
     mapMarkers.get(key).found = marker_found;
 
-    const marker_present = inscription2marker(inscriptionData, present_lat, present_lon, leaflet);
+    const marker_present = inscription2marker(inscriptionData, present_lat, present_lon, 'present', leaflet);
     mapMarkers.get(key).present = marker_present ? marker_present : marker_found;
   });
   return mapMarkers;

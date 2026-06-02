@@ -74,6 +74,7 @@ $.fn.queryBuilder.define('case-rule', function(options) {
     const caseRuleFilterIds = [
       'normalization_norse_to_transliteration',
       'normalization_scandinavian_to_transliteration',
+      'search_runic_texts',
       'english_translation',
       'swedish_translation',
     ];
@@ -153,6 +154,7 @@ $.fn.queryBuilder.extend({
 const specialSymbolsFilterIds = [
   'normalization_norse_to_transliteration',
   'normalization_scandinavian_to_transliteration',
+  'search_runic_texts',
 ];
 
 $.fn.queryBuilder.define('special-symbols-rule', function(options) {
@@ -721,6 +723,18 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
     }),
     prepareAutoComplete('english_translation', dbMap, getHumanName, { optgroup: 'gr_texts', operators: ["contains", "not_contains", "is_empty", 'is_not_empty'] }),
     prepareAutoComplete('swedish_translation', dbMap, getHumanName, { optgroup: 'gr_texts', operators: ["contains", "not_contains", "is_empty", 'is_not_empty'] }),
+    {
+      id: 'search_runic_texts',
+      field: 'normalisation_norse',
+      label: 'Search in runic texts',
+      type: 'string',
+      input: 'text',
+      optgroup: 'gr_texts',
+      data: {
+        multiField: true,
+      },
+      operators: ['contains', 'equal', 'begins_with', 'ends_with'],
+    },
     {
       id: 'has_personal_name',
       label: "Contains names",
