@@ -190,6 +190,11 @@ def _fold_text(value: str) -> str:
     return re.sub(r"\s+", " ", without_diacritics).strip().lower()
 
 
+def _compact_code(value: str) -> str:
+    folded = _fold_text(value)
+    return re.sub(r"[^a-z0-9]+", "", folded)
+
+
 COUNTRY_PROVINCE_ALIASES: dict[str, str] = {
     # Swedish provinces
     "uppland": "U ",
@@ -344,6 +349,12 @@ def _extract_location_terms(user_text: str) -> list[str]:
                 raw = " ".join(token_list[:cut_idx])
             cleaned = _clean_location_value(raw)
             if len(cleaned) < 2:
+                continue
+            if re.fullmatch(r"(?i)pr(?:\s*\d+)?", cleaned):
+                continue
+            if re.fullmatch(r"(?i)fp", cleaned):
+                continue
+            if re.fullmatch(r"(?i)(rak|kb|sod)(?:\s+style)?", cleaned):
                 continue
             if _term_maps_to_country_or_province(cleaned):
                 continue
@@ -501,6 +512,97 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
     return constraints
 
 
+def _extract_style_constraints(user_text: str) -> list[dict[str, str]]:
+    constraints: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def add_style(value: str) -> None:
+        normalized_value = re.sub(r"\s+", " ", value.replace("\u00a0", " ")).strip()
+        key = _fold_text(normalized_value)
+        if key in seen:
+            return
+        seen.add(key)
+        constraints.append({"id": "style", "field": "style", "value": normalized_value})
+
+    for match in re.finditer(r"\bpr(?:ofil|ofile|file|of)?\.?\s*([0-9]+)\b", user_text or "", flags=re.IGNORECASE):
+        add_style(f"Pr {match.group(1)}")
+    for match in re.finditer(r"\bfp\b|\bfågelperspektiv\b|\bfagelperspektiv\b|\bbird'?s?-eye view\b", user_text or "", flags=re.IGNORECASE):
+        add_style("Fp")
+    for match in re.finditer(r"\brak\b|\bkb\b|\bsod\b", user_text or "", flags=re.IGNORECASE):
+        add_style(match.group(0))
+
+    text_folded = _fold_text(user_text or "")
+    for value, folded_value in _get_style_values():
+        if len(folded_value) < 2:
+            continue
+        if re.search(rf"(^|\b){re.escape(folded_value)}(\b|$)", text_folded):
+            add_style(value)
+    return constraints
+
+
+@lru_cache(maxsize=1)
+def _get_style_values() -> tuple[tuple[str, str], ...]:
+    values = (
+        MetaInformation.objects.exclude(style__isnull=True)
+        .exclude(style__exact="")
+        .values_list("style", flat=True)
+        .distinct()
+    )
+    cleaned_pairs: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for raw in values:
+        value = str(raw or "").replace("\u00a0", " ").strip()
+        if not value:
+            continue
+        # Only expose concise style codes for direct deterministic matching.
+        if not re.fullmatch(r"(?i)(rak|fp|kb|sod|pr\s*\d+)", value):
+            continue
+        folded = _fold_text(value)
+        if not folded or folded in seen:
+            continue
+        seen.add(folded)
+        cleaned_pairs.append((value, folded))
+    cleaned_pairs.sort(key=lambda item: len(item[1]), reverse=True)
+    return tuple(cleaned_pairs)
+
+
+def _clean_carver_value(value: str) -> str:
+    cleaned = (value or "").strip(" .,!?:;\"'()[]{}")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    # Stop at the next independent constraint phrase.
+    cleaned = re.split(
+        r"\b(?:in|i|from|från|under|during|with|med|period|dating|style|stil|pr(?:ofil|ofile|file|of)?\.?\s*\d+)\b",
+        cleaned,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip(" .,!?:;\"'()[]{}")
+    return cleaned
+
+
+def _extract_carver_constraints(user_text: str) -> list[dict[str, str]]:
+    text = user_text or ""
+    constraints: list[dict[str, str]] = []
+    seen: set[str] = set()
+    patterns = [
+        r"\b(?:made|carved|cut|ristad|ristade|ristat|gjord|gjorda)\s+by\s+([A-Za-zÅÄÖåäöÉéÜü.\- ]{2,})",
+        r"\b(?:made\s+by|carved\s+by|cut\s+by)\s+([A-Za-zÅÄÖåäöÉéÜü.\- ]{2,})",
+        r"\b(?:av|by)\s+([A-ZÅÄÖÜÉ][A-Za-zÅÄÖåäöÉéÜü.\- ]{1,})",
+    ]
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            value = _clean_carver_value(match.group(1))
+            if len(value) < 2:
+                continue
+            folded = _fold_text(value)
+            if folded in {"alla", "all", "inscriptions", "inskrifter", "these", "dessa"}:
+                continue
+            if folded in seen:
+                continue
+            seen.add(folded)
+            constraints.append({"id": "carver", "field": "carver", "value": value})
+    return constraints
+
+
 @lru_cache(maxsize=1)
 def _get_object_info_values() -> tuple[tuple[str, str], ...]:
     values = (
@@ -615,6 +717,14 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
         if not _has_location_value(root, (item["id"],), item["value"]):
             root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
 
+    for item in _extract_style_constraints(user_text):
+        if not _has_location_value(root, (item["id"],), item["value"]):
+            root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
+
+    for item in _extract_carver_constraints(user_text):
+        if not _has_location_value(root, (item["id"],), item["value"]):
+            root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
+
     for location_term in _extract_location_terms(user_text):
         if location_term.lower() == "shm":
             continue
@@ -667,6 +777,12 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
         rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
 
     for item in _extract_object_info_constraints(user_text):
+        rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
+
+    for item in _extract_style_constraints(user_text):
+        rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
+
+    for item in _extract_carver_constraints(user_text):
         rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
 
     for location_term in _extract_location_terms(user_text):
@@ -891,6 +1007,12 @@ def _build_meta_queryset_from_text(user_text: str, *, ignore_dating_constraint: 
 
     for item in _extract_object_info_constraints(user_text):
         qs = qs.filter(objectInfo__icontains=item["value"])
+
+    for item in _extract_style_constraints(user_text):
+        qs = qs.filter(style__icontains=item["value"])
+
+    for item in _extract_carver_constraints(user_text):
+        qs = qs.filter(carver__icontains=item["value"])
 
     return qs, dating_prefix, country_codes
 
@@ -1506,6 +1628,66 @@ def _looks_like_period_frequency_question(user_text: str) -> bool:
     return asks_period and (asks_compare or mentions_period_codes)
 
 
+STYLE_HELP_URL = "https://rundata-net.readthedocs.io/en/latest/db/data.html#figure-styles"
+
+
+def _looks_like_style_explanation_question(user_text: str) -> bool:
+    text = _fold_text(user_text or "")
+    asks_definition = any(
+        token in text
+        for token in (
+            "what is",
+            "what does",
+            "explain",
+            "vad ar",
+            "vad betyder",
+            "forklara",
+            "förklara",
+        )
+    )
+    mentions_style_code = bool(re.search(r"\b(fp|kb|rak|sod|pr\s*[1-5])\b", text))
+    return asks_definition and mentions_style_code
+
+
+def _answer_style_explanation(user_text: str) -> AiAnswerResponse:
+    text = _fold_text(user_text or "")
+    requested_codes: list[str] = []
+    for code in ("Fp", "Kb", "Rak", "Sod"):
+        if re.search(rf"\b{re.escape(code.lower())}\b", text):
+            requested_codes.append(code)
+    for match in re.finditer(r"\bpr\s*([1-5])\b", text):
+        requested_codes.append(f"Pr {match.group(1)}")
+
+    if not requested_codes:
+        requested_codes = ["Pr 1-5", "Fp", "Kb", "Rak", "Sod"]
+
+    unique_codes = []
+    seen = set()
+    for code in requested_codes:
+        if code.lower() not in seen:
+            seen.add(code.lower())
+            unique_codes.append(code)
+
+    codes_text = ", ".join(unique_codes)
+    verb = "belongs" if len(unique_codes) == 1 else "belong"
+    answer = (
+        f"{codes_text} {verb} to the Style filter. Style grouping information "
+        "(Pr1-Pr5, Fp, KB, RAK) follows A.-S. Gräslund's chronological system "
+        "for Viking Age runestones. The runestone material from the Mälar valley "
+        "was dated by A.-S. Gräslund, and other runestones by A.-S. Gräslund "
+        "and L. Lager in cooperation. See Help: Style: "
+        f"{STYLE_HELP_URL}"
+    )
+    return AiAnswerResponse(
+        answer=answer,
+        matched_inscriptions=0,
+        metadata={
+            "style_codes": unique_codes,
+            "help_url": STYLE_HELP_URL,
+        },
+    )
+
+
 def _answer_period_frequency_from_filters(user_text: str) -> AiAnswerResponse:
     # For period comparison questions, do not force a single dating constraint from text.
     qs, _, country_codes = _build_meta_queryset_from_text(user_text, ignore_dating_constraint=True)
@@ -1605,6 +1787,9 @@ def ai_answer(request, data: TextRequest):
     Answer DB-driven analytical questions. Initial response mode supports
     counting distinct carvers in user-constrained result sets.
     """
+    if _looks_like_style_explanation_question(data.text):
+        return _answer_style_explanation(data.text)
+
     if _looks_like_similarity_question(data.text):
         return _answer_signature_similarity(data.text)
 
