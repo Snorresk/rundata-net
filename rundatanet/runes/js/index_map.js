@@ -92,6 +92,11 @@ export function onHideMapClicked(mapContainerId, menuItemId) {
 
 function isMobileDevice() {
   try {
+    if (typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(max-width: 767.98px)').matches) {
+      return true;
+    }
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   } catch (e) {
     return false;
@@ -117,6 +122,38 @@ function hasCurrentLocationInfo(inscriptionData) {
   return String(currentLocation || '').trim().length > 0;
 }
 
+function makeMobileTooltipOpenPopup(marker, tooltip) {
+  const tooltipElement = tooltip && typeof tooltip.getElement === 'function'
+    ? tooltip.getElement()
+    : null;
+  if (!tooltipElement || tooltipElement.dataset.mobilePopupTrigger === 'true') {
+    return;
+  }
+
+  tooltipElement.dataset.mobilePopupTrigger = 'true';
+  tooltipElement.setAttribute('role', 'button');
+  tooltipElement.setAttribute('tabindex', '0');
+  tooltipElement.setAttribute('aria-label', 'Open Drive here and warnings');
+
+  const openPopupFromTooltip = (event) => {
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
+    if (event && typeof event.stopPropagation === 'function') {
+      event.stopPropagation();
+    }
+    marker.openPopup();
+  };
+
+  tooltipElement.addEventListener('click', openPopupFromTooltip);
+  tooltipElement.addEventListener('touchend', openPopupFromTooltip);
+  tooltipElement.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      openPopupFromTooltip(event);
+    }
+  });
+}
+
 function inscription2marker(inscriptionData, lat, lon, locationType = 'found', leaflet=L) {
   // Inscriptions have two sets of latitude and longitude values: one for the
   // original location and one for the present location. We will always create two
@@ -134,6 +171,7 @@ function inscription2marker(inscriptionData, lat, lon, locationType = 'found', l
   const isMobile = isMobileDevice();
   const hasCurrentLocation = hasCurrentLocationInfo(inscriptionData);
   const warningTexts = [];
+  const infoTexts = [];
   const confirmTexts = [];
   if (isLostInscription(inscriptionData)) {
     warningTexts.push('Warning: this inscription is lost.');
@@ -144,6 +182,7 @@ function inscription2marker(inscriptionData, lat, lon, locationType = 'found', l
   }
   if (isMobile && locationType === 'present' && hasCurrentLocation) {
     warningTexts.push('Warning: this inscription is moved.');
+    infoTexts.push('You are driving to Current location.');
   }
   if (locationType === 'found' && hasCurrentLocation) {
     confirmTexts.push('Are you sure you want to drive to Found location? The inscription is moved! Check its current location.');
@@ -154,6 +193,9 @@ function inscription2marker(inscriptionData, lat, lon, locationType = 'found', l
     } else {
       popupText += `<span style="color:#b94a48;font-weight:600;">${text}</span><br>`;
     }
+  });
+  infoTexts.forEach(text => {
+    popupText += `<span class="map-popup-note">${text}</span><br>`;
   });
   const destinationUrl = getGeoIntentURL(lat, lon);
   const driveLinkClass = isMobile ? ' class="map-drive-link"' : '';
@@ -173,7 +215,18 @@ function inscription2marker(inscriptionData, lat, lon, locationType = 'found', l
       }
     : {autoClose: false};
   marker.bindPopup(popupText, popupOptions);
-  marker.bindTooltip(inscriptionData.signature_text, {permanent: true}).openTooltip();
+  const tooltipOptions = isMobile
+    ? {permanent: true, interactive: true, className: 'mobile-map-id-tooltip'}
+    : {permanent: true};
+  marker.bindTooltip(inscriptionData.signature_text, tooltipOptions).openTooltip();
+  if (isMobile && typeof marker.on === 'function') {
+    marker.on('tooltipopen', (event) => {
+      makeMobileTooltipOpenPopup(marker, event.tooltip);
+    });
+  }
+  if (isMobile && typeof marker.getTooltip === 'function') {
+    makeMobileTooltipOpenPopup(marker, marker.getTooltip());
+  }
 
   return marker;
 }

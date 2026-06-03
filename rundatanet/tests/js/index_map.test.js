@@ -4,6 +4,20 @@ import { inscriptions2markers } from '../../runes/js/index_map.js';
 
 const mockLeaflet = {
   marker: (latlng, options) => {
+      const tooltipElement = {
+        dataset: {},
+        attributes: {},
+        listeners: {},
+        setAttribute: (name, value) => {
+          tooltipElement.attributes[name] = value;
+        },
+        addEventListener: (eventName, handler) => {
+          tooltipElement.listeners[eventName] = handler;
+        },
+      };
+      const tooltipObj = {
+        getElement: () => tooltipElement,
+      };
       const markerObj = {
         _latlng: latlng,
         options: options,
@@ -18,8 +32,23 @@ const mockLeaflet = {
           markerObj.popupOptions = popupOptions;
           return markerObj;
         },
-        bindTooltip: () => markerObj,
+        bindTooltip: (tooltipText, tooltipOptions) => {
+          markerObj.tooltipText = tooltipText;
+          markerObj.tooltipOptions = tooltipOptions;
+          return markerObj;
+        },
         openTooltip: () => markerObj,
+        getTooltip: () => tooltipObj,
+        on: (eventName, handler) => {
+          markerObj.events[eventName] = handler;
+          return markerObj;
+        },
+        openPopup: () => {
+          markerObj.openPopupCalled = true;
+          return markerObj;
+        },
+        events: {},
+        tooltipElement,
       };
       return markerObj;
   }
@@ -125,6 +154,9 @@ test('inscriptions2markers() adds drive link and warnings to marker popup', asyn
   assert.not.match(marker.popupText, /map-drive-link/);
   assert.not.match(marker.popupText, /map-popup-warning/);
   assert.not.match(presentMarker.popupText, /Warning: this inscription is moved/);
+  assert.not.match(presentMarker.popupText, /You are driving to Current location/);
+  assert.is(marker.tooltipOptions.interactive, undefined);
+  assert.is(marker.tooltipElement.attributes.role, undefined);
 });
 
 test('inscriptions2markers() uses mobile-only popup helpers on mobile', async () => {
@@ -153,6 +185,18 @@ test('inscriptions2markers() uses mobile-only popup helpers on mobile', async ()
   assert.match(marker.popupText, /map-popup-warning/);
   assert.is(marker.popupOptions.autoPan, true);
   assert.match(presentMarker.popupText, /Warning: this inscription is moved/);
+  assert.match(presentMarker.popupText, /You are driving to Current location/);
+  assert.match(presentMarker.popupText, /map-popup-note/);
+  assert.not.match(marker.popupText, /You are driving to Current location/);
+  assert.is(marker.tooltipOptions.interactive, true);
+  assert.is(marker.tooltipOptions.className, 'mobile-map-id-tooltip');
+  assert.is(marker.tooltipElement.attributes.role, 'button');
+  assert.is(marker.tooltipElement.attributes.tabindex, '0');
+  marker.tooltipElement.listeners.click({
+    preventDefault: () => {},
+    stopPropagation: () => {},
+  });
+  assert.is(marker.openPopupCalled, true);
 
   Object.defineProperty(globalThis, 'navigator', {
     value: originalNavigator,
