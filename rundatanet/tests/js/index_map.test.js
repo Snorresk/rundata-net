@@ -13,7 +13,11 @@ const mockLeaflet = {
             lng: latlng[1]
           }
         },
-        bindPopup: () => markerObj,
+        bindPopup: (popupText, popupOptions) => {
+          markerObj.popupText = popupText;
+          markerObj.popupOptions = popupOptions;
+          return markerObj;
+        },
         bindTooltip: () => markerObj,
         openTooltip: () => markerObj,
       };
@@ -93,4 +97,65 @@ test('inscriptions2markers() on two items', async () => {
   });
   const result = inscriptions2markers(myDb, mockLeaflet);
   assert.is(result.size, 2, `The resulting object should contain two items`);
+});
+
+test('inscriptions2markers() adds drive link and warnings to marker popup', async () => {
+  const myDb = new Map();
+  myDb.set(1, {
+    signature_text: "Moved lost test",
+    id: 1,
+    latitude: 1.0,
+    longitude: 1.0,
+    present_latitude: 10.0,
+    present_longitude: 12.0,
+    current_location: "Museum",
+    lost: true,
+  });
+
+  const result = inscriptions2markers(myDb, mockLeaflet);
+  const marker = result.get(1).found;
+  const presentMarker = result.get(1).present;
+
+  assert.match(marker.popupText, /Warning: this inscription is lost/);
+  assert.match(marker.popupText, /Warning: this inscription is moved/);
+  assert.match(marker.popupText, /Drive here!/);
+  assert.match(marker.popupText, /google\.com\/maps\/dir/);
+  assert.is(marker.popupOptions.autoClose, false);
+  assert.is(marker.popupOptions.autoPan, undefined);
+  assert.not.match(marker.popupText, /map-drive-link/);
+  assert.not.match(marker.popupText, /map-popup-warning/);
+  assert.not.match(presentMarker.popupText, /Warning: this inscription is moved/);
+});
+
+test('inscriptions2markers() uses mobile-only popup helpers on mobile', async () => {
+  const originalNavigator = globalThis.navigator;
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { userAgent: 'iPhone' },
+    configurable: true,
+  });
+
+  const myDb = new Map();
+  myDb.set(1, {
+    signature_text: "Mobile moved test",
+    id: 1,
+    latitude: 1.0,
+    longitude: 1.0,
+    present_latitude: 10.0,
+    present_longitude: 12.0,
+    current_location: "Museum",
+  });
+
+  const result = inscriptions2markers(myDb, mockLeaflet);
+  const marker = result.get(1).found;
+  const presentMarker = result.get(1).present;
+
+  assert.match(marker.popupText, /map-drive-link/);
+  assert.match(marker.popupText, /map-popup-warning/);
+  assert.is(marker.popupOptions.autoPan, true);
+  assert.match(presentMarker.popupText, /Warning: this inscription is moved/);
+
+  Object.defineProperty(globalThis, 'navigator', {
+    value: originalNavigator,
+    configurable: true,
+  });
 });

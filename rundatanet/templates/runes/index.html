@@ -177,6 +177,12 @@
         padding: 5mm;
         box-sizing: border-box;
       }
+      #mobileMapPopupHint {
+        display: none;
+      }
+      #mobileSearchResultsSummary {
+        display: none;
+      }
       @media (min-width: 768px) {
         #leftPanel.left-panel-one-cm-narrow {
           flex: 0 0 calc(16.666667% - 1cm);
@@ -196,11 +202,76 @@
         #miniQueryBuilder {
           display: none !important;
         }
+        #mobileDbPaneSwitcher {
+          display: none !important;
+        }
       }
       @media (max-width: 767.98px) {
-        /* Mobile: hide signatures list and stack map above main display */
+        /* Mobile: three panes for map, inscription info, and search controls. */
         #leftPanel {
           display: none !important;
+        }
+        #mobileDbPaneSwitcher {
+          position: sticky;
+          top: 0;
+          z-index: 1030;
+          background: #fff;
+          border-bottom: 1px solid #d9dee3;
+          padding: 8px 12px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .mobile-db-tabs {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+        .mobile-db-tab {
+          min-height: 42px;
+          border-radius: 6px;
+          font-weight: 600;
+        }
+        .mobile-db-tab[aria-selected="true"] {
+          color: #fff;
+          background: #243b53;
+          border-color: #243b53;
+        }
+        #aiAssistantRow {
+          display: none !important;
+        }
+        body.mobile-db-map-view #mainPanel,
+        body.mobile-db-map-view #searchControlsRow,
+        body.mobile-db-map-view #builderContainer,
+        body.mobile-db-map-view #aiAssistantContainer,
+        body.mobile-db-map-view #mobileSearchBuilderRow,
+        body.mobile-db-info-view #mapDisplayWrapper,
+        body.mobile-db-info-view #mobileSearchBuilderRow,
+        body.mobile-db-info-view #searchControlsRow,
+        body.mobile-db-info-view #builderContainer,
+        body.mobile-db-info-view #aiAssistantRow,
+        body.mobile-db-search-view #mapDisplayWrapper,
+        body.mobile-db-search-view #mainPanel,
+        body.mobile-db-search-view #searchControlsRow,
+        body.mobile-db-search-view #builderContainer,
+        body.mobile-db-search-view #aiAssistantRow {
+          display: none !important;
+        }
+        #dbPageContainer {
+          display: flex;
+          flex-direction: column;
+        }
+        #mobileSearchBuilderRow {
+          order: 2;
+        }
+        #mainLayoutRow {
+          order: 3;
+        }
+        #aiAssistantRow {
+          order: 4;
+        }
+        body.mobile-db-info-view #mainLayoutRow,
+        body.mobile-db-search-view #mainLayoutRow {
+          order: 3;
         }
         #mapDisplayWrapper {
           order: 1;
@@ -218,9 +289,30 @@
           flex: 0 0 100%;
           margin-top: 0 !important;
         }
-        #searchControlsRow,
-        #builderContainer {
-          display: none !important;
+        #searchControlsRow {
+          padding-top: 0.75rem !important;
+          padding-bottom: 0.75rem !important;
+        }
+        #searchControlsContainer {
+          gap: 0.5rem !important;
+        }
+        #searchControlsContainer .btn-group {
+          width: 100%;
+        }
+        #searchControlsContainer > .btn {
+          flex: 1 1 auto;
+        }
+        #builderContainer,
+        #aiAssistantContainer {
+          width: 100%;
+          max-width: 100%;
+          flex: 0 0 100%;
+        }
+        #aiAssistantContainer .row {
+          --bs-gutter-y: 0.5rem;
+        }
+        #aiAssistantContainer .col-auto {
+          width: 100%;
         }
         #mapDisplayWrapper.map-hidden {
           flex: 0 0 100% !important;
@@ -228,13 +320,120 @@
           min-width: 0;
           padding-right: 0 !important;
         }
-        #mapDisplayWrapper.map-hidden #miniQueryBuilder {
-          display: block;
+        #miniQueryBuilder,
+        #mHideMap {
+          display: none !important;
+        }
+        body.mobile-db-search-view #miniQueryBuilder {
+          display: block !important;
+          margin: 8px 0 0;
+          padding-right: 8px;
+        }
+        body.mobile-db-search-view #miniQueryBuilder .d-flex {
+          flex-wrap: wrap;
+        }
+        body.mobile-db-search-view #miniQueryBuilder .btn {
+          flex: 1 1 auto;
+        }
+        body.mobile-db-map-view #mapDisplay {
+          height: min(720px, calc(100dvh - 128px)) !important;
+          min-height: 360px;
+          max-height: none;
           margin-bottom: 0;
+        }
+        body.mobile-db-map-view #mobileMapPopupHint {
+          display: block;
+          background: #fff7df;
+          border: 1px solid #edc56b;
+          border-radius: 8px;
+          color: #4f3b06;
+          font-size: 0.78rem;
+          line-height: 1.25;
+          margin: 0 0 8px;
+          padding: 8px 10px;
+        }
+        body.mobile-db-map-view .leaflet-popup-content {
+          font-size: 0.88rem;
+          line-height: 1.3;
+          margin: 10px 12px;
+        }
+        body.mobile-db-map-view .map-popup-warning {
+          color: #9f2f24;
+          display: block;
+          font-size: 0.86rem;
+          font-weight: 700;
+          margin: 0.15rem 0 0.35rem;
+        }
+        body.mobile-db-map-view .map-drive-link {
+          background: #243b53;
+          border-radius: 6px;
+          color: #fff !important;
+          display: inline-block;
+          font-size: 0.9rem;
+          font-weight: 700;
+          margin-top: 0.25rem;
+          padding: 0.35rem 0.6rem;
+          text-decoration: none;
+          width: 100%;
+          text-align: center;
+        }
+        body.mobile-db-info-view #mainDisplay {
+          height: auto;
+          min-height: 0;
+          max-height: none;
+          overflow: visible !important;
+          border: 0 !important;
+          background: transparent;
+          font-size: 0.78rem;
+          line-height: 1.3;
+          margin-bottom: 0;
+          padding: 2mm 0 0;
+        }
+        body.mobile-db-info-view #mainDisplay .inscription-section {
+          padding-bottom: 0.35rem;
+          margin-bottom: 0.45rem;
+        }
+        body.mobile-db-info-view #mainDisplay .inscription-section h4 {
+          font-size: 0.88rem;
+          line-height: 1.2;
+          font-weight: 700;
+          margin: 0.35rem 0 0.15rem;
+        }
+        body.mobile-db-info-view #mainDisplay .inscription-section span,
+        body.mobile-db-info-view #mainDisplay .inscription-section i,
+        body.mobile-db-info-view #mainDisplay .inscription-section table {
+          font-size: 0.78rem;
+        }
+        body.mobile-db-info-view #mainDisplay .inscription-section table {
+          line-height: 1.2;
+        }
+        body.mobile-db-info-view #mobileSearchResultsSummary {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.35rem 0.65rem;
+          align-items: center;
+          background: #eef4ef;
+          border: 1px solid #c7dacb;
+          border-radius: 8px;
+          color: #233426;
+          font-size: 0.78rem;
+          font-weight: 600;
+          line-height: 1.25;
+          margin-top: 8px;
+          padding: 8px 10px;
+        }
+        body.mobile-db-info-view #mobileSearchResultsSummary .mobile-stat-label {
+          font-weight: 700;
+        }
+        body.mobile-db-info-view #mobileSearchResultsSummary .mobile-stat-value {
+          font-weight: 500;
         }
 
         body.mobile-map-fullscreen .rundata-navbar,
+        body.mobile-map-fullscreen #mobileDbPaneSwitcher,
         body.mobile-map-fullscreen #mainPanel,
+        body.mobile-map-fullscreen #searchControlsRow,
+        body.mobile-map-fullscreen #builderContainer,
         body.mobile-map-fullscreen #aiAssistantContainer {
           display: none !important;
         }
@@ -363,18 +562,28 @@
           overflow-y: auto;
           border: 1px solid #dee2e6;
           border-radius: 0.5rem;
-          padding: 0.75rem;
+          padding: 0.5rem;
           background: #fff;
         }
-        .display-options-group + .display-options-group {
-          margin-top: 0.85rem;
-          padding-top: 0.85rem;
-          border-top: 1px solid #e9ecef;
+        .display-options-mobile-row {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.45rem 0.35rem;
+          border-bottom: 1px solid #edf0f2;
         }
-        .display-options-group-title {
-          font-size: 0.9rem;
-          font-weight: 600;
-          margin-bottom: 0.35rem;
+        .display-options-mobile-row:last-child {
+          border-bottom: 0;
+        }
+        .display-options-mobile-order {
+          display: flex;
+          gap: 0.25rem;
+          flex: 0 0 auto;
+        }
+        .display-options-mobile-order .btn {
+          min-width: 34px;
+          min-height: 34px;
+          padding: 0.25rem 0.35rem;
         }
       }
 
@@ -698,9 +907,26 @@
     </div>
   </nav>-->
 
-  <div class="container-fluid">
+  <div id="dbPageContainer" class="container-fluid">
     <div class="row">
       <div class="col alert alert-danger" role="alert" id="alertObj"></div>
+    </div>
+
+    <div id="mobileDbPaneSwitcher" class="d-md-none" role="tablist" aria-label="Mobile database views">
+      <div class="mobile-db-tabs">
+        <button type="button" class="btn btn-outline-secondary mobile-db-tab" id="mobilePaneMap" data-mobile-db-pane="map" role="tab" aria-controls="mapDisplayWrapper" aria-selected="true">
+          <i class="bi bi-map" aria-hidden="true"></i>
+          Map
+        </button>
+        <button type="button" class="btn btn-outline-secondary mobile-db-tab" id="mobilePaneInfo" data-mobile-db-pane="info" role="tab" aria-controls="mainPanel" aria-label="Show inscription information" aria-selected="false">
+          <i class="bi bi-card-text" aria-hidden="true"></i>
+          Info
+        </button>
+        <button type="button" class="btn btn-outline-secondary mobile-db-tab" id="mobilePaneWork" data-mobile-db-pane="search" role="tab" aria-controls="mobileSearchBuilderRow" aria-label="Search database" aria-selected="false">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          Search
+        </button>
+      </div>
     </div>
 
     <!--<div class="row border border-1">
@@ -709,7 +935,30 @@
       <div class="col-md-4 p-0 bg-success">f</div>
     </div>-->
 
-    <div class="row align-items-start">
+    <div id="mobileSearchBuilderRow" class="row d-md-none">
+      <div class="col">
+        <div id="miniQueryBuilder" class="mini-query-builder">
+          <div class="mb-2">
+            <label class="form-label" for="miniSearchInput">Write ID numbers or any location</label>
+            <input type="text" class="form-control form-control-sm" id="miniSearchInput">
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="miniRunicTextInput">Search in runic texts</label>
+            <input type="text" class="form-control form-control-sm" id="miniRunicTextInput">
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="miniMetaInfoInput">Search in meta information, e.g. carvers, styles, material etc</label>
+            <input type="text" class="form-control form-control-sm" id="miniMetaInfoInput">
+          </div>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-success btn-sm" id="btnMiniSearch">Search</button>
+            <button type="button" class="btn btn-danger btn-sm" id="btnMiniResetSearch">Delete search</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="mainLayoutRow" class="row align-items-start">
       <div id="leftPanel" class="left-panel-one-cm-narrow col-md-2 col-sm-2 ps-0 d-flex flex-column my-2 my-md-0">
         <!--<select id="inpInscriptions" class="form-select flex-grow-1 mb-2" multiple></select>-->
         <div id="jstree" class="overflow-scroll signatures-fixed-height"></div>
@@ -725,25 +974,20 @@
       <div id="mainPanel" class="col my-2 my-md-0">
         <div id="mainDisplay" class="my-fixed-height overflow-scroll border" contentEditable="true" autocomplete="off" autocorrect="off" spellcheck="false">
         </div>
+        <div id="mobileSearchResultsSummary" class="d-md-none" aria-live="polite">
+          <span class="mobile-stat-label">Search results:</span>
+          <span>Inscriptions: <span id="mobileOutNumSignaturesFound" class="mobile-stat-value">6815</span></span>
+          <span>Words: <span id="mobileOutNumWords" class="mobile-stat-value">54852</span></span>
+          <span>Names: <span id="mobileOutNumFoundNames" class="mobile-stat-value">11318</span></span>
+        </div>
       </div>
 
       <div id="mapDisplayWrapper" class="map-two-cm-narrow col-md-4 col-sm-2 ps-0 pe-3 pe-md-0 mt-3 mt-md-0">
-        <div id="miniQueryBuilder" class="mini-query-builder">
-          <div class="mb-2">
-            <label class="form-label" for="miniSearchInput">Write ID numbers or any location</label>
-            <input type="text" class="form-control form-control-sm" id="miniSearchInput">
-          </div>
-          <div class="mb-2">
-            <label class="form-label" for="miniRunicTextInput">Search in runic texts</label>
-            <input type="text" class="form-control form-control-sm" id="miniRunicTextInput">
-          </div>
-          <div class="d-flex gap-2">
-            <button type="button" class="btn btn-success btn-sm" id="btnMiniSearch">Search</button>
-            <button type="button" class="btn btn-danger btn-sm" id="btnMiniResetSearch">Delete search</button>
-          </div>
-        </div>
         <div id="mapDisplayContainer" class="map-display-container">
           <button type="button" class="btn btn-outline-secondary btn-sm map-corner-toggle" id="mHideMap" aria-label="Hide map" title="Hide map">×</button>
+          <div id="mobileMapPopupHint" role="note">
+            Tap an individual map pin to see warnings and Drive here. Tap numbered clusters to zoom closer first.
+          </div>
           <div id="mapDisplay" class="my-fixed-height"></div>
         </div>
       </div>
@@ -785,7 +1029,7 @@
         <div id="builder"></div>
       </div>
     </div>
-    <div class="row mt-4 mb-3 pb-6">
+    <div id="aiAssistantRow" class="row mt-4 mb-3 pb-6">
       <div id="aiAssistantContainer" class="col">
         <div class="border border-warning rounded-3 p-3 bg-body-tertiary shadow-sm">
           <div class="small text-muted mb-2">Let the AI assistent help you with your search: write your question in any language</div>
@@ -862,7 +1106,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-default" data-bs-dismiss="modal" id="btnDismissDisplayFormat">Close</button>
-          <button type="button" class="btn btn-primary" id="btnApplyDisplayFormat">Apply changes</button>
+          <button type="button" class="btn btn-primary d-none d-md-inline-block" id="btnApplyDisplayFormat">Apply changes</button>
         </div>
       </div>
     </div>
@@ -1022,7 +1266,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260602-ai-merge"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260603-mobile-property-order"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -1144,10 +1388,47 @@ function parseIdQueryTokens(value) {
     .filter(v => v.length > 0);
 }
 
+const MINI_META_TEXT_FIELDS = [
+  { id: 'dating', field: 'dating' },
+  { id: 'style', field: 'style' },
+  { id: 'carver', field: 'carver' },
+  { id: 'rune_type', field: 'rune_type' },
+  { id: 'material', field: 'material' },
+  { id: 'material_type', field: 'material_type' },
+  { id: 'objectInfo', field: 'objectInfo' },
+  { id: 'references_combined', field: 'references_combined' },
+  { id: 'additional', field: 'additional' },
+];
+const MINI_META_INTEGER_FIELDS = [
+  { id: 'year_from', field: 'year_from' },
+  { id: 'year_to', field: 'year_to' },
+  { id: 'num_crosses', field: 'num_crosses' },
+];
+const MINI_META_RULE_IDS = [
+  ...MINI_META_TEXT_FIELDS.map(item => item.id),
+  ...MINI_META_INTEGER_FIELDS.map(item => item.id),
+  'cross_form',
+];
+
+function getMiniMetaValueFromRules(rules) {
+  for (const ruleId of MINI_META_RULE_IDS) {
+    const rule = findRuleById(rules, ruleId);
+    if (!rule || rule.value === null || rule.value === undefined || rule.value === '') {
+      continue;
+    }
+    if (ruleId === 'cross_form' && typeof rule.value === 'object' && rule.value.form) {
+      return String(rule.value.form);
+    }
+    return miniRuleValueToText(rule.value);
+  }
+  return '';
+}
+
 function syncMiniBuilderFromRules(rules) {
   const miniSearchInput = document.getElementById('miniSearchInput');
   const miniRunicTextInput = document.getElementById('miniRunicTextInput');
-  if (!miniSearchInput || !miniRunicTextInput) {
+  const miniMetaInfoInput = document.getElementById('miniMetaInfoInput');
+  if (!miniSearchInput || !miniRunicTextInput || !miniMetaInfoInput) {
     return;
   }
 
@@ -1156,6 +1437,7 @@ function syncMiniBuilderFromRules(rules) {
   const runicTextRule = findRuleById(rules, 'search_runic_texts');
   miniSearchInput.value = '';
   miniRunicTextInput.value = '';
+  miniMetaInfoInput.value = getMiniMetaValueFromRules(rules);
   if (signatureRule && signatureRule.value) {
     miniSearchInput.value = miniRuleValueToText(signatureRule.value);
   } else if (locationRule && locationRule.value) {
@@ -1169,12 +1451,14 @@ function syncMiniBuilderFromRules(rules) {
 function buildRulesFromMiniBuilder() {
   const miniSearchInput = document.getElementById('miniSearchInput');
   const miniRunicTextInput = document.getElementById('miniRunicTextInput');
-  if (!miniSearchInput || !miniRunicTextInput) {
+  const miniMetaInfoInput = document.getElementById('miniMetaInfoInput');
+  if (!miniSearchInput || !miniRunicTextInput || !miniMetaInfoInput) {
     return null;
   }
 
   const idLocationValue = miniSearchInput.value.trim();
   const runicTextValue = miniRunicTextInput.value.trim();
+  const metaInfoValue = miniMetaInfoInput.value.trim();
   const rules = [];
 
   if (idLocationValue) {
@@ -1229,6 +1513,47 @@ function buildRulesFromMiniBuilder() {
     });
   }
 
+  if (metaInfoValue) {
+    const metaRules = MINI_META_TEXT_FIELDS.map(({ id, field }) => ({
+      id,
+      field,
+      type: 'string',
+      input: 'text',
+      operator: 'contains',
+      value: metaInfoValue,
+      ignoreCase: true,
+      includeSpecialSymbols: false,
+    }));
+    const numericMetaValue = Number.parseInt(metaInfoValue, 10);
+    if (!Number.isNaN(numericMetaValue) && String(numericMetaValue) === metaInfoValue) {
+      MINI_META_INTEGER_FIELDS.forEach(({ id, field }) => {
+        metaRules.push({
+          id,
+          field,
+          type: 'integer',
+          input: 'number',
+          operator: 'equal',
+          value: numericMetaValue,
+        });
+      });
+    }
+    metaRules.push({
+      id: 'cross_form',
+      field: 'crosses',
+      type: 'string',
+      operator: 'cross_form',
+      value: {
+        form: metaInfoValue,
+        is_certain: '2',
+      },
+    });
+    rules.push({
+      condition: 'OR',
+      rules: metaRules,
+      not: false,
+    });
+  }
+
   if (rules.length === 0) {
     return null;
   }
@@ -1249,6 +1574,16 @@ function applyMiniBuilderRulesIfNeeded() {
   return true;
 }
 
+function showMobileInfoPaneAfterSearch() {
+  if (!window.matchMedia('(max-width: 767.98px)').matches) {
+    return;
+  }
+  setMobileDbPane('info');
+  if (window.location.hash !== '#db-info') {
+    window.history.replaceState(null, '', '#db-info');
+  }
+}
+
 function applyStatsDisplayMode() {
   const wordsRow = document.getElementById('statsWordsRow');
   const namesRow = document.getElementById('statsNamesRow');
@@ -1265,6 +1600,14 @@ function applyStatsDisplayMode() {
   wordsRow.style.display = '';
   namesRow.style.display = '';
   tokensRow.style.display = 'none';
+}
+
+function updateMobileSearchResultStat(statId, value) {
+  const statEl = document.getElementById(statId);
+  if (!statEl) {
+    return;
+  }
+  statEl.textContent = value;
 }
 
 function renderMainDisplayHintIfNeeded() {
@@ -1418,6 +1761,68 @@ function updateMobileFullscreenLayout() {
   document.body.classList.toggle('mobile-map-fullscreen', isFullscreen);
 }
 
+function setMobileDbPane(pane) {
+  let selectedPane = 'map';
+  if (pane === 'info') {
+    selectedPane = 'info';
+  } else if (pane === 'search' || pane === 'work') {
+    selectedPane = 'search';
+  }
+  const isMobile = window.matchMedia('(max-width: 767.98px)').matches;
+
+  document.body.classList.toggle('mobile-db-map-view', isMobile && selectedPane === 'map');
+  document.body.classList.toggle('mobile-db-info-view', isMobile && selectedPane === 'info');
+  document.body.classList.toggle('mobile-db-search-view', isMobile && selectedPane === 'search');
+
+  document.querySelectorAll('[data-mobile-db-pane]').forEach(button => {
+    const isSelected = button.dataset.mobileDbPane === selectedPane;
+    button.setAttribute('aria-selected', String(isSelected));
+    button.classList.toggle('active', isSelected);
+  });
+
+  if (isMobile && selectedPane === 'map' && gMyMap) {
+    setTimeout(() => gMyMap.invalidateSize(), 50);
+  }
+
+  applyWindowAlignments();
+}
+
+function initMobileDbPaneSwitcher() {
+  const buttons = document.querySelectorAll('[data-mobile-db-pane]');
+  if (!buttons.length) {
+    return;
+  }
+
+  const setPaneFromHash = () => {
+    if (window.location.hash === '#db-info') {
+      setMobileDbPane('info');
+      return;
+    }
+    if (window.location.hash === '#db-work' || window.location.hash === '#db-search') {
+      setMobileDbPane('search');
+      return;
+    }
+    setMobileDbPane('map');
+  };
+
+  buttons.forEach(button => {
+    button.addEventListener('click', function() {
+      setMobileDbPane(this.dataset.mobileDbPane);
+      const paneHash = {
+        map: '#db-map',
+        info: '#db-info',
+        search: '#db-work',
+      }[this.dataset.mobileDbPane] || '#db-map';
+      if (window.location.hash !== paneHash) {
+        window.history.replaceState(null, '', paneHash);
+      }
+    });
+  });
+  setPaneFromHash();
+  window.addEventListener('hashchange', setPaneFromHash);
+  setTimeout(setPaneFromHash, 0);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   // Initialization happens in 3 steps:
   // 1. code here on page load
@@ -1443,6 +1848,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   initMultiselect();
+  initMobileDbPaneSwitcher();
 
   $('#multiselect, #displayOptionsChecklist').on('displayUpdated', () => {
     displaySignatureInfo();
@@ -1472,7 +1878,8 @@ document.addEventListener('DOMContentLoaded', function() {
   applyWindowAlignments();
   window.addEventListener('resize', () => {
     updateMobileFullscreenLayout();
-    applyWindowAlignments();
+    const activePane = document.querySelector('[data-mobile-db-pane][aria-selected="true"]');
+    setMobileDbPane(activePane ? activePane.dataset.mobileDbPane : 'map');
   });
 
   // Configure jsTree even before we have the data
@@ -1662,14 +2069,17 @@ document.addEventListener('DOMContentLoaded', function() {
     $(`#${inpQueryBuilder}`).queryBuilder('reset');
     const miniSearchInput = document.getElementById('miniSearchInput');
     const miniRunicTextInput = document.getElementById('miniRunicTextInput');
+    const miniMetaInfoInput = document.getElementById('miniMetaInfoInput');
     if (miniSearchInput) miniSearchInput.value = '';
     if (miniRunicTextInput) miniRunicTextInput.value = '';
+    if (miniMetaInfoInput) miniMetaInfoInput.value = '';
   });
   document.getElementById('btnMiniSearch').addEventListener('click', function() {
     applyMiniBuilderRulesIfNeeded();
     document.getElementById('btnSearch').click();
+    showMobileInfoPaneAfterSearch();
   });
-  ['miniSearchInput', 'miniRunicTextInput'].forEach((fieldId) => {
+  ['miniSearchInput', 'miniRunicTextInput', 'miniMetaInfoInput'].forEach((fieldId) => {
     const field = document.getElementById(fieldId);
     if (!field) {
       return;
@@ -1679,7 +2089,9 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
       event.preventDefault();
+      applyMiniBuilderRulesIfNeeded();
       document.getElementById('btnSearch').click();
+      showMobileInfoPaneAfterSearch();
     });
   });
   document.getElementById('btnMiniResetSearch').addEventListener('click', function() {
@@ -1791,9 +2203,11 @@ document.addEventListener('DOMContentLoaded', function() {
   // Search statistics updates:
   $(document).on('updateSignatureCount', function(event, data) {
     document.getElementById('outNumSignaturesFound').textContent = data.count;
+    updateMobileSearchResultStat('mobileOutNumSignaturesFound', data.count);
   });
   $(document).on('updateWordCount', function(event, data) {
     document.getElementById('outNumWords').textContent = data.count;
+    updateMobileSearchResultStat('mobileOutNumWords', data.count);
     // can be: 'mixed', 'word-specific', 'general'
     const countType = data.type;
     if (countType === 'word-specific') {
@@ -1806,6 +2220,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   $(document).on('updatePersonalNameCount', function(event, data) {
     document.getElementById('outNumFoundNames').textContent = data.count;
+    updateMobileSearchResultStat('mobileOutNumFoundNames', data.count);
     // can be: 'mixed', 'word-specific', 'general'
     const countType = data.type;
     if (countType === 'word-specific') {

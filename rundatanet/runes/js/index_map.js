@@ -131,28 +131,48 @@ function inscription2marker(inscriptionData, lat, lon, locationType = 'found', l
     id: inscriptionData.id,
   });
   let popupText = `${inscriptionData.signature_text}<br>`;
+  const isMobile = isMobileDevice();
+  const hasCurrentLocation = hasCurrentLocationInfo(inscriptionData);
   const warningTexts = [];
   const confirmTexts = [];
   if (isLostInscription(inscriptionData)) {
     warningTexts.push('Warning: this inscription is lost.');
     confirmTexts.push('Are you sure you want to drive here? The inscription is lost!');
   }
-  if (locationType === 'found' && hasCurrentLocationInfo(inscriptionData)) {
+  if (locationType === 'found' && hasCurrentLocation) {
     warningTexts.push('Warning: this inscription is moved.');
+  }
+  if (isMobile && locationType === 'present' && hasCurrentLocation) {
+    warningTexts.push('Warning: this inscription is moved.');
+  }
+  if (locationType === 'found' && hasCurrentLocation) {
     confirmTexts.push('Are you sure you want to drive to Found location? The inscription is moved! Check its current location.');
   }
   warningTexts.forEach(text => {
-    popupText += `<span style="color:#b94a48;font-weight:600;">${text}</span><br>`;
+    if (isMobile) {
+      popupText += `<span class="map-popup-warning">${text}</span><br>`;
+    } else {
+      popupText += `<span style="color:#b94a48;font-weight:600;">${text}</span><br>`;
+    }
   });
   const destinationUrl = getGeoIntentURL(lat, lon);
+  const driveLinkClass = isMobile ? ' class="map-drive-link"' : '';
   if (confirmTexts.length > 0) {
     const confirmText = confirmTexts.join('\n');
-    popupText += `<a href="${destinationUrl}" target="_self" onclick="return window.confirm('${confirmText}')">Drive here!</a>`;
+    popupText += `<a${driveLinkClass} href="${destinationUrl}" target="_self" onclick="return window.confirm('${confirmText}')">Drive here!</a>`;
   } else {
-    popupText += `<a href="${destinationUrl}" target="_self">Drive here!</a>`;
+    popupText += `<a${driveLinkClass} href="${destinationUrl}" target="_self">Drive here!</a>`;
   }
   // Tooltip is simple and is always on, popup supports HTML and is opened  /closed by user
-  marker.bindPopup(popupText, {autoClose: false});
+  const popupOptions = isMobile
+    ? {
+        autoClose: false,
+        autoPan: true,
+        closeButton: true,
+        maxWidth: 260,
+      }
+    : {autoClose: false};
+  marker.bindPopup(popupText, popupOptions);
   marker.bindTooltip(inscriptionData.signature_text, {permanent: true}).openTooltip();
 
   return marker;

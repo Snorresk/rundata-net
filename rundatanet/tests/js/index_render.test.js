@@ -24,6 +24,9 @@ test.before.each(() => {
   global.$ = global.jQuery = function () {
     return { is: () => false };
   };
+  global.window = {
+    matchMedia: () => ({ matches: false }),
+  };
 
   // index_scripts.js calls getUserSelectedFields() as a global (resolved via
   // the rollup bundle in production). In unit tests we stub it directly so
@@ -100,6 +103,44 @@ test('inscriptions2markup does not throw when translation columns are highlight-
   // normalization word highlight should be applied on the matched word.
   assert.ok(joined.includes('<span class="highlight">gerði</span>'),
     'matched normalization word should be highlighted');
+});
+
+test('inscriptions2markup hides empty mobile-only detail headers on mobile', () => {
+  global.$ = global.jQuery = function () {
+    return { is: () => true };
+  };
+  global.window = {
+    matchMedia: () => ({ matches: true }),
+  };
+  global.getUserSelectedFields = function () {
+    const names = [
+      'signature_text',
+      'lost',
+      'rune_type',
+      'num_crosses',
+      'cross_form',
+    ];
+    return names.map(n => schemaFieldsInfo.find(f => f.schemaName === n));
+  };
+
+  const inscription = makeInscription({
+    lost: 0,
+    rune_type: '',
+    num_crosses: 0,
+    cross_form: '',
+  });
+  const joined = inscriptions2markup([inscription]).join('');
+
+  assert.ok(joined.includes('<h4>Inscription ID</h4>'),
+    'non-empty default header should still be rendered');
+  assert.not.ok(joined.includes('<h4>Is Lost?</h4>'),
+    'false lost value should be hidden on mobile');
+  assert.not.ok(joined.includes('<h4>Rune type</h4>'),
+    'empty rune type should be hidden on mobile');
+  assert.not.ok(joined.includes('<h4>Number of crosses</h4>'),
+    'zero cross count should be hidden on mobile');
+  assert.not.ok(joined.includes('<h4>Cross form</h4>'),
+    'empty cross form should be hidden on mobile');
 });
 
 test.run();
