@@ -1034,6 +1034,9 @@ export function inscriptions2markup(inscriptions) {
 
   const showHeaders = $('#chkDisplayHeaders').is(":checked");
   const userSelectedFields =  getUserSelectedFields();
+  const isMobileViewport = typeof window !== 'undefined'
+    && window.matchMedia
+    && window.matchMedia('(max-width: 767.98px)').matches;
   let markupData = [];
   for (let i = 0; i < inscriptions.length; i++) {
 
@@ -1052,6 +1055,21 @@ export function inscriptions2markup(inscriptions) {
       let columnData = "";
       if (columnName in inscriptionData) {
         columnData = inscriptionData[columnName].toString();
+      }
+      const trimmedColumnData = String(columnData || '').trim();
+      if (isMobileViewport) {
+        if (columnName === 'lost' && (trimmedColumnData === '' || trimmedColumnData === '0' || trimmedColumnData.toLowerCase() === 'false')) {
+          continue;
+        }
+        if (columnName === 'num_crosses' && (trimmedColumnData === '' || trimmedColumnData === '0')) {
+          continue;
+        }
+        if (columnName === 'rune_type' && trimmedColumnData === '') {
+          continue;
+        }
+        if (columnName === 'cross_form' && trimmedColumnData === '' && inscriptionData['num_crosses'] == 0) {
+          continue;
+        }
       }
       if (showHeaders) {
         paragraph += `<h4>${humanName}</h4>`;
