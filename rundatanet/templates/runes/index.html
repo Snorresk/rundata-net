@@ -236,12 +236,10 @@
           background: #243b53;
           border-color: #243b53;
         }
-        #aiAssistantRow {
-          display: none !important;
-        }
         body.mobile-db-map-view #mainPanel,
         body.mobile-db-map-view #searchControlsRow,
         body.mobile-db-map-view #builderContainer,
+        body.mobile-db-map-view #aiAssistantRow,
         body.mobile-db-map-view #aiAssistantContainer,
         body.mobile-db-map-view #mobileSearchBuilderRow,
         body.mobile-db-info-view #mapDisplayWrapper,
@@ -252,8 +250,7 @@
         body.mobile-db-search-view #mapDisplayWrapper,
         body.mobile-db-search-view #mainPanel,
         body.mobile-db-search-view #searchControlsRow,
-        body.mobile-db-search-view #builderContainer,
-        body.mobile-db-search-view #aiAssistantRow {
+        body.mobile-db-search-view #builderContainer {
           display: none !important;
         }
         #dbPageContainer {
@@ -268,6 +265,11 @@
         }
         #aiAssistantRow {
           order: 4;
+        }
+        body.mobile-db-search-view #aiAssistantRow {
+          display: flex !important;
+          order: 3;
+          margin-top: 0.75rem !important;
         }
         body.mobile-db-info-view #mainLayoutRow,
         body.mobile-db-search-view #mainLayoutRow {
@@ -364,6 +366,13 @@
           font-weight: 700;
           margin: 0.15rem 0 0.35rem;
         }
+        body.mobile-db-map-view .map-popup-note {
+          color: #243b53;
+          display: block;
+          font-size: 0.84rem;
+          font-weight: 700;
+          margin: 0.1rem 0 0.35rem;
+        }
         body.mobile-db-map-view .map-drive-link {
           background: #243b53;
           border-radius: 6px;
@@ -377,6 +386,9 @@
           width: 100%;
           text-align: center;
         }
+        body.mobile-db-map-view .mobile-map-id-tooltip {
+          cursor: pointer;
+        }
         body.mobile-db-info-view #mainDisplay {
           height: auto;
           min-height: 0;
@@ -384,7 +396,7 @@
           overflow: visible !important;
           border: 0 !important;
           background: transparent;
-          font-size: 0.78rem;
+          font-size: 0.86rem;
           line-height: 1.3;
           margin-bottom: 0;
           padding: 2mm 0 0;
@@ -394,7 +406,7 @@
           margin-bottom: 0.45rem;
         }
         body.mobile-db-info-view #mainDisplay .inscription-section h4 {
-          font-size: 0.88rem;
+          font-size: 0.98rem;
           line-height: 1.2;
           font-weight: 700;
           margin: 0.35rem 0 0.15rem;
@@ -402,7 +414,7 @@
         body.mobile-db-info-view #mainDisplay .inscription-section span,
         body.mobile-db-info-view #mainDisplay .inscription-section i,
         body.mobile-db-info-view #mainDisplay .inscription-section table {
-          font-size: 0.78rem;
+          font-size: 0.86rem;
         }
         body.mobile-db-info-view #mainDisplay .inscription-section table {
           line-height: 1.2;
@@ -849,12 +861,14 @@
         <ul id="topControlButtons" class="navbar-nav me-auto mb-2 mb-lg-0">
           <li class="nav-item d-flex align-items-center ms-2">
             <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#divFormatDialog">
-              Choose what to show about inscriptions in the main display
+              <span class="d-md-none">Info filter</span>
+              <span class="d-none d-md-inline">Choose what to show about inscriptions in the main display</span>
             </button>
           </li>
           <li class="nav-item d-flex align-items-center ms-2">
             <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#mapDisplayOptionsDialog">
-              Choose what to show on the map
+              <span class="d-md-none">Map filter</span>
+              <span class="d-none d-md-inline">Choose what to show on the map</span>
             </button>
           </li>
         </ul>
@@ -939,12 +953,24 @@
       <div class="col">
         <div id="miniQueryBuilder" class="mini-query-builder">
           <div class="mb-2">
-            <label class="form-label" for="miniSearchInput">Write ID numbers or any location</label>
+            <label class="form-label" for="miniSearchInput">Write ID numbers</label>
             <input type="text" class="form-control form-control-sm" id="miniSearchInput">
           </div>
           <div class="mb-2">
-            <label class="form-label" for="miniRunicTextInput">Search in runic texts</label>
+            <label class="form-label" for="miniGeoInfoInput">Search any location</label>
+            <input type="text" class="form-control form-control-sm" id="miniGeoInfoInput">
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="miniRunicTextInput">Search in transliteration</label>
             <input type="text" class="form-control form-control-sm" id="miniRunicTextInput">
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="miniNormalisationInput">Search in normalisations</label>
+            <input type="text" class="form-control form-control-sm" id="miniNormalisationInput">
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="miniTranslationInput">Search in translations to English and Swedish</label>
+            <input type="text" class="form-control form-control-sm" id="miniTranslationInput">
           </div>
           <div class="mb-2">
             <label class="form-label" for="miniMetaInfoInput">Search in meta information, e.g. carvers, styles, material etc</label>
@@ -986,7 +1012,7 @@
         <div id="mapDisplayContainer" class="map-display-container">
           <button type="button" class="btn btn-outline-secondary btn-sm map-corner-toggle" id="mHideMap" aria-label="Hide map" title="Hide map">×</button>
           <div id="mobileMapPopupHint" role="note">
-            Tap an individual map pin to see warnings and Drive here. Tap numbered clusters to zoom closer first.
+            Tap numbered clusters to zoom closer. Tap an id number to see Drive here and warnings. Switch between found or current location by using the Map filter in the menu.
           </div>
           <div id="mapDisplay" class="my-fixed-height"></div>
         </div>
@@ -1116,7 +1142,10 @@
     <div class="modal-dialog" role="document">
       <div class="modal-content">
         <div class="modal-header">
-          <h4 class="modal-title" id="mapDisplayOptionsDialogLabel">Choose What To Show On The Map</h4>
+          <h4 class="modal-title" id="mapDisplayOptionsDialogLabel">
+            <span class="d-md-none">Map filter</span>
+            <span class="d-none d-md-inline">Choose What To Show On The Map</span>
+          </h4>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
@@ -1409,6 +1438,23 @@ const MINI_META_RULE_IDS = [
   ...MINI_META_INTEGER_FIELDS.map(item => item.id),
   'cross_form',
 ];
+const MINI_GEO_FIELDS = [
+  { id: 'inscription_country', field: 'signature_text', data: { multiField: true } },
+  { id: 'full_address', field: 'full_address' },
+  { id: 'found_location', field: 'found_location' },
+  { id: 'current_location', field: 'current_location' },
+  { id: 'parish', field: 'parish' },
+  { id: 'district', field: 'district' },
+  { id: 'municipality', field: 'municipality' },
+];
+const MINI_RUNIC_TEXT_FIELDS = [
+  { id: 'normalization_norse_to_transliteration', field: 'normalisation_norse' },
+  { id: 'normalization_scandinavian_to_transliteration', field: 'normalisation_scandinavian' },
+];
+const MINI_TRANSLATION_FIELDS = [
+  { id: 'english_translation', field: 'english_translation' },
+  { id: 'swedish_translation', field: 'swedish_translation' },
+];
 
 function getMiniMetaValueFromRules(rules) {
   for (const ruleId of MINI_META_RULE_IDS) {
@@ -1424,45 +1470,85 @@ function getMiniMetaValueFromRules(rules) {
   return '';
 }
 
+function getMiniWordSearchValue(rule) {
+  if (!rule || !rule.value) {
+    return '';
+  }
+  if (typeof rule.value === 'object') {
+    return miniRuleValueToText(rule.value.normalization || rule.value.transliteration || '');
+  }
+  return miniRuleValueToText(rule.value);
+}
+
 function syncMiniBuilderFromRules(rules) {
   const miniSearchInput = document.getElementById('miniSearchInput');
+  const miniGeoInfoInput = document.getElementById('miniGeoInfoInput');
   const miniRunicTextInput = document.getElementById('miniRunicTextInput');
+  const miniNormalisationInput = document.getElementById('miniNormalisationInput');
+  const miniTranslationInput = document.getElementById('miniTranslationInput');
   const miniMetaInfoInput = document.getElementById('miniMetaInfoInput');
-  if (!miniSearchInput || !miniRunicTextInput || !miniMetaInfoInput) {
+  if (!miniSearchInput || !miniGeoInfoInput || !miniRunicTextInput || !miniNormalisationInput || !miniTranslationInput || !miniMetaInfoInput) {
     return;
   }
 
   const signatureRule = findRuleById(rules, 'inscription_id');
-  const locationRule = findRuleById(rules, 'full_address');
-  const runicTextRule = findRuleById(rules, 'search_runic_texts');
+  const geoRule = MINI_GEO_FIELDS
+    .map(item => findRuleById(rules, item.id))
+    .find(rule => rule && rule.value);
+  const runicTextRule = findRuleById(rules, 'search_runic_texts')
+    || MINI_RUNIC_TEXT_FIELDS
+      .map(item => findRuleById(rules, item.id))
+      .find(rule => rule && rule.value && typeof rule.value === 'object' && rule.value.transliteration);
+  const normalisationRule = MINI_RUNIC_TEXT_FIELDS
+    .map(item => findRuleById(rules, item.id))
+    .find(rule => rule && rule.value && typeof rule.value === 'object' && rule.value.normalization);
+  const translationRule = MINI_TRANSLATION_FIELDS
+    .map(item => findRuleById(rules, item.id))
+    .find(rule => rule && rule.value);
   miniSearchInput.value = '';
+  miniGeoInfoInput.value = '';
   miniRunicTextInput.value = '';
+  miniNormalisationInput.value = '';
+  miniTranslationInput.value = '';
   miniMetaInfoInput.value = getMiniMetaValueFromRules(rules);
   if (signatureRule && signatureRule.value) {
     miniSearchInput.value = miniRuleValueToText(signatureRule.value);
-  } else if (locationRule && locationRule.value) {
-    miniSearchInput.value = miniRuleValueToText(locationRule.value);
+  }
+  if (geoRule && geoRule.value) {
+    miniGeoInfoInput.value = miniRuleValueToText(geoRule.value);
   }
   if (runicTextRule && runicTextRule.value) {
-    miniRunicTextInput.value = miniRuleValueToText(runicTextRule.value);
+    miniRunicTextInput.value = getMiniWordSearchValue(runicTextRule);
+  }
+  if (normalisationRule && normalisationRule.value) {
+    miniNormalisationInput.value = getMiniWordSearchValue(normalisationRule);
+  }
+  if (translationRule && translationRule.value) {
+    miniTranslationInput.value = miniRuleValueToText(translationRule.value);
   }
 }
 
 function buildRulesFromMiniBuilder() {
   const miniSearchInput = document.getElementById('miniSearchInput');
+  const miniGeoInfoInput = document.getElementById('miniGeoInfoInput');
   const miniRunicTextInput = document.getElementById('miniRunicTextInput');
+  const miniNormalisationInput = document.getElementById('miniNormalisationInput');
+  const miniTranslationInput = document.getElementById('miniTranslationInput');
   const miniMetaInfoInput = document.getElementById('miniMetaInfoInput');
-  if (!miniSearchInput || !miniRunicTextInput || !miniMetaInfoInput) {
+  if (!miniSearchInput || !miniGeoInfoInput || !miniRunicTextInput || !miniNormalisationInput || !miniTranslationInput || !miniMetaInfoInput) {
     return null;
   }
 
-  const idLocationValue = miniSearchInput.value.trim();
+  const idValue = miniSearchInput.value.trim();
+  const geoInfoValue = miniGeoInfoInput.value.trim();
   const runicTextValue = miniRunicTextInput.value.trim();
+  const normalisationValue = miniNormalisationInput.value.trim();
+  const translationValue = miniTranslationInput.value.trim();
   const metaInfoValue = miniMetaInfoInput.value.trim();
   const rules = [];
 
-  if (idLocationValue) {
-    const idTokens = parseIdQueryTokens(idLocationValue);
+  if (idValue) {
+    const idTokens = parseIdQueryTokens(idValue);
     const idRule = idTokens.length > 1
       ? {
         operator: 'in_separated_list',
@@ -1470,46 +1556,95 @@ function buildRulesFromMiniBuilder() {
       }
       : {
         operator: 'in',
-        value: [idLocationValue],
+        value: [idValue],
       };
     rules.push({
+      id: 'inscription_id',
+      field: 'signature_text',
+      type: 'string',
+      input: 'text',
+      operator: idRule.operator,
+      value: idRule.value,
+      ignoreCase: true,
+    });
+  }
+
+  if (geoInfoValue) {
+    rules.push({
       condition: 'OR',
-      rules: [
-        {
-          id: 'inscription_id',
-          field: 'signature_text',
-          type: 'string',
-          input: 'text',
-          operator: idRule.operator,
-          value: idRule.value,
-          ignoreCase: true,
-        },
-        {
-          id: 'full_address',
-          field: 'full_address',
-          type: 'string',
-          input: 'text',
-          operator: 'contains',
-          value: idLocationValue,
-          ignoreCase: true,
-          includeSpecialSymbols: false,
-        }
-      ],
+      rules: MINI_GEO_FIELDS.map(({ id, field, data }) => ({
+        id,
+        field,
+        type: 'string',
+        input: 'text',
+        operator: 'contains',
+        value: geoInfoValue,
+        ignoreCase: true,
+        includeSpecialSymbols: false,
+        ...(data ? { data } : {}),
+      })),
       not: false,
     });
   }
 
   if (runicTextValue) {
     rules.push({
-      id: 'search_runic_texts',
-      field: 'normalisation_norse',
-      type: 'string',
-      input: 'text',
-      operator: 'contains',
-      value: runicTextValue,
-      ignoreCase: true,
-      includeSpecialSymbols: true,
-      data: { multiField: true },
+      condition: 'OR',
+      rules: MINI_RUNIC_TEXT_FIELDS.map(({ id, field }) => ({
+        id,
+        field,
+        type: 'string',
+        input: 'text',
+        operator: 'contains',
+        value: {
+          normalization: '',
+          transliteration: runicTextValue,
+          names_mode: 'includeAll',
+        },
+        ignoreCase: false,
+        includeSpecialSymbols: true,
+        data: { multiField: true },
+      })),
+      not: false,
+    });
+  }
+
+  if (normalisationValue) {
+    rules.push({
+      condition: 'OR',
+      rules: MINI_RUNIC_TEXT_FIELDS.map(({ id, field }) => ({
+        id,
+        field,
+        type: 'string',
+        input: 'text',
+        operator: 'contains',
+        value: {
+          normalization: normalisationValue,
+          transliteration: '',
+          names_mode: 'includeAll',
+        },
+        ignoreCase: true,
+        includeSpecialSymbols: false,
+        data: { multiField: true },
+      })),
+      not: false,
+    });
+  }
+
+  if (translationValue) {
+    rules.push({
+      condition: 'OR',
+      rules: MINI_TRANSLATION_FIELDS.map(({ id, field }) => ({
+        id,
+        field,
+        type: 'string',
+        input: 'text',
+        operator: 'contains',
+        value: translationValue,
+        ignoreCase: true,
+        includeSpecialSymbols: false,
+      })),
+      not: false,
     });
   }
 
@@ -2068,10 +2203,16 @@ document.addEventListener('DOMContentLoaded', function() {
     gViewModel.clearSearchResults();
     $(`#${inpQueryBuilder}`).queryBuilder('reset');
     const miniSearchInput = document.getElementById('miniSearchInput');
+    const miniGeoInfoInput = document.getElementById('miniGeoInfoInput');
     const miniRunicTextInput = document.getElementById('miniRunicTextInput');
+    const miniNormalisationInput = document.getElementById('miniNormalisationInput');
+    const miniTranslationInput = document.getElementById('miniTranslationInput');
     const miniMetaInfoInput = document.getElementById('miniMetaInfoInput');
     if (miniSearchInput) miniSearchInput.value = '';
+    if (miniGeoInfoInput) miniGeoInfoInput.value = '';
     if (miniRunicTextInput) miniRunicTextInput.value = '';
+    if (miniNormalisationInput) miniNormalisationInput.value = '';
+    if (miniTranslationInput) miniTranslationInput.value = '';
     if (miniMetaInfoInput) miniMetaInfoInput.value = '';
   });
   document.getElementById('btnMiniSearch').addEventListener('click', function() {
@@ -2079,7 +2220,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnSearch').click();
     showMobileInfoPaneAfterSearch();
   });
-  ['miniSearchInput', 'miniRunicTextInput', 'miniMetaInfoInput'].forEach((fieldId) => {
+  ['miniSearchInput', 'miniGeoInfoInput', 'miniRunicTextInput', 'miniNormalisationInput', 'miniTranslationInput', 'miniMetaInfoInput'].forEach((fieldId) => {
     const field = document.getElementById(fieldId);
     if (!field) {
       return;

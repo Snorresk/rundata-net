@@ -357,6 +357,42 @@ testSingleRuleSearch({
   firstResultCheck: 'Öl 1',
   multiField: true,
 });
+testSingleRuleSearch({
+  id: 'inscription_country',
+  field: 'signature_text',
+  operator: 'contains',
+  value: 'Uppland',
+  expectedCount: 1517,
+  firstResultCheck: 'U 1',
+  multiField: true,
+});
+testSingleRuleSearch({
+  id: 'inscription_country',
+  field: 'signature_text',
+  operator: 'contains',
+  value: 'Norway',
+  expectedCount: 1650,
+  firstResultCheck: 'N 1',
+  multiField: true,
+});
+testSingleRuleSearch({
+  id: 'inscription_country',
+  field: 'signature_text',
+  operator: 'contains',
+  value: 'Ög',
+  expectedCount: 491,
+  firstResultCheck: 'Ög 1',
+  multiField: true,
+});
+testSingleRuleSearch({
+  id: 'inscription_country',
+  field: 'signature_text',
+  operator: 'contains',
+  value: 'Sweden',
+  expectedCount: 4049,
+  firstResultCheck: 'Öl 1',
+  multiField: true,
+});
 
 test('inscription_country "N" (Norway) should not match "Nä" (Närke)', () => {
   const rules = {

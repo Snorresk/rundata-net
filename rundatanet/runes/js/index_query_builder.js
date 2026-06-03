@@ -761,7 +761,11 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
       data: {
         multiField: true,
       },
-      operators: ['in'],
+      operators: (typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(max-width: 767.98px)').matches)
+        ? ['in', 'contains']
+        : ['in'],
       plugin: 'tomSelect',
       plugin_config: {
         plugins: ['remove_button'],
