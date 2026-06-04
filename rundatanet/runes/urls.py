@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.sitemaps.views import sitemap
 from django.urls import path, register_converter
 from django.views.generic import TemplateView
@@ -48,3 +49,12 @@ urlpatterns = [
         name="robots_txt",
     ),
 ]
+
+if settings.DEBUG:
+    urlpatterns.append(
+        path(
+            "mobile-db/",
+            TemplateView.as_view(template_name="runes/index.html"),
+            name="mobile_db",
+        )
+    )
