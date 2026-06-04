@@ -236,6 +236,10 @@
           background: #243b53;
           border-color: #243b53;
         }
+        .mobile-db-tab[data-mobile-db-pane="search"][aria-selected="true"] {
+          background: #198754;
+          border-color: #198754;
+        }
         body.mobile-db-map-view #mainPanel,
         body.mobile-db-map-view #searchControlsRow,
         body.mobile-db-map-view #builderContainer,
@@ -431,7 +435,7 @@
           font-size: 0.78rem;
           font-weight: 600;
           line-height: 1.25;
-          margin-top: 8px;
+          margin-bottom: 8px;
           padding: 8px 10px;
         }
         body.mobile-db-info-view #mobileSearchResultsSummary .mobile-stat-label {
@@ -977,7 +981,6 @@
             <input type="text" class="form-control form-control-sm" id="miniMetaInfoInput">
           </div>
           <div class="d-flex gap-2">
-            <button type="button" class="btn btn-success btn-sm" id="btnMiniSearch">Search</button>
             <button type="button" class="btn btn-danger btn-sm" id="btnMiniResetSearch">Delete search</button>
           </div>
         </div>
@@ -998,13 +1001,13 @@
       </div>
 
       <div id="mainPanel" class="col my-2 my-md-0">
-        <div id="mainDisplay" class="my-fixed-height overflow-scroll border" contentEditable="true" autocomplete="off" autocorrect="off" spellcheck="false">
-        </div>
         <div id="mobileSearchResultsSummary" class="d-md-none" aria-live="polite">
           <span class="mobile-stat-label">Search results:</span>
           <span>Inscriptions: <span id="mobileOutNumSignaturesFound" class="mobile-stat-value">6815</span></span>
           <span>Words: <span id="mobileOutNumWords" class="mobile-stat-value">54852</span></span>
           <span>Names: <span id="mobileOutNumFoundNames" class="mobile-stat-value">11318</span></span>
+        </div>
+        <div id="mainDisplay" class="my-fixed-height overflow-scroll border" contentEditable="true" autocomplete="off" autocorrect="off" spellcheck="false">
         </div>
       </div>
 
@@ -1719,6 +1722,12 @@ function showMobileInfoPaneAfterSearch() {
   }
 }
 
+function runMobileMiniSearch() {
+  applyMiniBuilderRulesIfNeeded();
+  document.getElementById('btnSearch').click();
+  showMobileInfoPaneAfterSearch();
+}
+
 function applyStatsDisplayMode() {
   const wordsRow = document.getElementById('statsWordsRow');
   const namesRow = document.getElementById('statsNamesRow');
@@ -1942,12 +1951,19 @@ function initMobileDbPaneSwitcher() {
 
   buttons.forEach(button => {
     button.addEventListener('click', function() {
-      setMobileDbPane(this.dataset.mobileDbPane);
+      const requestedPane = this.dataset.mobileDbPane;
+      const isMobile = window.matchMedia('(max-width: 767.98px)').matches;
+      if (isMobile && requestedPane === 'search' && document.body.classList.contains('mobile-db-search-view')) {
+        runMobileMiniSearch();
+        return;
+      }
+
+      setMobileDbPane(requestedPane);
       const paneHash = {
         map: '#db-map',
         info: '#db-info',
         search: '#db-work',
-      }[this.dataset.mobileDbPane] || '#db-map';
+      }[requestedPane] || '#db-map';
       if (window.location.hash !== paneHash) {
         window.history.replaceState(null, '', paneHash);
       }
@@ -2214,11 +2230,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (miniNormalisationInput) miniNormalisationInput.value = '';
     if (miniTranslationInput) miniTranslationInput.value = '';
     if (miniMetaInfoInput) miniMetaInfoInput.value = '';
-  });
-  document.getElementById('btnMiniSearch').addEventListener('click', function() {
-    applyMiniBuilderRulesIfNeeded();
-    document.getElementById('btnSearch').click();
-    showMobileInfoPaneAfterSearch();
   });
   ['miniSearchInput', 'miniGeoInfoInput', 'miniRunicTextInput', 'miniNormalisationInput', 'miniTranslationInput', 'miniMetaInfoInput'].forEach((fieldId) => {
     const field = document.getElementById(fieldId);
