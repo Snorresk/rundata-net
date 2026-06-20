@@ -1,4 +1,5 @@
 import { isPersonalName } from './search_core.js';
+import { isCompactDbLayout } from './index_layout.js';
 
 export { isPersonalName } from './search_core.js';
 
@@ -642,9 +643,7 @@ export function fetchAllImages(db) {
 export function makeImagesMarkup(signatureImageLinks) {
   let directImages = "";
   let indirectImages = "";
-  const isMobileViewport = typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(max-width: 767.98px)').matches;
+  const isMobileViewport = isCompactDbLayout();
 
   const escapeHtml = function (value) {
     return String(value)
@@ -1034,9 +1033,7 @@ export function inscriptions2markup(inscriptions) {
 
   const showHeaders = $('#chkDisplayHeaders').is(":checked");
   const userSelectedFields =  getUserSelectedFields();
-  const isMobileViewport = typeof window !== 'undefined'
-    && window.matchMedia
-    && window.matchMedia('(max-width: 767.98px)').matches;
+  const isMobileViewport = isCompactDbLayout();
   let markupData = [];
   for (let i = 0; i < inscriptions.length; i++) {
 

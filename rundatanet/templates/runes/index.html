@@ -180,8 +180,26 @@
       #mobileMapPopupHint {
         display: none;
       }
+      #mobileDbPaneSwitcher,
+      #mobileSearchBuilderRow {
+        display: none;
+      }
       #mobileSearchResultsSummary {
         display: none;
+      }
+      .db-compact-inline,
+      .db-compact-block,
+      .db-compact-inline-block {
+        display: none !important;
+      }
+      .db-desktop-inline {
+        display: inline !important;
+      }
+      .db-desktop-block {
+        display: block !important;
+      }
+      .db-desktop-inline-block {
+        display: inline-block !important;
       }
       @media (min-width: 768px) {
         #leftPanel.left-panel-one-cm-narrow {
@@ -206,12 +224,46 @@
           display: none !important;
         }
       }
-      @media (max-width: 767.98px) {
+      @media (max-width: 767.98px), (max-width: 1366px) and (any-pointer: coarse) {
         /* Mobile: three panes for map, inscription info, and search controls. */
+        .db-compact-inline {
+          display: inline !important;
+        }
+        .db-compact-block {
+          display: block !important;
+        }
+        .db-compact-inline-block {
+          display: inline-block !important;
+        }
+        .db-desktop-inline,
+        .db-desktop-block,
+        .db-desktop-inline-block {
+          display: none !important;
+        }
+        .rundata-navbar.navbar-expand-md {
+          flex-wrap: wrap;
+        }
+        .rundata-navbar.navbar-expand-md .navbar-toggler {
+          display: block;
+        }
+        .rundata-navbar.navbar-expand-md .navbar-collapse {
+          flex-basis: 100%;
+          flex-grow: 1;
+        }
+        .rundata-navbar.navbar-expand-md .navbar-collapse:not(.show) {
+          display: none !important;
+        }
+        .rundata-navbar.navbar-expand-md .navbar-collapse.show {
+          display: block !important;
+        }
+        .rundata-navbar.navbar-expand-md .navbar-nav {
+          flex-direction: column;
+        }
         #leftPanel {
           display: none !important;
         }
         #mobileDbPaneSwitcher {
+          display: block !important;
           position: sticky;
           top: 0;
           z-index: 1030;
@@ -262,6 +314,7 @@
           flex-direction: column;
         }
         #mobileSearchBuilderRow {
+          display: flex !important;
           order: 2;
         }
         #mainLayoutRow {
@@ -279,14 +332,19 @@
         body.mobile-db-search-view #mainLayoutRow {
           order: 3;
         }
-        #mapDisplayWrapper {
+        #mapDisplayWrapper,
+        #mapDisplayWrapper.map-two-cm-narrow {
           order: 1;
           width: 100%;
-          max-width: 100%;
-          flex: 0 0 100%;
+          max-width: 100% !important;
+          flex: 0 0 100% !important;
           padding-right: 0 !important;
           margin-top: 0 !important;
           margin-bottom: 8px;
+        }
+        #mapDisplayContainer,
+        #mapDisplay {
+          width: 100% !important;
         }
         #mainPanel {
           order: 2;
@@ -294,6 +352,7 @@
           max-width: 100%;
           flex: 0 0 100%;
           margin-top: 0 !important;
+          margin-right: 0 !important;
         }
         #searchControlsRow {
           padding-top: 0.75rem !important;
@@ -489,7 +548,7 @@
         position: relative;
       }
       @media (min-width: 768px) {
-        #mapDisplayWrapper.map-hidden {
+        html:not(.db-compact-layout) #mapDisplayWrapper.map-hidden {
           flex: 0 0 44px !important;
           max-width: 44px !important;
           min-width: 44px;
@@ -517,7 +576,7 @@
         justify-content: center;
         font-size: 1.1rem;
       }
-      @media (max-width: 767.98px) {
+      @media (max-width: 767.98px), (max-width: 1366px) and (any-pointer: coarse) {
         body.display-options-open #mHideMap {
           display: none !important;
         }
@@ -583,7 +642,7 @@
           }
         }
       }
-      @media (max-width: 767.98px) {
+      @media (max-width: 767.98px), (max-width: 1366px) and (any-pointer: coarse) {
         .display-options-checklist {
           max-height: 52vh;
           overflow-y: auto;
@@ -668,7 +727,7 @@
         color: inherit;
         text-decoration: underline;
       }
-      @media (max-width: 767.98px) {
+      @media (max-width: 767.98px), (max-width: 1366px) and (any-pointer: coarse) {
         .rundata-image-gallery {
           flex-wrap: nowrap;
           overflow-x: auto;
@@ -766,7 +825,7 @@
       .query-builder [data-text-options-row="rule"] .form-check-label {
         font-size: 0.88rem;
       }
-      @media (max-width: 767.98px) {
+      @media (max-width: 767.98px), (max-width: 1366px) and (any-pointer: coarse) {
         #topControlButtons {
           width: 100%;
           margin-top: 0.25rem;
@@ -819,7 +878,7 @@
 
     <!-- modifications for query builder to make it responsive -->
     <style>
-      @media (max-width: 768px) {
+      @media (max-width: 767.98px), (max-width: 1366px) and (any-pointer: coarse) {
         .query-builder .rule-container .rule-filter-container,
         .query-builder .rule-container .rule-operator-container,
         .query-builder .rule-container .rule-value-container {
@@ -876,14 +935,14 @@
         <ul id="topControlButtons" class="navbar-nav me-auto mb-2 mb-lg-0">
           <li class="nav-item d-flex align-items-center ms-2">
             <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#divFormatDialog">
-              <span class="d-md-none">Info filter</span>
-              <span class="d-none d-md-inline">Choose what to show about inscriptions in the main display</span>
+              <span class="db-compact-inline">Info filter</span>
+              <span class="db-desktop-inline">Choose what to show about inscriptions in the main display</span>
             </button>
           </li>
           <li class="nav-item d-flex align-items-center ms-2">
             <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#mapDisplayOptionsDialog">
-              <span class="d-md-none">Map filter</span>
-              <span class="d-none d-md-inline">Choose what to show on the map</span>
+              <span class="db-compact-inline">Map filter</span>
+              <span class="db-desktop-inline">Choose what to show on the map</span>
             </button>
           </li>
         </ul>
@@ -941,7 +1000,7 @@
       <div class="col alert alert-danger" role="alert" id="alertObj"></div>
     </div>
 
-    <div id="mobileDbPaneSwitcher" class="d-md-none" role="tablist" aria-label="Mobile database views">
+    <div id="mobileDbPaneSwitcher" role="tablist" aria-label="Mobile database views">
       <div class="mobile-db-tabs">
         <button type="button" class="btn btn-outline-secondary mobile-db-tab" id="mobilePaneMap" data-mobile-db-pane="map" role="tab" aria-controls="mapDisplayWrapper" aria-selected="true">
           <i class="bi bi-map" aria-hidden="true"></i>
@@ -964,7 +1023,7 @@
       <div class="col-md-4 p-0 bg-success">f</div>
     </div>-->
 
-    <div id="mobileSearchBuilderRow" class="row d-md-none">
+    <div id="mobileSearchBuilderRow" class="row">
       <div class="col">
         <div id="miniQueryBuilder" class="mini-query-builder">
           <div class="mb-2">
@@ -1012,7 +1071,7 @@
       </div>
 
       <div id="mainPanel" class="col my-2 my-md-0">
-        <div id="mobileSearchResultsSummary" class="d-md-none" aria-live="polite">
+        <div id="mobileSearchResultsSummary" aria-live="polite">
           <span class="mobile-stat-label">Search results:</span>
           <span>Inscriptions: <span id="mobileOutNumSignaturesFound" class="mobile-stat-value">6815</span></span>
           <span>Words: <span id="mobileOutNumWords" class="mobile-stat-value">54852</span></span>
@@ -1102,12 +1161,12 @@
           </div>
           <div class="row" style="padding-left: 1em; padding-right: 1em;">
             <div class="col"><p>Here you can select which properties are shown on the main display when an inscription is selected.</p>
-            <p class="d-none d-md-block">List on the left contains properties available for selection. List on the right contains properties selected for display.</p>
+            <p class="db-desktop-block">List on the left contains properties available for selection. List on the right contains properties selected for display.</p>
             <p>Check <em>Display headers</em> checkbox if you want to see property name as long as it's value. If unchecked, only the value is displayed.</p>
             </div>
           </div>
           <div class="row">
-            <div class="col-12 d-none d-md-block">
+            <div class="col-12 db-desktop-block">
               <div class="row">
                 <div class="col-sm-5">
                   <select name="from[]" id="multiselect" class="form-control" size="8" multiple="multiple"></select>
@@ -1131,7 +1190,7 @@
                 </div>
               </div>
             </div>
-            <div class="col-12 d-md-none">
+            <div class="col-12 db-compact-block">
               <div id="displayOptionsChecklist" class="display-options-checklist"></div>
             </div>
             <div class="col-12 mt-2">
@@ -1146,7 +1205,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-default" data-bs-dismiss="modal" id="btnDismissDisplayFormat">Close</button>
-          <button type="button" class="btn btn-primary d-none d-md-inline-block" id="btnApplyDisplayFormat">Apply changes</button>
+          <button type="button" class="btn btn-primary db-desktop-inline-block" id="btnApplyDisplayFormat">Apply changes</button>
         </div>
       </div>
     </div>
@@ -1157,8 +1216,8 @@
       <div class="modal-content">
         <div class="modal-header">
           <h4 class="modal-title" id="mapDisplayOptionsDialogLabel">
-            <span class="d-md-none">Map filter</span>
-            <span class="d-none d-md-inline">Choose What To Show On The Map</span>
+            <span class="db-compact-inline">Map filter</span>
+            <span class="db-desktop-inline">Choose What To Show On The Map</span>
           </h4>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
@@ -1309,7 +1368,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260620-mobile-open-info-v4"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260620-tablet-layout-v2"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -1724,7 +1783,7 @@ function applyMiniBuilderRulesIfNeeded() {
 }
 
 function showMobileInfoPaneAfterSearch() {
-  if (!window.matchMedia('(max-width: 767.98px)').matches) {
+  if (!isCompactDbLayout()) {
     return;
   }
   setMobileDbPane('info');
@@ -1856,7 +1915,7 @@ function alignLowerSectionsToMainWindow() {
   }
 
   // Keep default mobile layout.
-  if (!window.matchMedia('(min-width: 768px)').matches) {
+  if (isCompactDbLayout()) {
     sections.forEach(el => {
       if (!el) return;
       el.style.marginLeft = '';
@@ -1884,7 +1943,7 @@ function alignTopButtonsToMainWindow() {
     return;
   }
 
-  if (!window.matchMedia('(min-width: 768px)').matches) {
+  if (isCompactDbLayout()) {
     topButtons.style.marginLeft = '';
     return;
   }
@@ -1901,7 +1960,7 @@ function applyWindowAlignments() {
 }
 
 function updateMobileFullscreenLayout() {
-  if (!window.matchMedia('(max-width: 767.98px)').matches) {
+  if (!isCompactDbLayout()) {
     document.body.classList.remove('mobile-map-fullscreen');
     return;
   }
@@ -1923,7 +1982,7 @@ function setMobileDbPane(pane) {
   } else if (pane === 'search' || pane === 'work') {
     selectedPane = 'search';
   }
-  const isMobile = window.matchMedia('(max-width: 767.98px)').matches;
+  const isMobile = isCompactDbLayout();
 
   document.body.classList.toggle('mobile-db-map-view', isMobile && selectedPane === 'map');
   document.body.classList.toggle('mobile-db-info-view', isMobile && selectedPane === 'info');
@@ -1963,7 +2022,7 @@ function initMobileDbPaneSwitcher() {
   buttons.forEach(button => {
     button.addEventListener('click', function() {
       const requestedPane = this.dataset.mobileDbPane;
-      const isMobile = window.matchMedia('(max-width: 767.98px)').matches;
+      const isMobile = isCompactDbLayout();
       if (isMobile && requestedPane === 'search' && document.body.classList.contains('mobile-db-search-view')) {
         runMobileMiniSearch();
         return;
@@ -2038,10 +2097,15 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   updateMobileFullscreenLayout();
   applyWindowAlignments();
-  window.addEventListener('resize', () => {
+  const refreshResponsiveDbLayout = () => {
+    syncCompactDbLayoutClass();
     updateMobileFullscreenLayout();
     const activePane = document.querySelector('[data-mobile-db-pane][aria-selected="true"]');
     setMobileDbPane(activePane ? activePane.dataset.mobileDbPane : 'map');
+  };
+  window.addEventListener('resize', refreshResponsiveDbLayout);
+  window.addEventListener('orientationchange', () => {
+    setTimeout(refreshResponsiveDbLayout, 100);
   });
 
   // Configure jsTree even before we have the data
