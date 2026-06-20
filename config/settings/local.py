@@ -10,10 +10,10 @@ USE_DOCKER = env.str("USE_DOCKER", default="no")
 # https://docs.djangoproject.com/en/dev/ref/settings/#secret-key
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="FFfiu8yUWpECxkZOahD7iCh9t99p1jsN0Jmq8nghaXVu5fLaH9TH7OaxDjtXVFpY")
 # https://docs.djangoproject.com/en/dev/ref/settings/#allowed-hosts
-ALLOWED_HOSTS = [
-    "localhost",
-    "127.0.0.1",
-]
+ALLOWED_HOSTS = env.list(
+    "DJANGO_ALLOWED_HOSTS",
+    default=["localhost", "127.0.0.1"],
+)
 
 # CACHES
 # ------------------------------------------------------------------------------

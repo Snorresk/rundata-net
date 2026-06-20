@@ -8,6 +8,7 @@ import {
   openMobileInscriptionInfo,
   positionSpiderfiedTooltips,
   resetSpiderfiedTooltips,
+  showMarkers,
   shouldSpiderfyNearbyPair,
   shouldSpiderfySharedCoordinates,
 } from '../../runes/js/index_map.js';
@@ -162,6 +163,32 @@ test('getMarkerClusterOptions() changes cluster clicks only on mobile', () => {
   assert.is(mobileOptions.maxClusterRadius, desktopOptions.maxClusterRadius);
 });
 
+test('showMarkers() sizes the map before fitting all visible inscriptions', () => {
+  const marker = {getLatLng: () => ({lat: 58, lng: 15})};
+  const markersLayer = {
+    clearLayers: () => {},
+    addLayers: () => {},
+  };
+  const mapObject = {
+    invalidateSize: options => { mapObject.invalidateOptions = options; },
+    fitBounds: (bounds, options) => {
+      mapObject.fittedBounds = bounds;
+      mapObject.fitOptions = options;
+    },
+  };
+
+  showMarkers({
+    inscriptionIds: [1],
+    allMarkers: new Map([[1, {found: marker, present: marker}]]),
+    mapObject,
+    markersLayer,
+  });
+
+  assert.equal(mapObject.invalidateOptions, {pan: false});
+  assert.equal(mapObject.fittedBounds, [{lat: 58, lng: 15}]);
+  assert.equal(mapObject.fitOptions, {padding: [20, 20]});
+});
+
 test('getSpiderfiedTooltipDirection() points labels away from cluster center', () => {
   const cluster = {getLatLng: () => ({lat: 0, lng: 0})};
   const map = {
@@ -307,10 +334,14 @@ test('inscriptions2markers() adds drive link and warnings to marker popup', asyn
 
 test('inscriptions2markers() uses mobile-only popup helpers on mobile', async () => {
   const originalNavigator = globalThis.navigator;
+  const originalWindow = globalThis.window;
   Object.defineProperty(globalThis, 'navigator', {
     value: { userAgent: 'iPhone' },
     configurable: true,
   });
+  globalThis.window = {
+    matchMedia: () => ({matches: true}),
+  };
 
   const myDb = new Map();
   myDb.set(1, {
@@ -351,6 +382,7 @@ test('inscriptions2markers() uses mobile-only popup helpers on mobile', async ()
     value: originalNavigator,
     configurable: true,
   });
+  globalThis.window = originalWindow;
 });
 
 test('openMobileInscriptionInfo() selects inscription before opening Info pane', () => {

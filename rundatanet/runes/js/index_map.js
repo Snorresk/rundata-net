@@ -1,3 +1,5 @@
+import { isCompactDbLayout } from './index_layout.js';
+
 /*
  This script assumes that you reference leaflet.js and leaflet.css in your HTML file.
  It allows relies on defined `isSafari` function.
@@ -242,16 +244,7 @@ export function onHideMapClicked(mapContainerId, menuItemId) {
 }
 
 function isMobileDevice() {
-  try {
-    if (typeof window !== 'undefined'
-      && typeof window.matchMedia === 'function'
-      && window.matchMedia('(max-width: 767.98px)').matches) {
-      return true;
-    }
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  } catch (e) {
-    return false;
-  }
+  return isCompactDbLayout();
 }
 
 function getGeoIntentURL(lat, lng) {
@@ -500,6 +493,9 @@ export function showMarkers({
   }
 
   if (markersLatLon.length > 0 && !preserveMapArea) {
-    mapObject.fitBounds(markersLatLon);
+    if (typeof mapObject.invalidateSize === 'function') {
+      mapObject.invalidateSize({pan: false});
+    }
+    mapObject.fitBounds(markersLatLon, {padding: [20, 20]});
   }
 }

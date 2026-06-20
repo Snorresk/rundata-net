@@ -1,3 +1,5 @@
+import { isCompactDbLayout } from './index_layout.js';
+
 /*
 This file contains code to work with jquery query builder. The query builder must be
 included in your code prior to using this file.
@@ -761,9 +763,7 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
       data: {
         multiField: true,
       },
-      operators: (typeof window !== 'undefined'
-        && typeof window.matchMedia === 'function'
-        && window.matchMedia('(max-width: 767.98px)').matches)
+      operators: isCompactDbLayout()
         ? ['in', 'contains']
         : ['in'],
       plugin: 'tomSelect',

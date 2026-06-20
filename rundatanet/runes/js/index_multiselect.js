@@ -1,3 +1,5 @@
+import { isCompactDbLayout } from './index_layout.js';
+
 // Key in the local storage under which users display options are saved.
 // display options are information which is displayed per inscription.
 const gUserSelectedDisplayKey = "userSelectedDisplay";
@@ -91,11 +93,7 @@ function applyMobileDefaultMigration(selectedValues, storage) {
 }
 
 function shouldUseMobileDefaults() {
-  try {
-    return window.matchMedia('(max-width: 767.98px)').matches;
-  } catch (e) {
-    return false;
-  }
+  return isCompactDbLayout();
 }
 
 function isMobileDisplayOptionsUi() {
