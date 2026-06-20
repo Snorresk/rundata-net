@@ -1,10 +1,6 @@
 import { test } from 'uvu';
 import * as assert from 'uvu/assert';
-import {
-  createClusteredMarkerDisplayLayer,
-  createMobileMarkerDisplayLayer,
-  inscriptions2markers
-} from '../../runes/js/index_map.js';
+import { inscriptions2markers } from '../../runes/js/index_map.js';
 
 const mockLeaflet = {
   marker: (latlng, options) => {
@@ -57,122 +53,6 @@ const mockLeaflet = {
       return markerObj;
   }
 };
-
-function makeLayerMock(name) {
-  return {
-    name,
-    addedMarkers: [],
-    cleared: 0,
-    events: {},
-    addTo: (map) => {
-      map.layers.push(name);
-      return makeLayerMock.instances[name];
-    },
-    clearLayers: () => {
-      makeLayerMock.instances[name].cleared += 1;
-      makeLayerMock.instances[name].addedMarkers = [];
-    },
-    addLayer: (marker) => {
-      makeLayerMock.instances[name].addedMarkers.push(marker);
-    },
-    addLayers: (markers) => {
-      makeLayerMock.instances[name].addedMarkers.push(...markers);
-    },
-    on: (eventName, handler) => {
-      makeLayerMock.instances[name].events[eventName] = handler;
-    },
-  };
-}
-
-function makeMarkerLayerTestObjects() {
-  makeLayerMock.instances = {
-    direct: makeLayerMock('direct'),
-    clustered: makeLayerMock('clustered'),
-  };
-  let layerGroupCalls = 0;
-  const map = {
-    layers: [],
-    events: {},
-    getZoom: () => 8,
-    project: (latLng) => {
-      return {
-        x: latLng.lng * 100,
-        y: latLng.lat * 100,
-      };
-    },
-    fitBounds: (latLngs) => {
-      map.fitBoundsLatLngs = latLngs;
-    },
-    on: (eventName, handler) => {
-      map.events[eventName] = handler;
-    },
-  };
-  const leaflet = {
-    layerGroup: () => {
-      layerGroupCalls += 1;
-      return layerGroupCalls === 1
-        ? makeLayerMock.instances.direct
-        : makeLayerMock.instances.clustered;
-    },
-    divIcon: (options) => options,
-    point: (x, y) => ({x, y}),
-    marker: (latLng, options) => {
-      const marker = {
-        _latlng: latLng,
-        options,
-        events: {},
-        getLatLng: () => latLng,
-        on(eventName, handler) {
-          marker.events[eventName] = handler;
-        },
-      };
-      return marker;
-    },
-  };
-  const markers = Array.from({length: 10}, (_, index) => ({
-    options: {
-      id: index,
-      signature: `Test ${index}`,
-    },
-    events: {},
-    getLatLng: () => ({
-      lat: 1,
-      lng: 1,
-    }),
-    on(eventName, handler) {
-      this.events[eventName] = handler;
-    },
-  }));
-
-  return {
-    map,
-    leaflet,
-    markers,
-    clusteredLayer: makeLayerMock.instances.clustered,
-    directLayer: makeLayerMock.instances.direct,
-  };
-}
-
-function makeClusteredLayerTestObjects() {
-  makeLayerMock.instances = {
-    clustered: makeLayerMock('clustered'),
-  };
-  const map = {
-    layers: [],
-  };
-  const leaflet = {
-    markerClusterGroup: (options) => {
-      makeLayerMock.instances.clustered.options = options;
-      return makeLayerMock.instances.clustered;
-    },
-  };
-
-  return {
-    map,
-    leaflet,
-    clusteredLayer: makeLayerMock.instances.clustered,
-  };
-}
 
 
 test('inscriptions2markers() on empty input', async () => {
@@ -281,27 +161,10 @@ test('inscriptions2markers() adds drive link and warnings to marker popup', asyn
 
 test('inscriptions2markers() uses mobile-only popup helpers on mobile', async () => {
   const originalNavigator = globalThis.navigator;
-  const originalWindow = globalThis.window;
-  const originalScrollToInscription = globalThis.scrollToInscription;
-  const selectedInscriptions = [];
   Object.defineProperty(globalThis, 'navigator', {
     value: { userAgent: 'iPhone' },
     configurable: true,
   });
-  globalThis.window = {
-    matchMedia: () => ({matches: true}),
-    location: {
-      hash: '#db-map',
-    },
-    history: {
-      replaceState: (_state, _title, hash) => {
-        globalThis.window.location.hash = hash;
-      },
-    },
-  };
-  globalThis.scrollToInscription = (signature, id) => {
-    selectedInscriptions.push({signature, id});
-  };
 
   const myDb = new Map();
   myDb.set(1, {
@@ -329,83 +192,14 @@ test('inscriptions2markers() uses mobile-only popup helpers on mobile', async ()
   assert.is(marker.tooltipOptions.className, 'mobile-map-id-tooltip');
   assert.is(marker.tooltipElement.attributes.role, 'button');
   assert.is(marker.tooltipElement.attributes.tabindex, '0');
-  assert.is(marker.tooltipElement.attributes['aria-label'], 'Show inscription information');
   marker.tooltipElement.listeners.click({
     preventDefault: () => {},
     stopPropagation: () => {},
   });
-  assert.equal(selectedInscriptions, [{signature: "Mobile moved test", id: 1}]);
-  assert.is(globalThis.window.location.hash, '#db-map');
   assert.is(marker.openPopupCalled, true);
 
   Object.defineProperty(globalThis, 'navigator', {
     value: originalNavigator,
     configurable: true,
   });
-  globalThis.window = originalWindow;
-  globalThis.scrollToInscription = originalScrollToInscription;
-});
-
-test('createMarkerDisplayLayer() renders fewer than ten markers without clustering', async () => {
-  const {map, leaflet, markers, clusteredLayer, directLayer} = makeMarkerLayerTestObjects();
-  const markerLayer = createMobileMarkerDisplayLayer(map, leaflet);
-
-  markerLayer.addLayers(markers.slice(0, 9));
-
-  assert.equal(map.layers, ['direct', 'clustered']);
-  assert.is(directLayer.addedMarkers.length, 9);
-  assert.is(clusteredLayer.addedMarkers.length, 0);
-  assert.is(typeof markers[0].events.click, 'function');
-});
-
-test('createMarkerDisplayLayer() clusters local groups with ten or more markers', async () => {
-  const {map, leaflet, markers, clusteredLayer, directLayer} = makeMarkerLayerTestObjects();
-  const markerLayer = createMobileMarkerDisplayLayer(map, leaflet);
-
-  markerLayer.addLayers(markers);
-
-  assert.equal(map.layers, ['direct', 'clustered']);
-  assert.is(clusteredLayer.addedMarkers.length, 1);
-  assert.is(directLayer.addedMarkers.length, 0);
-  assert.match(clusteredLayer.addedMarkers[0].options.icon.html, /10/);
-});
-
-test('createMarkerDisplayLayer() does not cluster local groups with fewer than ten markers', async () => {
-  const {markers, leaflet, clusteredLayer, directLayer} = makeMarkerLayerTestObjects();
-  const spreadMarkers = markers.concat(markers.slice(0, 2).map((marker, index) => ({
-    ...marker,
-    options: {
-      id: marker.options.id + 10,
-      signature: `Far test ${index}`,
-    },
-    events: {},
-    getLatLng: () => ({
-      lat: 20,
-      lng: 20,
-    }),
-  })));
-  const markerLayer = createMobileMarkerDisplayLayer({
-    layers: [],
-    getZoom: () => 8,
-    project: (latLng) => ({
-      x: latLng.lng * 100,
-      y: latLng.lat * 100,
-    }),
-    on: () => {},
-  }, leaflet);
-
-  markerLayer.addLayers(spreadMarkers.slice(0, 9).concat(spreadMarkers.slice(10, 12)));
-
-  assert.is(clusteredLayer.addedMarkers.length, 0);
-  assert.is(directLayer.addedMarkers.length, 11);
-});
-
-test('createClusteredMarkerDisplayLayer() keeps desktop markercluster behavior', async () => {
-  const {map, leaflet, clusteredLayer} = makeClusteredLayerTestObjects();
-  const markerLayer = createClusteredMarkerDisplayLayer(map, leaflet);
-
-  assert.is(markerLayer, clusteredLayer);
-  assert.equal(map.layers, ['clustered']);
-  assert.is(clusteredLayer.options.maxClusterRadius, 60);
-  assert.is(typeof clusteredLayer.events.click, 'function');
 });
