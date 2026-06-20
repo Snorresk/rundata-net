@@ -377,11 +377,12 @@
           font-weight: 700;
           margin: 0.1rem 0 0.35rem;
         }
-        body.mobile-db-map-view .map-drive-link {
-          background: #243b53;
+        body.mobile-db-map-view .map-drive-link,
+        body.mobile-db-map-view .map-open-info-link {
+          border: 1px solid transparent;
           border-radius: 6px;
-          color: #fff !important;
-          display: inline-block;
+          display: block;
+          font-family: inherit;
           font-size: 0.9rem;
           font-weight: 700;
           margin-top: 0.25rem;
@@ -389,6 +390,16 @@
           text-decoration: none;
           width: 100%;
           text-align: center;
+        }
+        body.mobile-db-map-view .map-drive-link {
+          background: #243b53;
+          color: #fff !important;
+        }
+        body.mobile-db-map-view .map-open-info-link {
+          background: #d1e7dd;
+          border-color: #75b798;
+          color: #0f5132 !important;
+          cursor: pointer;
         }
         body.mobile-db-map-view .mobile-map-id-tooltip {
           cursor: pointer;
@@ -1298,7 +1309,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260603-mobile-property-order"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260620-mobile-open-info-v4"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;

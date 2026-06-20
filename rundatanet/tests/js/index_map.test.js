@@ -1,6 +1,16 @@
 import { test } from 'uvu';
 import * as assert from 'uvu/assert';
-import { inscriptions2markers } from '../../runes/js/index_map.js';
+import {
+  getMarkerClusterOptions,
+  getSpiderfiedTooltipDirection,
+  handleMobileClusterClick,
+  inscriptions2markers,
+  openMobileInscriptionInfo,
+  positionSpiderfiedTooltips,
+  resetSpiderfiedTooltips,
+  shouldSpiderfyNearbyPair,
+  shouldSpiderfySharedCoordinates,
+} from '../../runes/js/index_map.js';
 
 const mockLeaflet = {
   marker: (latlng, options) => {
@@ -53,6 +63,141 @@ const mockLeaflet = {
       return markerObj;
   }
 };
+
+function makeClusterMock(markerCoordinates) {
+  const childMarkers = markerCoordinates.map(([lat, lng]) => ({
+    getLatLng: () => ({lat, lng}),
+  }));
+  const cluster = {
+    getChildCount: () => childMarkers.length,
+    getAllChildMarkers: () => childMarkers,
+    spiderfy: () => {
+      cluster.spiderfyCalled = true;
+    },
+    zoomToBounds: () => {
+      cluster.zoomToBoundsCalled = true;
+    },
+  };
+  return cluster;
+}
+
+function makeMapMock(distanceMeters, zoom = 10, maxZoom = 19) {
+  return {
+    distance: () => distanceMeters,
+    getZoom: () => zoom,
+    getMaxZoom: () => maxZoom,
+  };
+}
+
+function makeSpiderfyMarker(lat, lng) {
+  const tooltip = {
+    options: {direction: 'auto'},
+    update: () => {
+      tooltip.updateCount = (tooltip.updateCount || 0) + 1;
+    },
+  };
+  return {
+    getLatLng: () => ({lat, lng}),
+    getTooltip: () => tooltip,
+    tooltip,
+  };
+}
+
+test('shouldSpiderfyNearbyPair() accepts only nearby two-marker clusters', () => {
+  const nearbyPair = makeClusterMock([[58.416765, 15.522882], [58.416846, 15.522864]]);
+  const threeMarkers = makeClusterMock([[1, 1], [1, 1.0001], [1, 1.0002]]);
+
+  assert.is(shouldSpiderfyNearbyPair(nearbyPair, makeMapMock(9)), true);
+  assert.is(shouldSpiderfyNearbyPair(nearbyPair, makeMapMock(101)), false);
+  assert.is(shouldSpiderfyNearbyPair(threeMarkers, makeMapMock(9)), false);
+});
+
+test('handleMobileClusterClick() immediately spiderfies a nearby pair', () => {
+  const cluster = makeClusterMock([[58.416765, 15.522882], [58.416846, 15.522864]]);
+
+  handleMobileClusterClick({layer: cluster}, makeMapMock(9));
+
+  assert.is(cluster.spiderfyCalled, true);
+  assert.is(cluster.zoomToBoundsCalled, undefined);
+});
+
+test('shouldSpiderfySharedCoordinates() accepts small clusters at one point', () => {
+  const exactPair = makeClusterMock([[58.366819, 15.371625], [58.366819, 15.371625]]);
+  const exactTriple = makeClusterMock([[1, 1], [1, 1], [1, 1]]);
+  const differentCoordinates = makeClusterMock([[1, 1], [1, 1.000001], [1, 1]]);
+  const largeExactCluster = makeClusterMock(Array.from({length: 11}, () => [1, 1]));
+
+  assert.is(shouldSpiderfySharedCoordinates(exactPair), true);
+  assert.is(shouldSpiderfySharedCoordinates(exactTriple), true);
+  assert.is(shouldSpiderfySharedCoordinates(differentCoordinates), false);
+  assert.is(shouldSpiderfySharedCoordinates(largeExactCluster), false);
+});
+
+test('handleMobileClusterClick() immediately spiderfies shared coordinates', () => {
+  const cluster = makeClusterMock([[1, 1], [1, 1], [1, 1]]);
+
+  handleMobileClusterClick({layer: cluster}, makeMapMock(0));
+
+  assert.is(cluster.spiderfyCalled, true);
+  assert.is(cluster.zoomToBoundsCalled, undefined);
+});
+
+test('handleMobileClusterClick() keeps normal zoom for other clusters', () => {
+  const distantPair = makeClusterMock([[58, 15], [59, 16]]);
+
+  handleMobileClusterClick({layer: distantPair}, makeMapMock(500));
+
+  assert.is(distantPair.spiderfyCalled, undefined);
+  assert.is(distantPair.zoomToBoundsCalled, true);
+});
+
+test('getMarkerClusterOptions() changes cluster clicks only on mobile', () => {
+  const desktopOptions = getMarkerClusterOptions(false);
+  const mobileOptions = getMarkerClusterOptions(true);
+
+  assert.is(desktopOptions.zoomToBoundsOnClick, undefined);
+  assert.is(desktopOptions.spiderfyOnMaxZoom, undefined);
+  assert.is(mobileOptions.zoomToBoundsOnClick, false);
+  assert.is(mobileOptions.spiderfyOnMaxZoom, false);
+  assert.is(mobileOptions.maxClusterRadius, desktopOptions.maxClusterRadius);
+});
+
+test('getSpiderfiedTooltipDirection() points labels away from cluster center', () => {
+  const cluster = {getLatLng: () => ({lat: 0, lng: 0})};
+  const map = {
+    latLngToLayerPoint: ({lat, lng}) => ({x: lng, y: -lat}),
+  };
+
+  assert.is(getSpiderfiedTooltipDirection(makeSpiderfyMarker(0, 1), cluster, map), 'right');
+  assert.is(getSpiderfiedTooltipDirection(makeSpiderfyMarker(0, -1), cluster, map), 'left');
+  assert.is(getSpiderfiedTooltipDirection(makeSpiderfyMarker(1, 0), cluster, map), 'top');
+  assert.is(getSpiderfiedTooltipDirection(makeSpiderfyMarker(-1, 0), cluster, map), 'bottom');
+});
+
+test('spiderfied tooltip directions are applied and then restored', () => {
+  const markers = [
+    makeSpiderfyMarker(0, 1),
+    makeSpiderfyMarker(0, -1),
+  ];
+  const cluster = {getLatLng: () => ({lat: 0, lng: 0})};
+  const map = {
+    latLngToLayerPoint: ({lat, lng}) => ({x: lng, y: -lat}),
+  };
+  const event = {cluster, markers};
+
+  positionSpiderfiedTooltips(event, map);
+
+  assert.is(markers[0].tooltip.options.direction, 'right');
+  assert.is(markers[1].tooltip.options.direction, 'left');
+  assert.is(markers[0].tooltip.updateCount, 1);
+
+  resetSpiderfiedTooltips(event);
+
+  assert.is(markers[0].tooltip.options.direction, 'auto');
+  assert.is(markers[1].tooltip.options.direction, 'auto');
+  assert.is(markers[0].tooltip._rundataOriginalDirection, undefined);
+  assert.is(markers[0].tooltip.updateCount, 2);
+});
 
 
 test('inscriptions2markers() on empty input', async () => {
@@ -152,6 +297,7 @@ test('inscriptions2markers() adds drive link and warnings to marker popup', asyn
   assert.is(marker.popupOptions.autoClose, false);
   assert.is(marker.popupOptions.autoPan, undefined);
   assert.not.match(marker.popupText, /map-drive-link/);
+  assert.not.match(marker.popupText, /map-open-info-link/);
   assert.not.match(marker.popupText, /map-popup-warning/);
   assert.not.match(presentMarker.popupText, /Warning: this inscription is moved/);
   assert.not.match(presentMarker.popupText, /You are driving to Current location/);
@@ -182,6 +328,9 @@ test('inscriptions2markers() uses mobile-only popup helpers on mobile', async ()
   const presentMarker = result.get(1).present;
 
   assert.match(marker.popupText, /map-drive-link/);
+  assert.match(marker.popupText, /map-open-info-link/);
+  assert.match(marker.popupText, /Open info/);
+  assert.match(marker.popupText, /openMobileInscriptionInfo\("1"\)/);
   assert.match(marker.popupText, /map-popup-warning/);
   assert.is(marker.popupOptions.autoPan, true);
   assert.match(presentMarker.popupText, /Warning: this inscription is moved/);
@@ -202,4 +351,41 @@ test('inscriptions2markers() uses mobile-only popup helpers on mobile', async ()
     value: originalNavigator,
     configurable: true,
   });
+});
+
+test('openMobileInscriptionInfo() selects inscription before opening Info pane', () => {
+  const originalNavigator = globalThis.navigator;
+  const originalWindow = globalThis.window;
+  const originalDocument = globalThis.document;
+  let selectedId = null;
+  let infoClicked = false;
+
+  Object.defineProperty(globalThis, 'navigator', {
+    value: {userAgent: 'iPhone'},
+    configurable: true,
+  });
+  globalThis.window = {
+    matchMedia: () => ({matches: true}),
+    scrollToInscription: (_signature, inscriptionId) => {
+      selectedId = inscriptionId;
+    },
+  };
+  globalThis.document = {
+    getElementById: (id) => id === 'mobilePaneInfo'
+      ? {click: () => { infoClicked = true; }}
+      : null,
+  };
+
+  const result = openMobileInscriptionInfo('42');
+
+  assert.is(result, false);
+  assert.is(selectedId, '42');
+  assert.is(infoClicked, true);
+
+  Object.defineProperty(globalThis, 'navigator', {
+    value: originalNavigator,
+    configurable: true,
+  });
+  globalThis.window = originalWindow;
+  globalThis.document = originalDocument;
 });

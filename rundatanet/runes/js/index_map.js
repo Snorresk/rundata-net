@@ -3,6 +3,152 @@
  It allows relies on defined `isSafari` function.
 */
 
+const MOBILE_PAIR_SPIDERFY_MAX_DISTANCE_METERS = 100;
+const MOBILE_SHARED_COORDINATE_MAX_MARKERS = 10;
+
+export function shouldSpiderfyNearbyPair(cluster, map, maxDistanceMeters = MOBILE_PAIR_SPIDERFY_MAX_DISTANCE_METERS) {
+  if (!cluster || typeof cluster.getAllChildMarkers !== 'function'
+    || !map || typeof map.distance !== 'function') {
+    return false;
+  }
+
+  if (typeof cluster.getChildCount === 'function' && cluster.getChildCount() !== 2) {
+    return false;
+  }
+
+  const childMarkers = cluster.getAllChildMarkers();
+  if (childMarkers.length !== 2) {
+    return false;
+  }
+
+  return map.distance(
+    childMarkers[0].getLatLng(),
+    childMarkers[1].getLatLng()
+  ) <= maxDistanceMeters;
+}
+
+export function shouldSpiderfySharedCoordinates(cluster, maxMarkers = MOBILE_SHARED_COORDINATE_MAX_MARKERS) {
+  if (!cluster || typeof cluster.getChildCount !== 'function'
+    || typeof cluster.getAllChildMarkers !== 'function') {
+    return false;
+  }
+
+  const childCount = cluster.getChildCount();
+  if (childCount < 2 || childCount > maxMarkers) {
+    return false;
+  }
+
+  const childMarkers = cluster.getAllChildMarkers();
+  if (childMarkers.length !== childCount) {
+    return false;
+  }
+
+  const firstLatLng = childMarkers[0].getLatLng();
+  return childMarkers.every(marker => {
+    const latLng = marker.getLatLng();
+    return latLng.lat === firstLatLng.lat && latLng.lng === firstLatLng.lng;
+  });
+}
+
+export function handleMobileClusterClick(event, map) {
+  const cluster = event && event.layer;
+  if (!cluster) {
+    return;
+  }
+
+  if (shouldSpiderfyNearbyPair(cluster, map) || shouldSpiderfySharedCoordinates(cluster)) {
+    cluster.spiderfy();
+    return;
+  }
+
+  const isAtMaxZoom = typeof map.getZoom === 'function'
+    && typeof map.getMaxZoom === 'function'
+    && map.getZoom() >= map.getMaxZoom();
+  if (isAtMaxZoom && typeof cluster.spiderfy === 'function') {
+    cluster.spiderfy();
+  } else if (typeof cluster.zoomToBounds === 'function') {
+    cluster.zoomToBounds();
+  }
+}
+
+export function getMarkerClusterOptions(isMobile) {
+  const options = {
+    showCoverageOnHover: true,
+    chunkedLoading: true,
+    maxClusterRadius: 60,
+  };
+  if (isMobile) {
+    // Handle small nearby pairs ourselves so they separate immediately on tap.
+    options.zoomToBoundsOnClick = false;
+    options.spiderfyOnMaxZoom = false;
+  }
+  return options;
+}
+
+export function getSpiderfiedTooltipDirection(marker, cluster, map) {
+  if (!marker || !cluster || !map
+    || typeof marker.getLatLng !== 'function'
+    || typeof cluster.getLatLng !== 'function'
+    || typeof map.latLngToLayerPoint !== 'function') {
+    return 'auto';
+  }
+
+  const markerPoint = map.latLngToLayerPoint(marker.getLatLng());
+  const clusterPoint = map.latLngToLayerPoint(cluster.getLatLng());
+  const deltaX = markerPoint.x - clusterPoint.x;
+  const deltaY = markerPoint.y - clusterPoint.y;
+
+  if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+    return deltaX >= 0 ? 'right' : 'left';
+  }
+  return deltaY >= 0 ? 'bottom' : 'top';
+}
+
+function getSpiderfyEventMarkers(event) {
+  if (event && Array.isArray(event.markers)) {
+    return event.markers;
+  }
+  if (event && event.cluster && typeof event.cluster.getAllChildMarkers === 'function') {
+    return event.cluster.getAllChildMarkers();
+  }
+  return [];
+}
+
+export function positionSpiderfiedTooltips(event, map) {
+  const cluster = event && event.cluster;
+  if (!cluster) {
+    return;
+  }
+
+  getSpiderfyEventMarkers(event).forEach(marker => {
+    const tooltip = typeof marker.getTooltip === 'function' ? marker.getTooltip() : null;
+    if (!tooltip || !tooltip.options) {
+      return;
+    }
+    if (typeof tooltip._rundataOriginalDirection === 'undefined') {
+      tooltip._rundataOriginalDirection = tooltip.options.direction || 'auto';
+    }
+    tooltip.options.direction = getSpiderfiedTooltipDirection(marker, cluster, map);
+    if (typeof tooltip.update === 'function') {
+      tooltip.update();
+    }
+  });
+}
+
+export function resetSpiderfiedTooltips(event) {
+  getSpiderfyEventMarkers(event).forEach(marker => {
+    const tooltip = typeof marker.getTooltip === 'function' ? marker.getTooltip() : null;
+    if (!tooltip || !tooltip.options || typeof tooltip._rundataOriginalDirection === 'undefined') {
+      return;
+    }
+    tooltip.options.direction = tooltip._rundataOriginalDirection;
+    delete tooltip._rundataOriginalDirection;
+    if (typeof tooltip.update === 'function') {
+      tooltip.update();
+    }
+  });
+}
+
 // Initialize the map on the user-provided div with a given center and zoom level
 // Default center is [56.607512, 16.439838] and default zoom is 8.
 export function initMap(divId, center = [56.607512, 16.439838], zoom = 8) {
@@ -45,14 +191,19 @@ export function initMap(divId, center = [56.607512, 16.439838], zoom = 8) {
     }
   });
 
-  const markers = L.markerClusterGroup({
-    showCoverageOnHover: true,
-    chunkedLoading: true,
-    maxClusterRadius: 60,
-  });
+  const markers = L.markerClusterGroup(getMarkerClusterOptions(isMobile));
   markers.on('click', function (e) {
     scrollToInscription(e.layer.options.signature, e.layer.options.id);
   });
+  if (isMobile) {
+    markers.on('clusterclick', function(event) {
+      handleMobileClusterClick(event, map);
+    });
+    markers.on('spiderfied', function(event) {
+      positionSpiderfiedTooltips(event, map);
+    });
+    markers.on('unspiderfied', resetSpiderfiedTooltips);
+  }
   markers.addTo(map);
 
   return {map, markers};
@@ -107,6 +258,43 @@ function getGeoIntentURL(lat, lng) {
   // Use Google Maps universal directions URL so mobile users (including iPhone)
   // can open navigation consistently.
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+}
+
+function selectInscriptionForMobileInfo(inscriptionId) {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  if (typeof window.scrollToInscription === 'function') {
+    window.scrollToInscription('', inscriptionId);
+    return true;
+  }
+
+  const jquery = window.jQuery || window.$;
+  if (typeof jquery !== 'function') {
+    return false;
+  }
+  const tree = jquery('#jstree').jstree(true);
+  if (!tree) {
+    return false;
+  }
+  tree.deselect_all();
+  tree.select_node(String(inscriptionId));
+  return true;
+}
+
+export function openMobileInscriptionInfo(inscriptionId) {
+  if (!isMobileDevice() || !selectInscriptionForMobileInfo(inscriptionId)) {
+    return false;
+  }
+
+  const infoButton = typeof document !== 'undefined'
+    ? document.getElementById('mobilePaneInfo')
+    : null;
+  if (infoButton && typeof infoButton.click === 'function') {
+    infoButton.click();
+  }
+  return false;
 }
 
 function isLostInscription(inscriptionData) {
@@ -204,6 +392,10 @@ function inscription2marker(inscriptionData, lat, lon, locationType = 'found', l
     popupText += `<a${driveLinkClass} href="${destinationUrl}" target="_self" onclick="return window.confirm('${confirmText}')">Drive here!</a>`;
   } else {
     popupText += `<a${driveLinkClass} href="${destinationUrl}" target="_self">Drive here!</a>`;
+  }
+  if (isMobile) {
+    const inscriptionId = JSON.stringify(String(inscriptionData.id));
+    popupText += `<button type="button" class="map-open-info-link" onclick='return window.openMobileInscriptionInfo(${inscriptionId})'>Open info</button>`;
   }
   // Tooltip is simple and is always on, popup supports HTML and is opened  /closed by user
   const popupOptions = isMobile
