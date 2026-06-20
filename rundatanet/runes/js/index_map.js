@@ -3,211 +3,6 @@
  It allows relies on defined `isSafari` function.
 */
 
-const MIN_CLUSTERED_MARKERS = 10;
-const CLUSTER_RADIUS_PIXELS = 60;
-
-function getScrollToInscriptionHandler() {
-  if (typeof window !== 'undefined' && typeof window.scrollToInscription === 'function') {
-    return window.scrollToInscription;
-  }
-  if (typeof globalThis !== 'undefined' && typeof globalThis.scrollToInscription === 'function') {
-    return globalThis.scrollToInscription;
-  }
-  if (typeof scrollToInscription === 'function') {
-    return scrollToInscription;
-  }
-  return null;
-}
-
-function onMarkerClicked(e) {
-  const scrollHandler = getScrollToInscriptionHandler();
-  if (!scrollHandler) {
-    return;
-  }
-  scrollHandler(e.layer.options.signature, e.layer.options.id);
-}
-
-function activateMarker(marker) {
-  onMarkerClicked({layer: marker});
-}
-
-function bindDirectMarkerClick(marker) {
-  if (!marker || typeof marker.on !== 'function' || marker._rundataDirectClickBound) {
-    return;
-  }
-
-  marker._rundataDirectClickBound = true;
-  marker.on('click', function() {
-    activateMarker(marker);
-  });
-}
-
-function getMarkerClusterClass(count) {
-  if (count < 100) {
-    return 'marker-cluster-small';
-  }
-  if (count < 1000) {
-    return 'marker-cluster-medium';
-  }
-  return 'marker-cluster-large';
-}
-
-function getMarkerLatLng(marker) {
-  const latLng = marker.getLatLng();
-  return {
-    lat: latLng.lat,
-    lng: latLng.lng,
-  };
-}
-
-function getAverageLatLng(markers) {
-  const total = markers.reduce((sum, marker) => {
-    const latLng = getMarkerLatLng(marker);
-    sum.lat += latLng.lat;
-    sum.lng += latLng.lng;
-    return sum;
-  }, {lat: 0, lng: 0});
-
-  return {
-    lat: total.lat / markers.length,
-    lng: total.lng / markers.length,
-  };
-}
-
-function getMarkerPoint(map, marker) {
-  return map.project(marker.getLatLng(), map.getZoom());
-}
-
-function getPointDistanceSquared(pointA, pointB) {
-  const dx = pointA.x - pointB.x;
-  const dy = pointA.y - pointB.y;
-  return dx * dx + dy * dy;
-}
-
-function getMarkerGroups(markers, map, radiusPixels = CLUSTER_RADIUS_PIXELS) {
-  const groups = [];
-  const radiusSquared = radiusPixels * radiusPixels;
-
-  markers.forEach(marker => {
-    const point = getMarkerPoint(map, marker);
-    let nearestGroup = null;
-    let nearestDistance = radiusSquared;
-
-    groups.forEach(group => {
-      const distance = getPointDistanceSquared(point, group.point);
-      if (distance <= nearestDistance) {
-        nearestGroup = group;
-        nearestDistance = distance;
-      }
-    });
-
-    if (!nearestGroup) {
-      groups.push({markers: [marker], point});
-      return;
-    }
-
-    nearestGroup.markers.push(marker);
-    const markerCount = nearestGroup.markers.length;
-    nearestGroup.point = {
-      x: nearestGroup.point.x + ((point.x - nearestGroup.point.x) / markerCount),
-      y: nearestGroup.point.y + ((point.y - nearestGroup.point.y) / markerCount),
-    };
-  });
-
-  return groups;
-}
-
-function makeClusterMarker(markers, leaflet=L) {
-  const count = markers.length;
-  const icon = leaflet.divIcon({
-    html: `<div><span>${count}</span></div>`,
-    className: `marker-cluster ${getMarkerClusterClass(count)}`,
-    iconSize: leaflet.point ? leaflet.point(40, 40) : [40, 40],
-  });
-  const clusterMarker = leaflet.marker(getAverageLatLng(markers), {
-    icon,
-    keyboard: false,
-    title: `${count} inscriptions`,
-  });
-  clusterMarker._rundataClusterMarkers = markers;
-  return clusterMarker;
-}
-
-function addMarkerToDirectLayer(marker, directMarkers) {
-  bindDirectMarkerClick(marker);
-  directMarkers.addLayer(marker);
-}
-
-export function createClusteredMarkerDisplayLayer(map, leaflet=L) {
-  const markers = leaflet.markerClusterGroup({
-    showCoverageOnHover: true,
-    chunkedLoading: true,
-    maxClusterRadius: CLUSTER_RADIUS_PIXELS,
-  });
-  markers.on('click', onMarkerClicked);
-  markers.addTo(map);
-  return markers;
-}
-
-export function createMobileMarkerDisplayLayer(map, leaflet=L, minClusteredMarkers = MIN_CLUSTERED_MARKERS) {
-  const directMarkers = leaflet.layerGroup();
-  const clusterMarkers = leaflet.layerGroup();
-  let currentMarkers = [];
-
-  directMarkers.addTo(map);
-  clusterMarkers.addTo(map);
-
-  const renderMarkers = () => {
-    directMarkers.clearLayers();
-    clusterMarkers.clearLayers();
-
-    if (currentMarkers.length < minClusteredMarkers) {
-      currentMarkers.forEach(marker => addMarkerToDirectLayer(marker, directMarkers));
-      return;
-    }
-
-    getMarkerGroups(currentMarkers, map).forEach(group => {
-      if (group.markers.length < minClusteredMarkers) {
-        group.markers.forEach(marker => addMarkerToDirectLayer(marker, directMarkers));
-        return;
-      }
-
-      const clusterMarker = makeClusterMarker(group.markers, leaflet);
-      if (typeof clusterMarker.on === 'function') {
-        clusterMarker.on('click', function() {
-          if (typeof map.fitBounds === 'function') {
-            map.fitBounds(group.markers.map(marker => marker.getLatLng()));
-          }
-        });
-      }
-      clusterMarkers.addLayer(clusterMarker);
-    });
-  };
-
-  if (typeof map.on === 'function') {
-    map.on('zoomend', renderMarkers);
-  }
-
-  return {
-    clearLayers() {
-      currentMarkers = [];
-      directMarkers.clearLayers();
-      clusterMarkers.clearLayers();
-    },
-    addLayers(markers) {
-      currentMarkers = Array.isArray(markers) ? markers : [markers];
-      renderMarkers();
-    },
-  };
-}
-
-export function createMarkerDisplayLayer(map, leaflet=L, minClusteredMarkers = MIN_CLUSTERED_MARKERS) {
-  if (isMobileDevice()) {
-    return createMobileMarkerDisplayLayer(map, leaflet, minClusteredMarkers);
-  }
-  return createClusteredMarkerDisplayLayer(map, leaflet);
-}
-
 // Initialize the map on the user-provided div with a given center and zoom level
 // Default center is [56.607512, 16.439838] and default zoom is 8.
 export function initMap(divId, center = [56.607512, 16.439838], zoom = 8) {
@@ -250,7 +45,15 @@ export function initMap(divId, center = [56.607512, 16.439838], zoom = 8) {
     }
   });
 
-  const markers = createMarkerDisplayLayer(map);
+  const markers = L.markerClusterGroup({
+    showCoverageOnHover: true,
+    chunkedLoading: true,
+    maxClusterRadius: 60,
+  });
+  markers.on('click', function (e) {
+    scrollToInscription(e.layer.options.signature, e.layer.options.id);
+  });
+  markers.addTo(map);
 
   return {map, markers};
 }
@@ -330,24 +133,23 @@ function makeMobileTooltipOpenPopup(marker, tooltip) {
   tooltipElement.dataset.mobilePopupTrigger = 'true';
   tooltipElement.setAttribute('role', 'button');
   tooltipElement.setAttribute('tabindex', '0');
-  tooltipElement.setAttribute('aria-label', 'Show inscription information');
+  tooltipElement.setAttribute('aria-label', 'Open Drive here and warnings');
 
-  const showInfoFromTooltip = (event) => {
+  const openPopupFromTooltip = (event) => {
     if (event && typeof event.preventDefault === 'function') {
       event.preventDefault();
     }
     if (event && typeof event.stopPropagation === 'function') {
       event.stopPropagation();
     }
-    activateMarker(marker);
     marker.openPopup();
   };
 
-  tooltipElement.addEventListener('click', showInfoFromTooltip);
-  tooltipElement.addEventListener('touchend', showInfoFromTooltip);
+  tooltipElement.addEventListener('click', openPopupFromTooltip);
+  tooltipElement.addEventListener('touchend', openPopupFromTooltip);
   tooltipElement.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
-      showInfoFromTooltip(event);
+      openPopupFromTooltip(event);
     }
   });
 }
@@ -491,7 +293,9 @@ export function showMarkers({
     return;
   }
 
-  const markersToShow = [];
+  // clear any markers from the map
+  markersLayer.clearLayers();
+
   for (let i = 0; i < inscriptionIds.length; i++) {
     const key = inscriptionIds[i];
     if (!allMarkers.has(key)) {
@@ -499,11 +303,9 @@ export function showMarkers({
     }
     const inscriptionMarkers = allMarkers.get(key);
     const markerToShow = showOriginalLocation ? inscriptionMarkers.found : inscriptionMarkers.present;
-    markersToShow.push(markerToShow);
+    markersLayer.addLayers(markerToShow);
     markersLatLon.push(markerToShow.getLatLng());
   }
-
-  markersLayer.addLayers(markersToShow);
 
   if (markersLatLon.length > 0 && !preserveMapArea) {
     mapObject.fitBounds(markersLatLon);
