@@ -790,6 +790,7 @@ function buildPhraseRule({
   };
 }
 
+
 test('phrase contains: finds record with consecutive matching tokens in normalization', () => {
   const records = [
     makeWordSearchRecord({ id: 'T1', norseWords: ['raised', 'the', 'stone', 'in', 'memory', 'of'] }),
@@ -800,6 +801,38 @@ test('phrase contains: finds record with consecutive matching tokens in normaliz
   assert.is(result.length, 1, 'Only T1 should match the phrase "in memory"');
   assert.is(result[0].id, 'T1');
   assert.equal(result[0].matchDetails.wordIndices, [3, 4], 'Matched word indices span the phrase');
+});
+
+test('aligned NOT excludes an initial rune only on the target normalized word', () => {
+  const records = [
+    makeWordSearchRecord({ id: 'KEEP_TARGET_WITHOUT_H', norseWords: ['hiogg'], scandinavianWords: ['hiogg'], translitWords: ['iuk'] }),
+    makeWordSearchRecord({ id: 'EXCLUDE_TARGET_WITH_H', norseWords: ['hiogg'], scandinavianWords: ['hiogg'], translitWords: ['hiuk'] }),
+    makeWordSearchRecord({ id: 'KEEP_UNRELATED_H', norseWords: ['hiogg', 'halfborinn'], scandinavianWords: ['hiogg', 'halfborinn'], translitWords: ['iuk', 'halfburin'] }),
+  ];
+  const positiveRule = buildPhraseRule({
+    id: 'normalization_scandinavian_to_transliteration',
+    operator: 'contains',
+    normalization: 'hiogg',
+  }).rules[0];
+  const alignedInitialHRule = buildPhraseRule({
+    id: 'normalization_scandinavian_to_transliteration',
+    operator: 'begins_with',
+    normalization: 'hiogg',
+    transliteration: 'h',
+  }).rules[0];
+  const rules = {
+    condition: 'AND',
+    rules: [
+      positiveRule,
+      { condition: 'AND', rules: [alignedInitialHRule], not: true },
+    ],
+    not: false,
+    valid: true,
+  };
+
+  const result = doSearch(rules, records);
+
+  assert.equal(result.map(record => record.id), ['KEEP_TARGET_WITHOUT_H', 'KEEP_UNRELATED_H']);
 });
 
 test('phrase contains: substring on every token (including middle)', () => {
