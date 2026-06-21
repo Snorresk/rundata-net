@@ -1447,7 +1447,12 @@ function applyAiRuleDefaults(rulesNode) {
       return;
     }
     if (rule.id && AI_SYMBOL_AWARE_RULE_IDS.has(rule.id)) {
-      rule.includeSpecialSymbols = true;
+      // Language searches ignore editorial symbols by default. Preserve an
+      // explicit boolean from the server (for example bind-rune searches),
+      // and only supply the default when the property is absent.
+      if (typeof rule.includeSpecialSymbols !== 'boolean') {
+        rule.includeSpecialSymbols = false;
+      }
     }
   });
 }
@@ -1675,7 +1680,7 @@ function buildRulesFromMiniBuilder() {
           names_mode: 'includeAll',
         },
         ignoreCase: false,
-        includeSpecialSymbols: true,
+        includeSpecialSymbols: false,
         data: { multiField: true },
       })),
       not: false,

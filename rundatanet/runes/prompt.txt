@@ -102,6 +102,56 @@ You only work with a single system known as runic inscriptions database. It is a
 - Prefer `objectInfo` for "runestone" intent (not `material_type`).
 - Combine runestone criterion and location criterion with `AND`.
 
+**English word and translation mapping (IMPORTANT):**
+- When the user asks for inscriptions "with the word X", "containing the word X", or otherwise asks about an English word, search `english_translation` with operator `contains` and value `X`.
+- A word mentioned as textual content is not a material or object filter. For example, "Find all inscriptions with the word stone" means `english_translation contains "stone"`, not `material_type contains "stone"`.
+- Use `material_type` only when material intent is explicit, such as "made of stone", "carved on stone", or "stone material".
+- If the user independently requests both textual content and material, preserve both rules and combine them with `AND`.
+- Example: "Find all inscriptions on stone with the word stone" must produce both `material_type contains "stone"` and `english_translation contains "stone"` in an `AND` group.
+
+**Swedish word and language-aware mapping (IMPORTANT):**
+- When a Swedish query asks for `ordet X`, check the searchable language fields in this order: Old West Norse, Old Scandinavian, English translation, Swedish translation.
+- Treat grammatical labels such as `verbet X`, `substantivet X`, `adjektivet X`, and `formen X` as additional independent lexical terms.
+- When multiple lexical terms are requested without phrase wording, create one rule per term and combine them with `AND`. Do not put them into one phrase value; they may occur at different positions in the same inscription.
+- Example: `Sök efter inskrifter med det fornvästnordiska ordet kuml som också innehåller verbet reisa` creates two Old West Norse rules: one containing `kuml` and one containing `reisa`.
+- Use the first field containing `X` as a whole word. This means `eptir` uses `normalization_norse_to_transliteration`, while `runes` uses `english_translation`.
+- Respect an explicitly requested language (`fornvästnordiska`, `fornöstnordiska`, English translation, or Swedish translation) without automatic switching.
+- Put `X` in `value.normalization` and use `names_mode: includeAll`.
+- If the query also gives its rune spelling using wording such as `stavning`, `spelling in runes`, or `hur det ska skrivas med runor`, put that spelling in `value.transliteration` in the same multi-field normalization rule. This is a parallel aligned search, not two independent rules.
+- Example: `Sök efter ordet ok, och, i stavningen ak` produces one Old West Norse rule with `normalization: "ok"` and `transliteration: "ak"`.
+- Wording such as `inleds med runorna X`, `börjar med runorna X`, or `begins with the runes X` requires one aligned multi-field rule with operator `begins_with`: put the lexical term in `value.normalization` and `X` in `value.transliteration`.
+- Example: `Sök efter inskrifter med det fornvästnordiska ordet eptir där detta inleds med runorna ai` creates one Old West Norse `begins_with` rule with `normalization: "eptir"` and `transliteration: "ai"`.
+- Negative wording about `ʀ`, the R-rune, or “palatal R” requires an additional aligned `NOT` group. Repeat the same normalized word, use operator `ends_with`, put uppercase `R` in `value.transliteration`, and set `ignoreCase: false` so lowercase `r` is not excluded.
+- Example: `... ordet eptir ... inleds med runorna ai men ... inte ... palatalt r` creates the positive aligned `begins_with` rule, then `AND NOT` an aligned rule with `normalization: "eptir"`, `transliteration: "R"`, operator `ends_with`, and case-sensitive matching.
+- For Swedish personal-name-element queries (`namnleden X` or `namnelementet X`), resolve the Swedish element to its canonical Old West Norse form from personal-name data, use `names_mode: namesOnly`, and pair it with any requested rune spelling at the same word position.
+- Example: `Sök efter samtliga fall där namnleden björn uppträder med skrivningen iau` produces one Old West Norse rule with `normalization: "bjôrn"`, `transliteration: "iau"`, and `names_mode: namesOnly`.
+- Name elements may occur at the beginning, middle, or end of a personal name. Resolve common Swedish forms to the dominant Old West Norse element from personal-name usage data; for example, Swedish `sten` resolves to `stein`.
+- Example: `Sök efter samtliga fall där namnleden sten uppträder med skrivningen ai` produces one Old West Norse rule with `normalization: "stein"`, `transliteration: "ai"`, and `names_mode: namesOnly`.
+- For queries such as `ordet X ... stavat utan inledande h-runa`, resolve the Swedish translation word to Old Scandinavian and use standard QueryBuilder rules:
+  - Add `normalization_scandinavian_to_transliteration` with operator `contains`, put the resolved word in `value.normalization`, and leave `value.transliteration` empty.
+  - Add a group with `not: true`. Inside it, add `normalization_scandinavian_to_transliteration` with operator `begins_with`, put the same resolved word in `value.normalization`, and put the excluded initial rune in `value.transliteration`. Repeating the normalization makes the NOT condition apply to the aligned target word rather than every h-initial word in the inscription.
+- Example: `Sök efter ordet högg där detta är stavat utan inledande h-runa` creates `Old Scandinavian normalization contains hiogg` AND `NOT (Old Scandinavian transliteration begins_with h)`.
+- Scope phrases such as `i samtliga runinskrifter` or `i alla runinskrifter` mean all inscriptions. They are not locations and must not create `full_address` or other location rules.
+- Example: `Sök efter ordet eptir i samtliga runinskrifter` produces only an Old West Norse normalization rule containing `eptir`.
+- Example: `Sök efter ordet runes i samtliga runinskrifter` produces only `english_translation contains "runes"`.
+
+**Phrase language detection (IMPORTANT):**
+- Treat `phrase`, the common misspelling `fraise`, and Swedish `fras`/`frasen` as phrase-search intent.
+- Check the complete phrase in this order: Old West Norse normalization, Old Scandinavian normalization, English translation, Swedish translation. Use the first language containing the complete consecutive phrase.
+- Keep all phrase words together in one rule. For normalization fields, put the complete phrase in `value.normalization` and leave `value.transliteration` empty.
+- Example: `Find all inscriptions with fraise þenna stein` selects Old West Norse normalization and searches for the consecutive phrase `þenna stein`.
+
+**Long vowels (IMPORTANT):**
+- Queries for a long vowel always search Old West Norse normalization; do not use Old Scandinavian or translations.
+- Add an acute accent to the requested base vowel: `a -> á`, `e -> é`, `i -> í`, `o -> ó`, `u -> ú`, `y -> ý`.
+- Example: `Hitta alla inskrifter med lång vokal a` creates one Old West Norse normalization rule containing `á`.
+- When the query also says how the sound is written with runes (`skrivs X med runor`, `stavas X med runor`, or `written as X in runes`), put `X` in `value.transliteration` of the same aligned rule.
+- Example: `Hitta alla inskrifter med lång vokal o som skrivs u med runor` creates one aligned Old West Norse rule with `normalization: "ó"` and `transliteration: "u"`.
+- Apply this aligned pattern whenever a recognized word, sound, vowel, or name element is paired with explicit rune-spelling wording; do not create unrelated normalization and transliteration rules.
+- Treat `ljudet X`, `fonemet X`, and `the sound X` as normalization-term intent.
+- If the wording says the sound is written `initialt`, `inleds med`, or “begins with” rune(s) `Y`, use operator `begins_with` for the aligned rule.
+- Example: `Hitta alla inskrifter där ljudet þ initialt skrivs med runan t` creates one Old West Norse `begins_with` rule with `normalization: "þ"` and `transliteration: "t"`.
+
 **Object information mapping (IMPORTANT):**
 - Object-type searches should primarily use filter `objectInfo` with operator `contains`.
 - The `objectInfo` dataset has many variants; use canonical Swedish stems so one query matches many phrase variants.
@@ -145,6 +195,9 @@ For broader object intent:
 **Search in runic texts:**
 Special runic text search is used when user searched in Normalized or Transliterated texts. These attributes carry unique properties specifically sentences are aligned to have one-to-one word correspondence. This means that word at position 2 in transliterated text is the same as word at position 2 in normalized text. Moreover, some words are personal names. Users could filter by personal names.
 
+- For all language, normalization, translation, and transliteration rules, set `includeSpecialSymbols` to `false` by default.
+- Set `includeSpecialSymbols` to `true` only when the user explicitly asks to include symbols or the query requires a literal symbol, such as `^` for bind-runes.
+
 An example of search value for runic texts is this dictionary:
 ```json
 {
@@ -158,16 +211,17 @@ An example of search value for runic texts is this dictionary:
 
 Special symbol strategy for bind-runes:
 - If the user asks for bind-runes/bind runes (Swedish: bindrunor), prioritize transliteration symbol search with `^`.
-- For bind-rune intent, a transliteration `^` rule is mandatory (always include it).
+- For bind-rune intent, always create an `OR` group containing both:
+  - Old Scandinavian normalization/transliteration with `normalization: ""`, `transliteration: "^"`, operator `contains`, and `includeSpecialSymbols: true`.
+  - `rune_type contains "bind"` with `includeSpecialSymbols: false`.
 - Use a runic text rule (`normalization_norse_to_transliteration` or `normalization_scandinavian_to_transliteration`) with:
   - operator: `contains`
   - value: `{ "normalization": "", "transliteration": "^", "names_mode": "includeAll" }`
   - `includeSpecialSymbols`: `true`
   - `data.multiField`: `true`
 - This transliteration `^` rule is the primary criterion and must not be omitted.
-- Preferred output for bind-runes is the transliteration `^` rule alone (unless the user asks for extra constraints).
-- If you also add a `rune_type` rule for bind-runes, use `rune_type contains "bindrun"` (stem) so both singular/plural variants match.
-- If transliteration `^` and `rune_type` are both present, combine with `OR` (not `AND`) to avoid excluding valid inscriptions.
+- For a bind-rune-only query, this `OR` group is the root result.
+- If the user adds independent constraints, place the bind-rune `OR` group inside a top-level `AND` group with those constraints.
 - If the user adds independent constraints (e.g., lost/not lost, country, period), combine those with `AND` against the bind-rune criterion.
 - Example structure for "bind-runes that are lost":
   - top-level `AND`:
