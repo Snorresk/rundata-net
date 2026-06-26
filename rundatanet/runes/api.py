@@ -387,6 +387,7 @@ def _extract_location_terms(user_text: str) -> list[str]:
     stop_words = {
         "which",
         "that",
+        "where",
         "som",
         "with",
         "med",
@@ -528,6 +529,9 @@ def _extract_lost_constraint(user_text: str) -> Optional[int]:
 
 def _extract_english_translation_terms(user_text: str) -> list[str]:
     """Extract words explicitly requested as English lexical content."""
+    if _extract_aligned_word_spelling(user_text):
+        return []
+
     text = user_text or ""
     terms: list[str] = []
     patterns = [
@@ -555,6 +559,31 @@ def _extract_swedish_word_terms(user_text: str) -> list[str]:
         if term and term.lower() not in {value.lower() for value in terms}:
             terms.append(term)
     return terms
+
+
+def _extract_aligned_word_spelling(user_text: str) -> Optional[tuple[str, str]]:
+    """Extract "word X is written with runes Y" as normalization + transliteration.
+
+    English "word X" normally means an English translation word in this app, but
+    when the same clause says how that word is written with runes, X is the
+    normalized runic word and Y is the aligned transliteration.
+    """
+    text = user_text or ""
+    word = r"[\wþðæøœÞÐÆØŒ^'’-]+"
+    patterns = (
+        rf"\b(?:the\s+)?word\s+[\"'“”]?({word})[\"'“”]?\s+"
+        rf"(?:is|was|being)?\s*(?:written|spelled|spelt)\s+with\s+runes?\s+[\"'“”]?({word})",
+        rf"\bwhere\s+(?:the\s+)?word\s+[\"'“”]?({word})[\"'“”]?\s+"
+        rf"(?:is|was|being)?\s*(?:written|spelled|spelt)\s+with\s+runes?\s+[\"'“”]?({word})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            normalized = match.group(1).strip(" .,!?:;\"'“”")
+            transliteration = match.group(2).strip(" .,!?:;\"'“”")
+            if normalized and transliteration:
+                return normalized, transliteration
+    return None
 
 
 def _extract_sound_term(user_text: str) -> Optional[str]:
@@ -651,6 +680,10 @@ def _extract_name_element(user_text: str) -> Optional[str]:
 
 def _extract_rune_spelling(user_text: str) -> Optional[str]:
     """Extract an explicitly supplied runic spelling/transliteration."""
+    aligned = _extract_aligned_word_spelling(user_text)
+    if aligned:
+        return aligned[1]
+
     text = user_text or ""
     word = r"[\wþðæøœÞÐÆØŒ^'’-]+"
     separator = r"\s*(?:(?:är|is|as|som)\s*)?[:=,-]?\s*"
@@ -666,6 +699,56 @@ def _extract_rune_spelling(user_text: str) -> Optional[str]:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
             return match.group(1).strip(" .,!?:;\"'“”")
+    return None
+
+
+def _extract_standalone_transliteration_rune(user_text: str) -> Optional[str]:
+    """Extract independent transliteration intent such as "uses rune o".
+
+    This is not aligned to a requested normalized word; it means the inscription
+    transliteration should contain the rune sequence anywhere.
+    """
+    if (
+        _has_bind_rune_intent(user_text)
+        or _extract_aligned_word_spelling(user_text)
+        or _extract_swedish_word_terms(user_text)
+        or _extract_sound_term(user_text)
+        or _extract_long_vowel(user_text)
+        or _extract_name_element(user_text)
+    ):
+        return None
+
+    text = user_text or ""
+    word = r"[\wþðæøœÞÐÆØŒ^'’-]+"
+    blocked_values = {
+        "i",
+        "in",
+        "fran",
+        "från",
+        "from",
+        "med",
+        "with",
+        "using",
+        "anvander",
+        "använder",
+        "som",
+        "that",
+        "which",
+        "och",
+        "and",
+    }
+    patterns = (
+        rf"\b(?:runan|runa|runorna|runor|rune|runes)\s+[\"'“”]?({word})\b",
+        rf"\b(?:använder|anvander|brukar|innehåller|innehaller|har)\s+run(?:an|orna|or)\s+[\"'“”]?({word})",
+        rf"\b(?:uses?|using|contains?|has)\s+(?:the\s+)?runes?\s+[\"'“”]?({word})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            value = match.group(1).strip(" .,!?:;\"'“”")
+            if _fold_text(value) in blocked_values:
+                continue
+            return value
     return None
 
 
@@ -1104,11 +1187,18 @@ def _get_style_values() -> tuple[tuple[str, str], ...]:
 
 
 def _clean_carver_value(value: str) -> str:
-    cleaned = (value or "").strip(" .,!?:;\"'()[]{}")
+    cleaned = (value or "").strip(" .,!?:;\"'[]{}")
+    cleaned = re.sub(r"\s*\([AS]\)\s*", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = re.sub(
+        r"^(?:the\s+)?(?:rune-?carver|carver|runristare[n]?|ristare[n]?)\s+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
     # Stop at the next independent constraint phrase.
     cleaned = re.split(
-        r"\b(?:in|i|from|från|under|during|with|med|period|dating|style|stil|pr(?:ofil|ofile|file|of)?\.?\s*\d+)\b",
+        r"\b(?:in|i|from|från|under|during|with|med|som|that|which|period|dating|style|stil|pr(?:ofil|ofile|file|of)?\.?\s*\d+)\b",
         cleaned,
         maxsplit=1,
         flags=re.IGNORECASE,
@@ -1116,27 +1206,117 @@ def _clean_carver_value(value: str) -> str:
     return cleaned
 
 
+def _extract_carver_status(user_text: str) -> Optional[str]:
+    """Return the requested carver relationship marker: S=signed, A=attributed."""
+    text = user_text or ""
+    marker_match = re.search(r"\(([AS])\)", text, flags=re.IGNORECASE)
+    if marker_match:
+        return marker_match.group(1).upper()
+
+    folded = _fold_text(text)
+    if re.search(r"\b(?:attributed|ascribed|attribuer\w*|tillskriv\w*)\b", folded):
+        return "A"
+    if re.search(
+        r"\b(?:signed|signerad\w*|signerat|signerade|ristarsignatur\w*|"
+        r"ristarens?\s+signatur|carver'?s?\s+signature|rune-?carver'?s?\s+signature)\b",
+        folded,
+    ):
+        return "S"
+    return None
+
+
+def _make_carver_status_value(status: str) -> str:
+    return f"({status.upper()})"
+
+
+def _split_carver_status_value(value: Any) -> Optional[tuple[str, str]]:
+    if not isinstance(value, str):
+        return None
+    marker_match = re.search(r"\(([AS])\)", value, flags=re.IGNORECASE)
+    if not marker_match:
+        return None
+    marker = _make_carver_status_value(marker_match.group(1))
+    name = _clean_carver_value(value)
+    return name, marker
+
+
+def _split_carver_status_rules(root: dict[str, Any]) -> None:
+    """Split `Öpir (A)` style carver rules into name + marker rules.
+
+    The carver field may contain variants such as `Öpir 1 (A)`, so a single
+    `contains "Öpir (A)"` rule can be too narrow. Keeping the marker as its
+    own rule preserves the signed/attributed distinction without losing named
+    variants.
+    """
+    rewritten: list[dict[str, Any]] = []
+    for rule in root.get("rules", []):
+        if not isinstance(rule, dict):
+            continue
+        if _is_group(rule):
+            _split_carver_status_rules(rule)
+            rewritten.append(rule)
+            continue
+        if rule.get("id") != "carver":
+            rewritten.append(rule)
+            continue
+        split_value = _split_carver_status_value(rule.get("value"))
+        if not split_value:
+            rewritten.append(rule)
+            continue
+        name, marker = split_value
+        marker_rule = _make_contains_rule("carver", "carver", marker)
+        if name:
+            rewritten.append(
+                {
+                    "condition": "AND",
+                    "rules": [
+                        _make_contains_rule("carver", "carver", name),
+                        marker_rule,
+                    ],
+                    "not": False,
+                    "valid": True,
+                }
+            )
+        else:
+            rewritten.append(marker_rule)
+    root["rules"] = rewritten
+
+
 def _extract_carver_constraints(user_text: str) -> list[dict[str, str]]:
     text = user_text or ""
     constraints: list[dict[str, str]] = []
     seen: set[str] = set()
+    status = _extract_carver_status(user_text)
+    name_chars = r"A-Za-zÅÄÖåäöÉéÜü0-9.\- "
     patterns = [
-        r"\b(?:made|carved|cut|ristad|ristade|ristat|gjord|gjorda)\s+by\s+([A-Za-zÅÄÖåäöÉéÜü.\- ]{2,})",
-        r"\b(?:made\s+by|carved\s+by|cut\s+by)\s+([A-Za-zÅÄÖåäöÉéÜü.\- ]{2,})",
-        r"\b(?:av|by)\s+([A-ZÅÄÖÜÉ][A-Za-zÅÄÖåäöÉéÜü.\- ]{1,})",
+        rf"\b(?:attributed|ascribed)\s+to\s+(?:the\s+)?(?:rune-?carver|carver)?\s*([A-ZÅÄÖÜÉ][{name_chars}]{{1,}})",
+        rf"\b(?:attribuer\w*|tillskriv\w*)\s+(?:till\s+)?(?:runristare[n]?|ristare[n]?)?\s*([A-ZÅÄÖÜÉ][{name_chars}]{{1,}})",
+        rf"\b(?:signed|signerad\w*|signerat|signerade)\s+(?:by|av)\s+(?:the\s+)?(?:rune-?carver|carver|runristare[n]?|ristare[n]?)?\s*([A-ZÅÄÖÜÉ][{name_chars}]{{1,}})",
+        rf"\b(?:ristarsignatur\w*|ristarens?\s+signatur|carver'?s?\s+signature|rune-?carver'?s?\s+signature)\s+(?:by|av|för|for)?\s*(?:the\s+)?(?:rune-?carver|carver|runristare[n]?|ristare[n]?)?\s*([A-ZÅÄÖÜÉ][{name_chars}]{{1,}})",
+        rf"\b(?:made|carved|cut|ristad|ristade|ristat|gjord|gjorda)\s+(?:by|av)\s+(?:the\s+)?(?:rune-?carver|carver|runristare[n]?|ristare[n]?)?\s*([A-ZÅÄÖÜÉ][{name_chars}]{{1,}})",
+        rf"\b(?:runristare[n]?|ristare[n]?|rune-?carver|carver)\s+([A-ZÅÄÖÜÉ][{name_chars}]{{1,}})",
+        rf"\b(?:av|by)\s+([A-ZÅÄÖÜÉ][{name_chars}]{{1,}})",
     ]
+
+    def add_constraint(value: str) -> None:
+        folded = _fold_text(value)
+        if folded in {"alla", "all", "inscriptions", "inskrifter", "these", "dessa"}:
+            return
+        if folded in seen:
+            return
+        seen.add(folded)
+        constraints.append({"id": "carver", "field": "carver", "value": value})
+
     for pattern in patterns:
         for match in re.finditer(pattern, text, flags=re.IGNORECASE):
             value = _clean_carver_value(match.group(1))
             if len(value) < 2:
                 continue
-            folded = _fold_text(value)
-            if folded in {"alla", "all", "inscriptions", "inskrifter", "these", "dessa"}:
-                continue
-            if folded in seen:
-                continue
-            seen.add(folded)
-            constraints.append({"id": "carver", "field": "carver", "value": value})
+            add_constraint(value)
+
+    if status:
+        add_constraint(_make_carver_status_value(status))
+
     return constraints
 
 
@@ -1221,6 +1401,7 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
 
     root = _normalize_root(parsed)
     text = (user_text or "").lower()
+    _split_carver_status_rules(root)
 
     bind_rune_intent = _has_bind_rune_intent(user_text)
     if bind_rune_intent:
@@ -1321,6 +1502,54 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
                 operator="begins_with" if _extract_required_initial_runes(user_text) else "contains",
             ),
         )
+
+    aligned_word_spelling = _extract_aligned_word_spelling(user_text)
+    if aligned_word_spelling:
+        term, spelling = aligned_word_spelling
+        language_rule_ids = {
+            "normalization_norse_to_transliteration",
+            "normalization_scandinavian_to_transliteration",
+            "english_translation",
+            "swedish_translation",
+        }
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") in language_rule_ids
+            and (
+                _rule_has_word_term(rule, term)
+                or _fold_text(rule.get("value")) == _fold_text(term)
+            ),
+        )
+        root = _append_and_constraint(
+            root,
+            _make_requested_word_rule(user_text, term, transliteration=spelling),
+        )
+
+    standalone_transliteration_rune = _extract_standalone_transliteration_rune(user_text)
+    if standalone_transliteration_rune:
+        normalization_rule_ids = {
+            "normalization_norse_to_transliteration",
+            "normalization_scandinavian_to_transliteration",
+        }
+
+        def has_matching_transliteration_rule() -> bool:
+            for rule in _iter_rules(root):
+                if rule.get("id") not in normalization_rule_ids:
+                    continue
+                value = rule.get("value")
+                if isinstance(value, dict) and value.get("transliteration") == standalone_transliteration_rune:
+                    return True
+            return False
+
+        if not has_matching_transliteration_rule():
+            root = _append_and_constraint(
+                root,
+                _make_normalization_rule(
+                    "",
+                    old_west_norse=False,
+                    transliteration=standalone_transliteration_rune,
+                ),
+            )
 
     swedish_word_terms = _extract_swedish_word_terms(user_text)
     required_initial_runes = _extract_required_initial_runes(user_text) or ""
@@ -1504,6 +1733,21 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
             )
         )
 
+    aligned_word_spelling = _extract_aligned_word_spelling(user_text)
+    if aligned_word_spelling:
+        term, spelling = aligned_word_spelling
+        rules.append(_make_requested_word_rule(user_text, term, transliteration=spelling))
+
+    standalone_transliteration_rune = _extract_standalone_transliteration_rune(user_text)
+    if standalone_transliteration_rune:
+        rules.append(
+            _make_normalization_rule(
+                "",
+                old_west_norse=False,
+                transliteration=standalone_transliteration_rune,
+            )
+        )
+
     required_initial_runes = _extract_required_initial_runes(user_text) or ""
     rune_spelling = required_initial_runes or _extract_rune_spelling(user_text) or ""
     excluded_initial_rune = _extract_excluded_initial_rune(user_text) or ""
@@ -1602,6 +1846,25 @@ def _is_simple_deterministic_query(user_text: str, fallback_rules: Optional[str]
     sound_term = _extract_sound_term(user_text)
     if sound_term:
         text = re.sub(rf"\b{re.escape(sound_term.lower())}\b", "", text)
+    aligned_word_spelling = _extract_aligned_word_spelling(user_text)
+    if aligned_word_spelling:
+        term, spelling = aligned_word_spelling
+        text = re.sub(rf"\b{re.escape(term.lower())}\b", "", text)
+        text = re.sub(rf"\b{re.escape(spelling.lower())}\b", "", text)
+        text = re.sub(
+            r"\b(?:where|the|word|is|was|being|written|spelled|spelt|with|runes?|runic)\b",
+            "",
+            text,
+        )
+    standalone_transliteration_rune = _extract_standalone_transliteration_rune(user_text)
+    if standalone_transliteration_rune:
+        text = re.sub(rf"\b{re.escape(standalone_transliteration_rune.lower())}\b", "", text)
+        text = re.sub(
+            r"\b(?:använder|anvander|brukar|innehåller|innehaller|har|uses?|using|"
+            r"contains?|has|the|runan|runorna|runor|runes?|rune)\b",
+            "",
+            text,
+        )
     rune_spelling = _extract_rune_spelling(user_text)
     if rune_spelling:
         text = re.sub(rf"\b{re.escape(rune_spelling.lower())}\b", "", text)
@@ -1620,6 +1883,18 @@ def _is_simple_deterministic_query(user_text: str, fallback_rules: Optional[str]
     name_element = _extract_name_element(user_text)
     if name_element:
         text = re.sub(rf"\b{re.escape(name_element.lower())}\b", "", text)
+    for item in _extract_carver_constraints(user_text):
+        value = str(item.get("value") or "").lower()
+        if value:
+            text = re.sub(re.escape(value), "", text)
+    if _extract_carver_constraints(user_text):
+        text = re.sub(
+            r"\b(?:carvers?|rune-?carvers?|ristare|runristare|signed|signerad\w*|signerat|"
+            r"signerade|ristarsignatur\w*|signature|attributed|ascribed|attribuer\w*|"
+            r"tillskriv\w*|made|carved|cut|ristad|ristade|ristat|gjord|gjorda|by|av|to|till)\b",
+            "",
+            text,
+        )
     # If the query contains additional advanced intents, let LLM handle composition.
     advanced_markers = (
         "rune",

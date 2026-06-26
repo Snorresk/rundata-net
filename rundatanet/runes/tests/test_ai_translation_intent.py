@@ -5,6 +5,9 @@ from django.test import SimpleTestCase
 
 from rundatanet.runes.api import (
     _build_rules_fallback_from_text,
+    _extract_aligned_word_spelling,
+    _extract_carver_constraints,
+    _extract_carver_status,
     _extract_english_translation_terms,
     _extract_excluded_initial_rune,
     _extract_long_vowel,
@@ -13,6 +16,7 @@ from rundatanet.runes.api import (
     _extract_phrase_query,
     _extract_required_initial_runes,
     _extract_sound_term,
+    _extract_standalone_transliteration_rune,
     _excludes_palatal_r,
     _extract_rune_spelling,
     _extract_swedish_word_terms,
@@ -212,6 +216,32 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         for prompt in prompts:
             with self.subTest(prompt=prompt):
                 self.assertEqual(_extract_rune_spelling(prompt), "ak")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_west_norse")
+    def test_english_word_written_with_runes_pairs_normalization_and_transliteration(
+        self, _language, _styles, _objects
+    ):
+        prompt = "Find all inscriptions in Sweden where the word stæin is written with runes stan"
+
+        self.assertEqual(_extract_aligned_word_spelling(prompt), ("stæin", "stan"))
+        self.assertEqual(_extract_rune_spelling(prompt), "stan")
+        self.assertEqual(_extract_english_translation_terms(prompt), [])
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(result["condition"], "AND")
+        self.assertEqual(len(result["rules"]), 2)
+        country_rule, word_rule = result["rules"]
+        self.assertEqual(country_rule["id"], "inscription_country")
+        self.assertEqual(country_rule["value"], ["all_sweden"])
+        self.assertEqual(word_rule["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(
+            word_rule["value"],
+            {"normalization": "stæin", "transliteration": "stan", "names_mode": "includeAll"},
+        )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
@@ -547,4 +577,127 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(
             rule["value"],
             {"normalization": "þ", "transliteration": "t", "names_mode": "includeAll"},
+        )
+
+
+class CarverIntentTests(SimpleTestCase):
+    def test_attributed_carver_adds_name_and_a_marker(self):
+        prompt = "Find inscriptions attributed to the carver Öpir"
+
+        self.assertEqual(_extract_carver_status(prompt), "A")
+        self.assertEqual(
+            _extract_carver_constraints(prompt),
+            [
+                {"id": "carver", "field": "carver", "value": "Öpir"},
+                {"id": "carver", "field": "carver", "value": "(A)"},
+            ],
+        )
+
+    def test_signed_carver_adds_name_and_s_marker(self):
+        prompt = "Hitta inskrifter signerade av Åsmund"
+
+        self.assertEqual(_extract_carver_status(prompt), "S")
+        self.assertEqual(
+            _extract_carver_constraints(prompt),
+            [
+                {"id": "carver", "field": "carver", "value": "Åsmund"},
+                {"id": "carver", "field": "carver", "value": "(S)"},
+            ],
+        )
+
+    def test_ristarsignatur_without_name_searches_signed_marker(self):
+        prompt = "Hitta alla inskrifter med ristarsignatur"
+
+        self.assertEqual(
+            _extract_carver_constraints(prompt),
+            [{"id": "carver", "field": "carver", "value": "(S)"}],
+        )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_separate_carver_marker_rule(self, _styles, _objects):
+        prompt = "Find inscriptions attributed to the carver Öpir"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [("carver", "Öpir"), ("carver", "(A)")],
+        )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_splits_model_carver_value_with_marker(self, _styles, _objects):
+        prompt = "Find inscriptions attributed to the carver Öpir"
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "carver",
+                        "field": "carver",
+                        "operator": "contains",
+                        "value": "Öpir (A)",
+                    }
+                ],
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(prompt, model_output))
+
+        self.assertEqual(len(result["rules"]), 1)
+        split_group = result["rules"][0]
+        self.assertEqual(split_group["condition"], "AND")
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in split_group["rules"]],
+            [("carver", "Öpir"), ("carver", "(A)")],
+        )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_signed_carver_with_used_rune_adds_marker_and_transliteration(
+        self, _styles, _objects
+    ):
+        prompt = "Hitta alla inskrifter signerade av ristare som använder runan o"
+
+        self.assertEqual(_extract_carver_status(prompt), "S")
+        self.assertEqual(_extract_standalone_transliteration_rune(prompt), "o")
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(result["condition"], "AND")
+        self.assertEqual(len(result["rules"]), 2)
+        transliteration_rule, carver_rule = result["rules"]
+        self.assertEqual(transliteration_rule["id"], "normalization_scandinavian_to_transliteration")
+        self.assertEqual(
+            transliteration_rule["value"],
+            {"normalization": "", "transliteration": "o", "names_mode": "includeAll"},
+        )
+        self.assertEqual(carver_rule["id"], "carver")
+        self.assertEqual(carver_rule["value"], "(S)")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_rune_value_with_denmark_targets_transliteration_and_country(
+        self, _styles, _objects
+    ):
+        prompt = "Hitta alla runor R i Danmark"
+
+        self.assertEqual(_extract_standalone_transliteration_rune(prompt), "R")
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(result["condition"], "AND")
+        self.assertEqual(len(result["rules"]), 2)
+        country_rule, transliteration_rule = result["rules"]
+        self.assertEqual(country_rule["id"], "inscription_country")
+        self.assertEqual(country_rule["value"], ["DR "])
+        self.assertEqual(transliteration_rule["id"], "normalization_scandinavian_to_transliteration")
+        self.assertEqual(
+            transliteration_rule["value"],
+            {"normalization": "", "transliteration": "R", "names_mode": "includeAll"},
         )
