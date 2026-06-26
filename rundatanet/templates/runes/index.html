@@ -1131,14 +1131,13 @@
     <div id="aiAssistantRow" class="row mt-4 mb-3 pb-6">
       <div id="aiAssistantContainer" class="col">
         <div class="border border-warning rounded-3 p-3 bg-body-tertiary shadow-sm">
-          <div class="small text-muted mb-2">Let the AI assistent help you with your search: write your question in any language</div>
+          <div class="small text-muted mb-2">Let the AI assistant search the database and explain the result: write your question in any language</div>
           <div class="row g-2">
             <div class="col-12">
               <textarea id="searchTextInput" class="form-control" rows="4" placeholder="Enter search query here..."></textarea>
             </div>
             <div class="col-auto d-grid gap-2">
-              <button class="btn btn-warning" type="button" id="btnText2Rules">Convert to search parameters</button>
-              <button class="btn btn-outline-warning" type="button" id="btnAiResponseMode">Response mode</button>
+              <button class="btn btn-warning" type="button" id="btnAiReply">Reply</button>
             </div>
           </div>
           <div id="aiAssistantAlert" class="alert d-none mt-2 mb-0" role="alert" aria-live="assertive"></div>
@@ -1335,7 +1334,7 @@ function isSafari() {
 </script>
 
 <script>
-  window.BLOB_BASE_URL = "{{ AZURE_BLOB_BASE_URL }}";
+  window.BLOB_BASE_URL = "{{ PUBLIC_PDF_BASE_URL }}";
 </script>
 
 <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
@@ -1368,7 +1367,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260620-tablet-layout-v2"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260626-stable-pdf-links"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -1425,7 +1424,292 @@ function showAiAssistantResponse(message) {
     return;
   }
   responseObj.classList.remove('d-none');
+  responseObj.style.whiteSpace = 'pre-line';
   responseObj.textContent = message;
+}
+
+const AI_RULE_LABELS = {
+  inscription_country: 'inscription ID / country-province code',
+  signature_text: 'inscription ID',
+  normalisation_norse: 'Old West Norse normalisation',
+  normalization_norse_to_transliteration: 'Old West Norse normalisation + transliteration',
+  normalisation_scandinavian: 'Old Scandinavian normalisation',
+  normalization_scandinavian_to_transliteration: 'Old Scandinavian normalisation + transliteration',
+  english_translation: 'English translation',
+  swedish_translation: 'Swedish translation',
+  material_type: 'material type',
+  objectInfo: 'object information',
+  carver: 'carver',
+  rune_type: 'rune type',
+  dating: 'dating',
+  style: 'style',
+  full_address: 'any location',
+  found_location: 'found location',
+  current_location: 'current location',
+  parish: 'parish',
+  district: 'district',
+  municipality: 'municipality',
+  lost: 'lost flag',
+};
+
+const AI_OPERATOR_LABELS = {
+  contains: 'contains',
+  not_contains: 'does not contain',
+  equal: 'equals',
+  not_equal: 'does not equal',
+  begins_with: 'begins with',
+  not_begins_with: 'does not begin with',
+  ends_with: 'ends with',
+  not_ends_with: 'does not end with',
+  in: 'is one of',
+  not_in: 'is not one of',
+  is_empty: 'is empty',
+  is_not_empty: 'is not empty',
+};
+
+function formatAiRuleValue(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (Array.isArray(value)) {
+    return value.join(', ');
+  }
+  if (typeof value === 'object') {
+    const parts = [];
+    if (value.normalization) {
+      parts.push(`normalisation "${value.normalization}"`);
+    }
+    if (value.transliteration) {
+      parts.push(`transliteration "${value.transliteration}"`);
+    }
+    if (value.names_mode === 'namesOnly') {
+      parts.push('personal names only');
+    } else if (value.names_mode === 'excludeNames') {
+      parts.push('excluding personal names');
+    }
+    return parts.length ? parts.join(', ') : 'any normalisation/transliteration value';
+  }
+  return String(value);
+}
+
+function describeAiRule(rule) {
+  if (!rule || typeof rule !== 'object') {
+    return '';
+  }
+  if (Array.isArray(rule.rules)) {
+    const childDescriptions = rule.rules
+      .map(describeAiRule)
+      .filter(Boolean)
+      .map(text => `  ${text}`)
+      .join(`\n`);
+    const condition = String(rule.condition || 'AND').toUpperCase();
+    const prefix = rule.not ? `NOT ${condition} group` : `${condition} group`;
+    return childDescriptions ? `${prefix}:\n${childDescriptions}` : prefix;
+  }
+
+  const label = AI_RULE_LABELS[rule.id] || AI_RULE_LABELS[rule.field] || rule.label || rule.id || rule.field || 'field';
+  const operator = AI_OPERATOR_LABELS[rule.operator] || rule.operator || 'matches';
+  const value = formatAiRuleValue(rule.value);
+
+  if (rule.id === 'carver' && rule.value === '(S)') {
+    return 'carver contains "(S)" = signed inscription / ristarsignatur';
+  }
+  if (rule.id === 'carver' && rule.value === '(A)') {
+    return 'carver contains "(A)" = attributed inscription';
+  }
+  if (value) {
+    return `${label} ${operator} ${value}`;
+  }
+  return `${label} ${operator}`;
+}
+
+function describeAiRules(rules) {
+  if (!rules || !Array.isArray(rules.rules) || rules.rules.length === 0) {
+    return 'No search parameters were generated.';
+  }
+  return rules.rules.map(describeAiRule).filter(Boolean).map(text => `• ${text}`).join('\n');
+}
+
+function compactAiValue(value, maxLength = 48) {
+  const cleaned = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!cleaned) {
+    return '';
+  }
+  return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength - 1)}…` : cleaned;
+}
+
+function getTopAiValues(results, getter, limit = 5) {
+  const counts = new Map();
+  (results || []).forEach(item => {
+    const rawValues = getter(item);
+    const values = Array.isArray(rawValues) ? rawValues : [rawValues];
+    values.forEach(rawValue => {
+      const value = compactAiValue(rawValue);
+      if (!value) {
+        return;
+      }
+      counts.set(value, (counts.get(value) || 0) + 1);
+    });
+  });
+
+  return Array.from(counts.entries())
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, limit)
+    .map(([value, count]) => `${value} (${count})`);
+}
+
+function getAiSignatureGroup(item) {
+  const signature = String(item?.signature_text || '').trim();
+  const match = signature.match(/^[^\s]+/);
+  return match ? match[0] : '';
+}
+
+function getAiCarverStatuses(item) {
+  const carver = String(item?.carver || '');
+  const statuses = [];
+  if (/\(S\)/i.test(carver)) {
+    statuses.push('signed (S)');
+  }
+  if (/\(A\)/i.test(carver)) {
+    statuses.push('attributed (A)');
+  }
+  if (/\(P\)/i.test(carver)) {
+    statuses.push('pair/mate signed (P)');
+  }
+  if (/\(L\)/i.test(carver)) {
+    statuses.push('like signed/attributed (L)');
+  }
+  return statuses;
+}
+
+function getAiCarverNames(item) {
+  const carver = String(item?.carver || '');
+  if (!carver.trim()) {
+    return [];
+  }
+  return carver
+    .split(/[;,/&]|\boch\b|\band\b/i)
+    .map(part => part.replace(/\([SAPL]\)/ig, '').replace(/\[[^\]]*\]/g, ''))
+    .map(part => compactAiValue(part, 36))
+    .filter(part => part && !/^(okänd|okand|unknown|anonym|anonymous|-|\?)$/i.test(part))
+    .filter(part => /[A-Za-zÅÄÖåäöÉéÜüØøÆæÞþÐð]/.test(part))
+    .filter(part => !/^\d+$/.test(part));
+}
+
+function getAiMatchedTextExamples(results, limit = 5) {
+  const examples = [];
+  for (const item of results || []) {
+    const indices = item?.matchDetails?.wordIndices;
+    if (!Array.isArray(indices) || indices.length === 0) {
+      continue;
+    }
+    const selected = indices.slice(0, 4);
+    const transliterationWords = Array.isArray(item.transliteration_words) ? item.transliteration_words : [];
+    const oldWestWords = Array.isArray(item.normalisation_norse_words) ? item.normalisation_norse_words : [];
+    const oldScandinavianWords = Array.isArray(item.normalisation_scandinavian_words) ? item.normalisation_scandinavian_words : [];
+    const transliteration = selected.map(index => transliterationWords[index]).filter(Boolean).join(' ');
+    const oldWest = selected.map(index => oldWestWords[index]).filter(Boolean).join(' ');
+    const oldScandinavian = selected.map(index => oldScandinavianWords[index]).filter(Boolean).join(' ');
+    const pieces = [];
+    if (transliteration) {
+      pieces.push(`transliteration: ${compactAiValue(transliteration, 70)}`);
+    }
+    if (oldWest) {
+      pieces.push(`Old West Norse: ${compactAiValue(oldWest, 70)}`);
+    } else if (oldScandinavian) {
+      pieces.push(`Old Scandinavian: ${compactAiValue(oldScandinavian, 70)}`);
+    }
+    if (pieces.length) {
+      examples.push(`${item.signature_text}: ${pieces.join('; ')}`);
+    }
+    if (examples.length >= limit) {
+      break;
+    }
+  }
+  return examples;
+}
+
+function summarizeDirectDbInformation(results) {
+  const total = Array.isArray(results) ? results.length : 0;
+  if (total === 0) {
+    return 'No matched records to summarize directly from the DB.';
+  }
+
+  const lines = [];
+  const signatureGroups = getTopAiValues(results, getAiSignatureGroup, 6);
+  if (signatureGroups.length) {
+    lines.push(`Top inscription groups: ${signatureGroups.join(', ')}.`);
+  }
+
+  const datings = getTopAiValues(results, item => item.dating, 5);
+  if (datings.length) {
+    lines.push(`Top dating values: ${datings.join(', ')}.`);
+  }
+
+  const materialTypes = getTopAiValues(results, item => item.material_type, 5);
+  if (materialTypes.length) {
+    lines.push(`Top material types: ${materialTypes.join(', ')}.`);
+  }
+
+  const objectTypes = getTopAiValues(results, item => item.objectInfo, 5);
+  if (objectTypes.length) {
+    lines.push(`Top object information: ${objectTypes.join(', ')}.`);
+  }
+
+  const carverStatuses = getTopAiValues(results, getAiCarverStatuses, 4);
+  if (carverStatuses.length) {
+    lines.push(`Carver markers present: ${carverStatuses.join(', ')}.`);
+  }
+
+  const carvers = getTopAiValues(results, getAiCarverNames, 5);
+  if (carvers.length) {
+    lines.push(`Top carvers in this result set: ${carvers.join(', ')}.`);
+  }
+
+  const matchedTextExamples = getAiMatchedTextExamples(results, 5);
+  if (matchedTextExamples.length) {
+    lines.push(`Matched text examples: ${matchedTextExamples.join(' | ')}.`);
+  }
+
+  if (!lines.length) {
+    return 'The matched DB records did not contain enough non-empty metadata for a compact summary.';
+  }
+  return lines.join('\n');
+}
+
+function summarizeAiSearchResults(results, rules) {
+  const total = Array.isArray(results) ? results.length : 0;
+  const examples = (results || [])
+    .slice(0, 12)
+    .map(item => item.signature_text || item.signature_header || item.signature || '')
+    .filter(Boolean);
+  const lines = [];
+  lines.push(`Result: ${total} inscription${total === 1 ? '' : 's'} matched the generated search.`);
+  if (examples.length) {
+    lines.push(`Examples: ${examples.join(', ')}${total > examples.length ? ' …' : ''}`);
+  }
+  const translationTokenCount = getTranslationSearchTokenCount(rules);
+  if (translationTokenCount > 0 && gTranslationOccurrenceCount !== null) {
+    lines.push(`Translation word occurrences found in the matched inscriptions: ${gTranslationOccurrenceCount}.`);
+  }
+  return lines.join('\n');
+}
+
+function performSearchWithRules(rules) {
+  syncMiniBuilderFromRules(rules);
+  if (shouldSuggestIncludeSymbols(rules)) {
+    gSearchHintMessage = INCLUDE_SYMBOLS_HINT;
+    gTranslationOccurrenceCount = null;
+    gViewModel.setSearchResults([]);
+    return { results: [], blockedBySymbolHint: true };
+  }
+
+  gSearchHintMessage = null;
+  const hasTranslationWordSearch = getTranslationSearchTokenCount(rules) > 0;
+  const results = doSearch(rules, gViewModel.getAllInscriptions().values());
+  gTranslationOccurrenceCount = hasTranslationWordSearch ? getTranslationOccurrenceCount(results) : null;
+  gViewModel.setSearchResults(results);
+  return { results, blockedBySymbolHint: false };
 }
 
 const AI_SYMBOL_AWARE_RULE_IDS = new Set([
@@ -2147,16 +2431,16 @@ document.addEventListener('DOMContentLoaded', function() {
     showMarkersWrapper({preserveMapArea: true});
   });
 
-  document.getElementById('btnText2Rules').addEventListener('click', function() {
+  document.getElementById('btnAiReply').addEventListener('click', function() {
     const text = document.getElementById('searchTextInput').value;
     if (!text.trim()) {
-      showAlert('Please enter a search query first', 'danger');
+      showAlert('Please enter a question first', 'danger');
       return;
     }
 
     hideAiAssistantAlert();
     hideAiAssistantResponse();
-    showLoading("Converting your search query to search parameters (up to 20 seconds)");
+    showLoading("AI is converting your question, searching the database, and preparing a reply (up to 20 seconds)");
 
     const REQUEST_TIMEOUT_MS = 20000;
     const controller = new AbortController();
@@ -2188,9 +2472,24 @@ document.addEventListener('DOMContentLoaded', function() {
         const parsedRules = JSON.parse(data.rules);
         applyAiRuleDefaults(parsedRules);
         $(`#${inpQueryBuilder}`).queryBuilder('setRules', parsedRules);
-        syncMiniBuilderFromRules(parsedRules);
-        // After successfully setting the rules, trigger the search
-        document.getElementById('btnSearch').click();
+
+        const searchOutcome = performSearchWithRules(parsedRules);
+        const responseLines = [
+          'I converted your question into search parameters, placed them in the QueryBuilder, and searched the database with those rules.',
+          '',
+          'Search parameters used:',
+          describeAiRules(parsedRules),
+          '',
+          summarizeAiSearchResults(searchOutcome.results, parsedRules),
+          '',
+          'Direct DB summary:',
+          summarizeDirectDbInformation(searchOutcome.results),
+        ];
+        if (searchOutcome.blockedBySymbolHint) {
+          responseLines.push('');
+          responseLines.push(INCLUDE_SYMBOLS_HINT);
+        }
+        showAiAssistantResponse(responseLines.join('\n'));
       } else {
         showAiAssistantAlert('The server could not generate search rules from your text.', 'warning');
       }
@@ -2201,73 +2500,7 @@ document.addEventListener('DOMContentLoaded', function() {
         showAiAssistantAlert('AI request timed out after 20 seconds. Please try again.', 'warning');
         return;
       }
-      showAiAssistantAlert('Failed to process your search query. Please try again.', 'danger');
-    })
-    .finally(() => {
-      window.clearTimeout(timeoutId);
-      hideLoading();
-    });
-  });
-
-  document.getElementById('btnAiResponseMode').addEventListener('click', function() {
-    const text = document.getElementById('searchTextInput').value;
-    if (!text.trim()) {
-      showAlert('Please enter a question first', 'danger');
-      return;
-    }
-
-    hideAiAssistantAlert();
-    hideAiAssistantResponse();
-    showLoading("Generating response from database (up to 20 seconds)");
-
-    const REQUEST_TIMEOUT_MS = 20000;
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-    fetch('api/ai-answer', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ text: text }),
-      signal: controller.signal,
-    })
-    .then(response => {
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-      return response.json();
-    })
-    .then(data => {
-      if (!data || (!data.answer && !data.error)) {
-        showAiAssistantAlert('The server could not generate a response.', 'warning');
-        return;
-      }
-
-      if (data.error && !data.answer) {
-        showAiAssistantAlert(data.error, 'warning');
-        return;
-      }
-
-      const lines = [];
-      if (data.answer) {
-        lines.push(data.answer);
-      }
-      if (typeof data.matched_inscriptions === 'number') {
-        lines.push(`Matched inscriptions: ${data.matched_inscriptions}`);
-      }
-      if (data.metadata && typeof data.metadata.unique_carver_count === 'number') {
-        lines.push(`Distinct carvers: ${data.metadata.unique_carver_count}`);
-      }
-      showAiAssistantResponse(lines.join('\n'));
-    })
-    .catch(error => {
-      console.error('Error:', error);
-      if (error.name === 'AbortError') {
-        showAiAssistantAlert('Response mode timed out after 20 seconds. Please try again.', 'warning');
-        return;
-      }
-      showAiAssistantAlert('Failed to generate response. Please try again.', 'danger');
+      showAiAssistantAlert('Failed to process your question. Please try again.', 'danger');
     })
     .finally(() => {
       window.clearTimeout(timeoutId);
@@ -2277,20 +2510,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   document.getElementById('btnSearch').addEventListener('click', function() {
     const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
-    syncMiniBuilderFromRules(rules);
-    if (shouldSuggestIncludeSymbols(rules)) {
-      gSearchHintMessage = INCLUDE_SYMBOLS_HINT;
-      gTranslationOccurrenceCount = null;
-      gViewModel.setSearchResults([]);
-      return;
-    }
-
-    gSearchHintMessage = null;
-    const hasTranslationWordSearch = getTranslationSearchTokenCount(rules) > 0;
-    const results = doSearch(rules, gViewModel.getAllInscriptions().values());
-    gTranslationOccurrenceCount = hasTranslationWordSearch ? getTranslationOccurrenceCount(results) : null;
-    //console.log(`Got ${results.length} results`);
-    gViewModel.setSearchResults(results);
+    performSearchWithRules(rules);
   });
 
   document.getElementById('btnResetSearch').addEventListener('click', function() {

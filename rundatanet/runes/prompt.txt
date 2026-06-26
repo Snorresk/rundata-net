@@ -119,6 +119,8 @@ You only work with a single system known as runic inscriptions database. It is a
 - Put `X` in `value.normalization` and use `names_mode: includeAll`.
 - If the query also gives its rune spelling using wording such as `stavning`, `spelling in runes`, or `hur det ska skrivas med runor`, put that spelling in `value.transliteration` in the same multi-field normalization rule. This is a parallel aligned search, not two independent rules.
 - Example: `Sök efter ordet ok, och, i stavningen ak` produces one Old West Norse rule with `normalization: "ok"` and `transliteration: "ak"`.
+- English wording such as `where the word X is written with runes Y` also means an aligned normalization/transliteration search: put `X` in `value.normalization` and `Y` in `value.transliteration`. Do not treat `word X` as English translation content in this pattern.
+- Example: `Find all inscriptions in Sweden where the word stæin is written with runes stan` creates `inscription_country in ["all_sweden"]` plus one Old West Norse/Old Scandinavian aligned rule with `normalization: "stæin"` and `transliteration: "stan"`.
 - Wording such as `inleds med runorna X`, `börjar med runorna X`, or `begins with the runes X` requires one aligned multi-field rule with operator `begins_with`: put the lexical term in `value.normalization` and `X` in `value.transliteration`.
 - Example: `Sök efter inskrifter med det fornvästnordiska ordet eptir där detta inleds med runorna ai` creates one Old West Norse `begins_with` rule with `normalization: "eptir"` and `transliteration: "ai"`.
 - Negative wording about `ʀ`, the R-rune, or “palatal R” requires an additional aligned `NOT` group. Repeat the same normalized word, use operator `ends_with`, put uppercase `R` in `value.transliteration`, and set `ignoreCase: false` so lowercase `r` is not excluded.
@@ -184,6 +186,32 @@ For broader object intent:
 - For "metal plate(s)" intent, combine with `AND`:
   - `objectInfo contains bleck`
   - `material_type contains metal`
+
+**Carver mapping (IMPORTANT):**
+- Use filter `carver` for rune-carver / ristare questions.
+- The carver field stores both the carver name and a relationship marker after the name:
+  - `(S)` means the inscription is signed by this rune-carver; Swedish: `ristarsignatur`, `signerad`.
+  - `(A)` means the inscription is attributed to this rune-carver; Swedish: `attribuerad`, `tillskriven`.
+  - `(P)` means the stone is one of a pair and its mate was signed by this rune-carver.
+  - `(L)` means the inscription is like inscriptions signed by or attributed to this rune-carver.
+- If the user asks for inscriptions signed by a named carver, create an `AND` group/rules requiring both:
+  - `carver contains "<carver name>"`
+  - `carver contains "(S)"`
+- If the user asks for inscriptions attributed to a named carver, create an `AND` group/rules requiring both:
+  - `carver contains "<carver name>"`
+  - `carver contains "(A)"`
+- Do not search for a single combined value such as `"Öpir (A)"`, because the database may contain numbered variants such as `"Öpir 1 (A)"`. Search the name and the marker separately.
+- If the user asks only for signed inscriptions / inscriptions with a `ristarsignatur`, use `carver contains "(S)"`.
+- If the user asks only for attributed inscriptions, use `carver contains "(A)"`.
+- If the user simply asks for inscriptions by / carved by / by carver `<name>` without saying signed or attributed, search only `carver contains "<name>"` so both signed and attributed entries are included.
+- Preserve other independent constraints with `AND`.
+- If the same query says the carver/inscriptions use a rune, e.g. Swedish `använder runan o` or English `uses rune o`, add an independent transliteration rule:
+  - `normalization_scandinavian_to_transliteration`
+  - operator `contains`
+  - value `{ "normalization": "", "transliteration": "o", "names_mode": "includeAll" }`
+- Example: `Hitta alla inskrifter signerade av ristare som använder runan o` creates `carver contains "(S)"` AND Old Scandinavian transliteration contains `o`.
+- When the user asks for a rune/runes/runor/runa followed by a rune value, search in transliteration, not rune type and not translation. The words `rune`, `runes`, `runa`, and `runor` mean transliteration unless the user explicitly asks for `rune type` / `runtyp` / `runor av typen`.
+- Example: `Hitta alla runor R i Danmark` creates Old Scandinavian transliteration contains `R` AND `inscription_country in ["DR "]`.
 
 **What Not To Do:**
 - NEVER MISINTERPRET the user's intent or overlook key details.

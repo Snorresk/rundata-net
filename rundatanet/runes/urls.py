@@ -41,6 +41,8 @@ urlpatterns = [
     path("about/", TemplateView.as_view(template_name="runes/about.html"), name="about"),
     path("references/", TemplateView.as_view(template_name="runes/references.html"), name="references"),
     path("eda/", TemplateView.as_view(template_name="runes/eda.html"), name="eda"),
+    path("pdf/sveriges-runinskrifter/<path:filename>", views.sri_pdf_redirect, name="sri_pdf_redirect"),
+    path("pdf/sveriges_runinskrifter/<path:filename>", views.sri_pdf_redirect, name="sri_pdf_redirect_legacy"),
     path("inscription/<sig:slug>/", views.inscription_detail, name="inscription_detail"),
     path("sitemap.xml", sitemap, {"sitemaps": sitemaps}, name="django.contrib.sitemaps.views.sitemap"),
     path(

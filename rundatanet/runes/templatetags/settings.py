@@ -1,5 +1,7 @@
 from django import template
 from django.conf import settings
+from urllib.parse import quote
+import unicodedata
 
 register = template.Library()
 
@@ -21,5 +23,6 @@ def make_blob_url(text, base_url):
     if "://" in text:
         return text
     if base_url:
-        return base_url.rstrip("/") + "/" + text
+        blob_path = unicodedata.normalize("NFD", str(text))
+        return base_url.rstrip("/") + "/" + quote(blob_path, safe="/")
     return text
