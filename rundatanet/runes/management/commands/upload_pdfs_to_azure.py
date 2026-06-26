@@ -33,9 +33,10 @@ Stored reference format
 -----------------------
 ``Reference(kind='link', text='<blob-filename>', label='Sveriges runinskrifter PDF')``
 
-The blob filename (e.g. ``Öl_1.pdf``) is environment-agnostic; the frontend
-constructs the full URL by prepending ``window.BLOB_BASE_URL`` (injected from
-``settings.AZURE_BLOB_BASE_URL`` via the template context processor).
+The blob filename (e.g. ``Öl_1.pdf``) is environment-agnostic.  User-facing
+pages link to stable Rundata-owned URLs under ``PUBLIC_PDF_BASE_URL``; those
+URLs redirect to the current storage backend configured by
+``settings.AZURE_BLOB_BASE_URL``.
 """
 
 import json

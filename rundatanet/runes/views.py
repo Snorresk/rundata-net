@@ -1,9 +1,30 @@
+import unicodedata
+from urllib.parse import quote
+
+from django.conf import settings
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
 
 from .models import MetaInformation, Signature
 from .normalization import SlugIndex, normalize_signature
 from .serializers import MetaInformationSerializer
+
+DEFAULT_AZURE_PDF_STORAGE_BASE_URL = "https://rundatapdfssk.blob.core.windows.net/rundatapdfs"
+
+
+def sri_pdf_redirect(request, filename: str):
+    """Redirect stable Rundata PDF links to the current storage backend.
+
+    The public URL is intentionally stable and storage-agnostic:
+    /pdf/sveriges-runinskrifter/<filename>
+
+    Azure currently stores the Swedish-letter filenames in decomposed Unicode
+    form, so normalize before quoting the redirect target.
+    """
+    storage_base = getattr(settings, "AZURE_BLOB_BASE_URL", "") or DEFAULT_AZURE_PDF_STORAGE_BASE_URL
+    normalized_filename = unicodedata.normalize("NFD", filename)
+    target = storage_base.rstrip("/") + "/" + quote(normalized_filename, safe="/")
+    return redirect(target, permanent=False)
 
 
 def inscription_detail(request, slug: str):

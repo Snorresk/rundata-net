@@ -718,7 +718,7 @@
             {% for ref in meta.references.all %}
             <li>
               {% if ref.kind == "link" %}
-                <a href="{{ ref.text|make_blob_url:AZURE_BLOB_BASE_URL }}" target="_blank" rel="noopener">{% if ref.label %}{{ ref.label }}{% else %}{{ ref.text }}{% endif %} <i class="bi bi-box-arrow-up-right"></i></a>
+                <a href="{{ ref.text|make_blob_url:PUBLIC_PDF_BASE_URL }}" target="_blank" rel="noopener">{% if ref.label %}{{ ref.label }}{% else %}{{ ref.text }}{% endif %} <i class="bi bi-box-arrow-up-right"></i></a>
               {% else %}
                 {{ ref.text }}
               {% endif %}

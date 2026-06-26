@@ -604,7 +604,14 @@ function resolveUrlOrBlob(urlOrBlob) {
     ? window.BLOB_BASE_URL
     : "";
   if (blobBase) {
-    return blobBase.replace(/\/$/, '') + '/' + urlOrBlob;
+    const normalizedBlobPath = (typeof urlOrBlob.normalize === "function")
+      ? urlOrBlob.normalize("NFD")
+      : urlOrBlob;
+    const encodedBlobPath = normalizedBlobPath
+      .split('/')
+      .map(part => encodeURIComponent(part))
+      .join('/');
+    return blobBase.replace(/\/$/, '') + '/' + encodedBlobPath;
   }
   return urlOrBlob;
 }

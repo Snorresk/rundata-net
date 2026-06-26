@@ -323,7 +323,7 @@ class TestMakeBlobUrlFilter(TestCase):
 
     def test_blob_filename_prepends_base_url(self):
         result = self._render("Öl_1.pdf", "https://files.rundata.info/sr")
-        assert result == "https://files.rundata.info/sr/Öl_1.pdf"
+        assert result == "https://files.rundata.info/sr/O%CC%88l_1.pdf"
 
     def test_trailing_slash_on_base_url_is_stripped(self):
         result = self._render("Gs_1.pdf", "https://files.rundata.info/sr/")
@@ -341,7 +341,7 @@ class TestMakeBlobUrlFilter(TestCase):
 
 
 class TestInscriptionDetailPdfLink(TestCase):
-    """Integration test: PDF blob references render with AZURE_BLOB_BASE_URL."""
+    """Integration test: PDF blob references render as stable public links."""
 
     databases = {"default", "runes_db"}
 
@@ -362,26 +362,40 @@ class TestInscriptionDetailPdfLink(TestCase):
     def tearDown(self):
         SlugIndex.reset()
 
-    @override_settings(AZURE_BLOB_BASE_URL="https://files.rundata.info/sveriges_runinskrifter")
-    def test_pdf_link_uses_blob_base_url(self):
+    @override_settings(PUBLIC_PDF_BASE_URL="/pdf/sveriges-runinskrifter")
+    def test_pdf_link_uses_public_pdf_base_url(self):
         url = reverse("runes:inscription_detail", kwargs={"slug": "gs-1"})
         response = self.client.get(url)
         content = response.content.decode()
-        assert 'href="https://files.rundata.info/sveriges_runinskrifter/Gs_1.pdf"' in content
+        assert 'href="/pdf/sveriges-runinskrifter/Gs_1.pdf"' in content
 
-    @override_settings(AZURE_BLOB_BASE_URL="https://files.rundata.info/sveriges_runinskrifter/")
+    @override_settings(PUBLIC_PDF_BASE_URL="/pdf/sveriges-runinskrifter/")
     def test_pdf_link_strips_trailing_slash_from_base_url(self):
         url = reverse("runes:inscription_detail", kwargs={"slug": "gs-1"})
         response = self.client.get(url)
         content = response.content.decode()
-        assert 'href="https://files.rundata.info/sveriges_runinskrifter/Gs_1.pdf"' in content
+        assert 'href="/pdf/sveriges-runinskrifter/Gs_1.pdf"' in content
 
-    @override_settings(AZURE_BLOB_BASE_URL="")
-    def test_pdf_link_without_blob_base_url_shows_filename(self):
+    @override_settings(PUBLIC_PDF_BASE_URL="")
+    def test_pdf_link_without_public_base_uses_default_stable_path(self):
         url = reverse("runes:inscription_detail", kwargs={"slug": "gs-1"})
         response = self.client.get(url)
         content = response.content.decode()
-        assert 'href="Gs_1.pdf"' in content
+        assert 'href="/pdf/sveriges-runinskrifter/Gs_1.pdf"' in content
+
+    @override_settings(AZURE_BLOB_BASE_URL="")
+    def test_public_pdf_link_redirects_to_default_storage_backend(self):
+        url = reverse("runes:sri_pdf_redirect", kwargs={"filename": "Sö_1.pdf"})
+        response = self.client.get(url)
+        assert response.status_code == 302
+        assert response["Location"] == "https://rundatapdfssk.blob.core.windows.net/rundatapdfs/So%CC%88_1.pdf"
+
+    @override_settings(AZURE_BLOB_BASE_URL="https://example-storage.test/container/")
+    def test_public_pdf_link_redirect_target_is_configurable(self):
+        url = reverse("runes:sri_pdf_redirect", kwargs={"filename": "Öl_1.pdf"})
+        response = self.client.get(url)
+        assert response.status_code == 302
+        assert response["Location"] == "https://example-storage.test/container/O%CC%88l_1.pdf"
 
     def test_absolute_link_ref_rendered_as_is(self):
         """A reference with an absolute URL should not be modified."""
