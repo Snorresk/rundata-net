@@ -168,6 +168,57 @@ def _make_contains_rule(rule_id: str, field: str, value: str) -> dict[str, Any]:
     }
 
 
+def _make_integer_rule(rule_id: str, field: str, value: int, operator: str = "equal") -> dict[str, Any]:
+    return {
+        "id": rule_id,
+        "field": field,
+        "type": "integer",
+        "input": "number",
+        "operator": operator,
+        "value": int(value),
+    }
+
+
+def _make_cross_form_rule(form: str, is_certain: str = "2") -> dict[str, Any]:
+    return {
+        "id": "cross_form",
+        "field": "crosses",
+        "operator": "cross_form",
+        "value": {
+            "form": form,
+            "is_certain": str(is_certain),
+        },
+    }
+
+
+def _make_cross_form_group(forms: list[str], is_certain: str = "2") -> dict[str, Any]:
+    rules = [_make_cross_form_rule(form, is_certain) for form in forms]
+    if len(rules) == 1:
+        return rules[0]
+    return {
+        "condition": "OR",
+        "rules": rules,
+        "not": False,
+        "valid": True,
+    }
+
+
+def _make_style_rule(value: str, operator: str = "contains") -> dict[str, Any]:
+    return _make_contains_rule("style", "style", value) | {"operator": operator}
+
+
+def _make_style_code_group(values: list[str]) -> dict[str, Any]:
+    rules = [_make_style_rule(value) for value in values]
+    if len(rules) == 1:
+        return rules[0]
+    return {
+        "condition": "OR",
+        "rules": rules,
+        "not": False,
+        "valid": True,
+    }
+
+
 def _make_normalization_rule(
     value: str,
     *,
@@ -375,6 +426,27 @@ def _term_maps_to_country_or_province(value: str) -> bool:
     return _fold_text(value) in COUNTRY_PROVINCE_ALIASES
 
 
+def _looks_like_style_location_value(value: Any) -> bool:
+    folded = _fold_text(str(value or ""))
+    if not folded:
+        return False
+    return bool(
+        re.search(
+            r"\b(?:stilen|stil|style)\s+(?:rak|fp|kb|sod|pr(?:\s*[1-5])?|urnes|ringerike|"
+            r"profilstil|profiled?\s+style|fagelperspektiv|bird'?s?-eye view|"
+            r"korsbandssten|cross-band\s+stone)\b",
+            folded,
+        )
+        or re.search(
+            r"\b(?:urnes(?:stil| style|stilen)?|ringerike(?:stil| style|stilen)?|"
+            r"profilstil(?:en)?|profiled?\s+style|pr\s*[1-5]|fagelperspektiv|"
+            r"bird'?s?-eye view|rak\s+stil|plain\s+style|korsbandssten(?:ar)?|"
+            r"cross-band\s+stones?)\b",
+            folded,
+        )
+    )
+
+
 def _extract_location_terms(user_text: str) -> list[str]:
     text = user_text or ""
     terms: list[str] = []
@@ -449,6 +521,8 @@ def _extract_location_terms(user_text: str) -> list[str]:
             if re.fullmatch(r"(?i)fp", cleaned):
                 continue
             if re.fullmatch(r"(?i)(rak|kb|sod)(?:\s+style)?", cleaned):
+                continue
+            if _looks_like_style_location_value(cleaned):
                 continue
             if _term_maps_to_country_or_province(cleaned):
                 continue
@@ -734,6 +808,13 @@ def _extract_standalone_transliteration_rune(user_text: str) -> Optional[str]:
         "som",
         "that",
         "which",
+        "inside",
+        "within",
+        "on",
+        "onto",
+        "inuti",
+        "pa",
+        "på",
         "och",
         "and",
     }
@@ -1132,32 +1213,528 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
     return constraints
 
 
-def _extract_style_constraints(user_text: str) -> list[dict[str, str]]:
-    constraints: list[dict[str, str]] = []
-    seen: set[str] = set()
+CROSS_COUNT_NUMBER_WORDS: dict[str, int] = {
+    "noll": 0,
+    "zero": 0,
+    "inga": 0,
+    "no": 0,
+    "en": 1,
+    "ett": 1,
+    "one": 1,
+    "tva": 2,
+    "two": 2,
+    "tre": 3,
+    "three": 3,
+    "fyra": 4,
+    "four": 4,
+    "fem": 5,
+    "five": 5,
+    "sex": 6,
+    "six": 6,
+    "sju": 7,
+    "seven": 7,
+    "atta": 8,
+    "eight": 8,
+    "nio": 9,
+    "nine": 9,
+    "tio": 10,
+    "ten": 10,
+    "elva": 11,
+    "eleven": 11,
+    "tolv": 12,
+    "twelve": 12,
+    "tretton": 13,
+    "thirteen": 13,
+    "fjorton": 14,
+    "fourteen": 14,
+    "femton": 15,
+    "fifteen": 15,
+    "sexton": 16,
+    "sixteen": 16,
+    "sjutton": 17,
+    "seventeen": 17,
+    "arton": 18,
+    "eighteen": 18,
+    "nitton": 19,
+    "nineteen": 19,
+    "tjugo": 20,
+    "twenty": 20,
+}
 
-    def add_style(value: str) -> None:
-        normalized_value = re.sub(r"\s+", " ", value.replace("\u00a0", " ")).strip()
-        key = _fold_text(normalized_value)
+
+def _parse_cross_count_number(value: str) -> Optional[int]:
+    token = _fold_text(value or "").strip()
+    if not token:
+        return None
+    if re.fullmatch(r"\d+", token):
+        return int(token)
+    return CROSS_COUNT_NUMBER_WORDS.get(token)
+
+
+def _cross_count_number_pattern() -> str:
+    words = sorted(CROSS_COUNT_NUMBER_WORDS, key=len, reverse=True)
+    return r"\d+|" + "|".join(re.escape(word) for word in words)
+
+
+def _extract_cross_count_constraints(user_text: str) -> list[dict[str, Any]]:
+    text = _fold_text(user_text or "")
+    if not text:
+        return []
+    number = _cross_count_number_pattern()
+    cross_word = r"(?:kors(?:en|et)?|cross(?:es)?)"
+    comparison_patterns: tuple[tuple[str, str], ...] = (
+        ("greater_or_equal", rf"\b(?:minst|at least)\s+({number})\s+{cross_word}\b"),
+        ("less_or_equal", rf"\b(?:hogst|högst|maximalt|at most|no more than)\s+({number})\s+{cross_word}\b"),
+        ("greater", rf"\b(?:fler an|fler än|mer an|mer än|over|more than)\s+({number})\s+{cross_word}\b"),
+        ("less", rf"\b(?:farre an|färre än|mindre an|mindre än|under|less than|fewer than)\s+({number})\s+{cross_word}\b"),
+        ("equal", rf"\b(?:exakt|exactly)\s+({number})\s+{cross_word}\b"),
+    )
+    for operator, pattern in comparison_patterns:
+        match = re.search(pattern, text)
+        if match:
+            parsed = _parse_cross_count_number(match.group(1))
+            if parsed is not None:
+                return [_make_integer_rule("num_crosses", "num_crosses", parsed, operator=operator)]
+
+    direct_patterns = (
+        rf"\b({number})\s+{cross_word}\b",
+        rf"\b(?:antal(?:et)?\s+kors|number\s+of\s+cross(?:es)?)\s*(?:ar|är|is|=)?\s*({number})\b",
+    )
+    for pattern in direct_patterns:
+        match = re.search(pattern, text)
+        if match:
+            parsed = _parse_cross_count_number(match.group(1))
+            if parsed is not None:
+                return [_make_integer_rule("num_crosses", "num_crosses", parsed)]
+
+    if re.search(rf"\b(?:inga|no)\s+{cross_word}\b", text):
+        return [_make_integer_rule("num_crosses", "num_crosses", 0)]
+
+    return []
+
+
+def _apply_cross_count_constraint(qs, constraint: dict[str, Any]):
+    value = int(constraint["value"])
+    operator = constraint.get("operator") or "equal"
+    qs = qs.annotate(_num_crosses=Count("crosses", distinct=True))
+    if operator == "not_equal":
+        return qs.exclude(_num_crosses=value)
+    if operator == "less":
+        return qs.filter(_num_crosses__lt=value)
+    if operator == "less_or_equal":
+        return qs.filter(_num_crosses__lte=value)
+    if operator == "greater":
+        return qs.filter(_num_crosses__gt=value)
+    if operator == "greater_or_equal":
+        return qs.filter(_num_crosses__gte=value)
+    return qs.filter(_num_crosses=value)
+
+
+CROSS_FORM_GROUP_MAX: dict[str, int] = {
+    "A": 9,
+    "B": 4,
+    "C": 11,
+    "D": 6,
+    "E": 11,
+    "F": 4,
+    "G": 6,
+}
+
+CROSS_FORM_GROUP_ALLOW_ZERO = {"C", "E", "G"}
+
+
+def _cross_form_codes_for_group(group: str, *, include_zero: bool = False, only_zero: bool = False) -> list[str]:
+    group = group.upper()
+    if group not in CROSS_FORM_GROUP_MAX:
+        return []
+    if only_zero:
+        return [f"{group}0"] if group in CROSS_FORM_GROUP_ALLOW_ZERO else []
+    start = 0 if include_zero and group in CROSS_FORM_GROUP_ALLOW_ZERO else 1
+    return [f"{group}{number}" for number in range(start, CROSS_FORM_GROUP_MAX[group] + 1)]
+
+
+def _has_cross_form_intent(user_text: str) -> bool:
+    text = _fold_text(user_text or "")
+    return bool(
+        re.search(
+            r"\b(?:korsform(?:en|er|erna)?|cross[-\s]?forms?|linn\s+lager|lager(?:s)?\s+system|"
+            r"korsets\s+form|cross\s+design|cross\s+classification|grupp\s+[a-g]|group\s+[a-g])\b",
+            text,
+        )
+        or (re.search(r"\b(?:kors|cross(?:es)?)\b", text) and re.search(r"\b[A-Ga-g]\s*\d{1,2}\??\b", user_text or ""))
+    )
+
+
+def _canonical_cross_form_code(group: str, number: str) -> Optional[str]:
+    group = str(group or "").upper()
+    if group not in CROSS_FORM_GROUP_MAX:
+        return None
+    try:
+        number_int = int(number)
+    except (TypeError, ValueError):
+        return None
+    if number_int == 0 and group not in CROSS_FORM_GROUP_ALLOW_ZERO:
+        return None
+    if number_int < 0 or number_int > CROSS_FORM_GROUP_MAX[group]:
+        return None
+    return f"{group}{number_int}"
+
+
+def _cross_form_global_certainty(user_text: str) -> Optional[str]:
+    text = _fold_text(user_text or "")
+    if re.search(r"\b(osak(?:er|ert|ra)?|osäker(?:t|a)?|uncertain|probably|probable|med fragetecken|med frågetecken)\b", text):
+        return "0"
+    if re.search(
+        r"\b(saker|säkert|sakra|säkra|certain|certainly|without question mark|"
+        r"without question marks|utan fragetecken|utan frågetecken)\b",
+        text,
+    ):
+        return "1"
+    return None
+
+
+def _cross_form_certainty_for_match(user_text: str, match: re.Match[str], *, question_mark_uncertain: bool = True) -> str:
+    if question_mark_uncertain and match.group(3):
+        return "0"
+    before = _fold_text((user_text or "")[max(0, match.start() - 35):match.start()])
+    if re.search(r"\b(osak(?:er|ert|ra)?|osäker(?:t|a)?|uncertain|probable|probably)\b", before):
+        return "0"
+    if re.search(r"\b(saker|säkert|sakra|säkra|certain|certainly)\b", before):
+        return "1"
+    return _cross_form_global_certainty(user_text) or "2"
+
+
+def _extract_cross_form_requests(
+    user_text: str,
+    *,
+    require_intent: bool = True,
+    question_mark_uncertain: bool = True,
+) -> list[dict[str, str]]:
+    if require_intent and not _has_cross_form_intent(user_text):
+        return []
+    requests: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for match in re.finditer(r"(?<![A-Za-z0-9])([A-Ga-g])\s*([0-9]{1,2})(\?)?(?![A-Za-z0-9])", user_text or ""):
+        form = _canonical_cross_form_code(match.group(1), match.group(2))
+        if not form:
+            continue
+        certainty = _cross_form_certainty_for_match(user_text, match, question_mark_uncertain=question_mark_uncertain)
+        key = (form, certainty)
+        if key in seen:
+            continue
+        seen.add(key)
+        requests.append({"form": form, "is_certain": certainty})
+    return requests
+
+
+def _extract_cross_form_group_requests(user_text: str) -> list[dict[str, Any]]:
+    text = _fold_text(user_text or "")
+    if not text:
+        return []
+    requests: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, bool, bool]] = set()
+    certainty = _cross_form_global_certainty(user_text) or "2"
+
+    def add_group(group: str, label: str, *, include_zero: bool = False, only_zero: bool = False) -> None:
+        group = group.upper()
+        forms = _cross_form_codes_for_group(group, include_zero=include_zero, only_zero=only_zero)
+        if not forms:
+            return
+        key = (group, certainty, include_zero, only_zero)
         if key in seen:
             return
         seen.add(key)
-        constraints.append({"id": "style", "field": "style", "value": normalized_value})
+        requests.append(
+            {
+                "group": group,
+                "label": label,
+                "forms": forms,
+                "is_certain": certainty,
+                "include_zero": include_zero,
+                "only_zero": only_zero,
+            }
+        )
 
-    for match in re.finditer(r"\bpr(?:ofil|ofile|file|of)?\.?\s*([0-9]+)\b", user_text or "", flags=re.IGNORECASE):
-        add_style(f"Pr {match.group(1)}")
-    for match in re.finditer(r"\bfp\b|\bfågelperspektiv\b|\bfagelperspektiv\b|\bbird'?s?-eye view\b", user_text or "", flags=re.IGNORECASE):
-        add_style("Fp")
-    for match in re.finditer(r"\brak\b|\bkb\b|\bsod\b", user_text or "", flags=re.IGNORECASE):
-        add_style(match.group(0))
+    explicit_group_matches = list(re.finditer(r"\b(?:group|grupp)\s*([a-g])\b", text))
+    for match in explicit_group_matches:
+        group = match.group(1).upper()
+        if group in {"C", "E", "G"}:
+            if re.search(r"\b(?:without|utan|saknar|lacks?|no)\b", text):
+                add_group(group, f"Group {group}, feature absent", only_zero=True)
+            elif re.search(r"\b(?:including|inklusive|also zero|aven 0|även 0|including 0)\b", text):
+                add_group(group, f"Group {group}, including 0", include_zero=True)
+            else:
+                add_group(group, f"Group {group}, feature present")
+        else:
+            add_group(group, f"Group {group}")
 
-    text_folded = _fold_text(user_text or "")
+    if re.search(r"\b(?:runes?|runor|runorna|runic\s+characters?)\b", text) and re.search(r"\b(?:cross(?:es)?|kors(?:en|et)?)\b", text):
+        if re.search(r"\b(?:without|utan|saknar|lacks?|no)\s+(?:runes?|runor)\b|\b(?:runes?|runor)\s+(?:saknas|absent)\b", text):
+            add_group("G", "Group G, no runes on the cross", only_zero=True)
+        else:
+            add_group("G", "Group G, runes on the cross")
+
+    if re.search(r"\b(?:ornament|ornamental|decoration|decorative|dekoration|ornamentik|ornamenterad|utsmyck)\w*\b", text):
+        if re.search(r"\b(?:without|utan|saknar|lacks?|no)\b", text):
+            add_group("E", "Group E, no ornamental decoration", only_zero=True)
+        else:
+            add_group("E", "Group E, ornamental decoration")
+
+    if re.search(r"\b(?:attached|fast|fäst|fastsatt|attached\s+to\s+the\s+runic\s+band|runic\s+band|runslinga|runband|base|foot|fot|bas)\b", text):
+        if re.search(r"\b(?:without|utan|saknar|lacks?|no)\b", text):
+            add_group("C", "Group C, no attachment/base/foot", only_zero=True)
+        else:
+            add_group("C", "Group C, attachment/base/foot")
+
+    if re.search(r"\b(?:centre|center|centrum|mitt|basic\s+construction|grundkonstruktion|construction|konstruktion)\b", text) and re.search(r"\b(?:cross(?:es)?|kors)\b", text):
+        add_group("A", "Group A, centre/basic construction")
+
+    if re.search(r"\b(?:overall\s+shape|shape|form|helhetsform|yttre\s+form)\b", text) and re.search(r"\b(?:cross(?:es)?|kors)\b", text):
+        add_group("B", "Group B, overall shape")
+
+    if re.search(r"\b(?:outer\s+part|cross[-\s]?arm\s+ends?|arm\s+ends?|korsarm(?:en|ar|arnas)?|armarnas\s+form|yttre\s+delen)\b", text):
+        add_group("D", "Group D, cross-arm ends")
+
+    if re.search(r"\b(?:width|thickness|wide|thick|bredd|tjocklek|breda|tjocka|smala|thin)\b", text) and re.search(r"\b(?:cross[-\s]?arms?|korsarm(?:ar|arna)?|cross(?:es)?|kors)\b", text):
+        add_group("F", "Group F, width/thickness")
+
+    return requests
+
+
+def _extract_cross_form_constraints(user_text: str) -> list[dict[str, Any]]:
+    constraints = [
+        _make_cross_form_rule(request["form"], request["is_certain"])
+        for request in _extract_cross_form_requests(user_text)
+    ]
+    constraints.extend(
+        _make_cross_form_group(group_request["forms"], group_request["is_certain"])
+        for group_request in _extract_cross_form_group_requests(user_text)
+    )
+    return constraints
+
+
+def _apply_cross_form_constraint(qs, constraint: dict[str, Any]):
+    if _is_group(constraint):
+        condition = str(constraint.get("condition", "AND")).upper()
+        child_rules = [rule for rule in constraint.get("rules", []) if isinstance(rule, dict)]
+        if condition == "OR":
+            query = Q()
+            for child in child_rules:
+                value = child.get("value") or {}
+                form = str(value.get("form") or "").strip()
+                if not form:
+                    continue
+                child_query = Q(crosses__forms__form__name=form)
+                certainty = str(value.get("is_certain", "2"))
+                if certainty in {"0", "1"}:
+                    child_query &= Q(crosses__forms__is_certain=int(certainty))
+                query |= child_query
+            return qs.filter(query).distinct() if query else qs
+        for child in child_rules:
+            qs = _apply_cross_form_constraint(qs, child)
+        return qs
+
+    value = constraint.get("value") or {}
+    form = str(value.get("form") or "").strip()
+    if not form:
+        return qs
+    qs = qs.filter(crosses__forms__form__name=form)
+    certainty = str(value.get("is_certain", "2"))
+    if certainty in {"0", "1"}:
+        qs = qs.filter(crosses__forms__is_certain=int(certainty))
+    return qs.distinct()
+
+
+STYLE_GROUP_ALIASES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
+    (
+        "Urnes style",
+        ("Pr 3", "Pr 4", "Pr 5"),
+        (
+            r"\burnes(?:stil| style)?\b",
+            r"\burnesstilen\b",
+        ),
+    ),
+    (
+        "Ringerike style",
+        ("Pr 1", "Pr 2"),
+        (
+            r"\bringerike(?:stil| style)?\b",
+            r"\bringerikestilen\b",
+        ),
+    ),
+    (
+        "profile style",
+        ("Pr 1", "Pr 2", "Pr 3", "Pr 4", "Pr 5"),
+        (
+            r"\bprofilstil(?:en)?\b",
+            r"\bprofile style\b",
+            r"\bprofiled style\b",
+        ),
+    ),
+    (
+        "bird's-eye-view style",
+        ("Fp",),
+        (
+            r"\bfp\b",
+            r"\bfågelperspektiv\b",
+            r"\bfagelperspektiv\b",
+            r"\bbird'?s?-eye view\b",
+        ),
+    ),
+    (
+        "plain style",
+        ("Rak",),
+        (
+            r"\brak\b",
+            r"\brak stil\b",
+            r"\bplain style\b",
+        ),
+    ),
+    (
+        "cross-band stone style",
+        ("Kb",),
+        (
+            r"\bkb\b",
+            r"\bkorsbandssten(?:ar)?\b",
+            r"\bcross-band stones?\b",
+        ),
+    ),
+    (
+        "Sod style",
+        ("Sod",),
+        (r"\bsod\b",),
+    ),
+)
+
+
+def _canonical_style_code(value: str) -> str:
+    cleaned = re.sub(r"\s+", " ", str(value or "").replace("\u00a0", " ")).strip()
+    compact = _compact_code(cleaned)
+    if compact in {"rak", "fp", "kb", "sod"}:
+        return {"rak": "Rak", "fp": "Fp", "kb": "Kb", "sod": "Sod"}[compact]
+    match = re.fullmatch(r"pr([1-5])", compact)
+    if match:
+        return f"Pr {match.group(1)}"
+    return cleaned
+
+
+def _style_uncertainty_mode(user_text: str) -> Optional[str]:
+    text = _fold_text(user_text or "")
+    if re.search(r"\b(osak(?:er|ert|ra)?|osäker(?:t|a)?|uncertain|probably|probable|med fragetecken|med frågetecken)\b", text):
+        return "uncertain"
+    if "?" in (user_text or "") and re.search(r"\b(style|stil|pr\s*[1-5]|fp|rak|kb|sod)\b", text):
+        return "uncertain"
+    if re.search(
+        r"\b(saker|säkert|sakra|säkra|certain|certainly|without question mark|"
+        r"without question marks|utan fragetecken|utan frågetecken)\b",
+        text,
+    ):
+        return "certain"
+    return None
+
+
+def _extract_style_requests(user_text: str) -> list[dict[str, Any]]:
+    text = user_text or ""
+    text_folded = _fold_text(text)
+    requests: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add_request(label: str, codes: tuple[str, ...] | list[str]) -> None:
+        canonical_codes = [_canonical_style_code(code) for code in codes]
+        canonical_codes = [code for code in canonical_codes if code]
+        if not canonical_codes:
+            return
+        key = "|".join(canonical_codes)
+        if key in seen:
+            return
+        seen.add(key)
+        requests.append(
+            {
+                "label": label,
+                "codes": canonical_codes,
+                "uncertainty": _style_uncertainty_mode(user_text),
+            }
+        )
+
+    if re.search(r"\bpr\s*[1-5]\s*(?:-|–|—|to|till)\s*pr?\s*[1-5]\b", text, flags=re.IGNORECASE):
+        numbers = [int(n) for n in re.findall(r"[1-5]", text)]
+        if numbers:
+            first, last = min(numbers[0], numbers[-1]), max(numbers[0], numbers[-1])
+            add_request(f"Pr {first}–Pr {last}", [f"Pr {number}" for number in range(first, last + 1)])
+
+    if re.search(r"\bpr\s*1\s*(?:-|–|—|to|till)\s*5\b", text, flags=re.IGNORECASE):
+        add_request("Pr 1–Pr 5", [f"Pr {number}" for number in range(1, 6)])
+
+    for match in re.finditer(r"\bpr\.?\s*([1-5])\b", text, flags=re.IGNORECASE):
+        add_request(f"Pr {match.group(1)}", (f"Pr {match.group(1)}",))
+
+    for label, codes, patterns in STYLE_GROUP_ALIASES:
+        if any(re.search(pattern, text_folded, flags=re.IGNORECASE) for pattern in patterns):
+            add_request(label, codes)
+
     for value, folded_value in _get_style_values():
         if len(folded_value) < 2:
             continue
         if re.search(rf"(^|\b){re.escape(folded_value)}(\b|$)", text_folded):
-            add_style(value)
+            add_request(value, (value,))
+
+    return requests
+
+
+def _extract_style_constraints(user_text: str) -> list[dict[str, str]]:
+    constraints: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for request in _extract_style_requests(user_text):
+        for code in request["codes"]:
+            key = _fold_text(code)
+            if key in seen:
+                continue
+            seen.add(key)
+            constraints.append({"id": "style", "field": "style", "value": code})
     return constraints
+
+
+def _make_style_query_constraint(request: dict[str, Any]) -> dict[str, Any]:
+    codes = list(request.get("codes") or [])
+    code_group = _make_style_code_group(codes)
+    uncertainty = request.get("uncertainty")
+    if uncertainty == "uncertain":
+        return {
+            "condition": "AND",
+            "rules": [code_group, _make_style_rule("?")],
+            "not": False,
+            "valid": True,
+        }
+    if uncertainty == "certain":
+        return {
+            "condition": "AND",
+            "rules": [code_group, _make_style_rule("?", operator="not_contains")],
+            "not": False,
+            "valid": True,
+        }
+    return code_group
+
+
+def _extract_style_query_constraints(user_text: str) -> list[dict[str, Any]]:
+    return [_make_style_query_constraint(request) for request in _extract_style_requests(user_text)]
+
+
+def _build_style_q(user_text: str) -> tuple[Optional[Q], list[dict[str, Any]]]:
+    requests = _extract_style_requests(user_text)
+    style_q = Q()
+    has_any = False
+    for request in requests:
+        codes_q = Q()
+        for code in request.get("codes") or []:
+            codes_q |= Q(style__icontains=code)
+        uncertainty = request.get("uncertainty")
+        if uncertainty == "uncertain":
+            codes_q &= Q(style__icontains="?")
+        elif uncertainty == "certain":
+            codes_q &= ~Q(style__icontains="?")
+        style_q &= codes_q
+        has_any = True
+    return (style_q if has_any else None), requests
 
 
 @lru_cache(maxsize=1)
@@ -1647,9 +2224,79 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
         if not _has_location_value(root, (item["id"],), item["value"]):
             root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
 
-    for item in _extract_style_constraints(user_text):
-        if not _has_location_value(root, (item["id"],), item["value"]):
-            root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
+    cross_count_constraints = _extract_cross_count_constraints(user_text)
+    if cross_count_constraints:
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") == "num_crosses"
+            or (rule.get("id") == "objectInfo" and _fold_text(str(rule.get("value") or "")) == "kors"),
+        )
+        for constraint in cross_count_constraints:
+            root = _append_and_constraint(root, constraint)
+
+    cross_form_constraints = _extract_cross_form_constraints(user_text)
+    if cross_form_constraints:
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") == "cross_form"
+            or (rule.get("id") == "objectInfo" and _fold_text(str(rule.get("value") or "")) == "kors"),
+        )
+        cross_form_noise_words = {
+            "inside",
+            "cross",
+            "crosses",
+            "kors",
+            "korset",
+            "rune",
+            "runes",
+            "runic",
+            "runor",
+            "runorna",
+            "ornament",
+            "ornamental",
+            "decoration",
+            "dekoration",
+            "base",
+            "foot",
+            "attached",
+            "band",
+            "runic band",
+            "runslinga",
+            "runband",
+        }
+        normalization_rule_ids = {
+            "normalization_norse_to_transliteration",
+            "normalization_scandinavian_to_transliteration",
+            "search_runic_texts",
+        }
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") in normalization_rule_ids
+            and (
+                _fold_text(str(rule.get("value") or "")) in cross_form_noise_words
+                or (
+                    isinstance(rule.get("value"), dict)
+                    and (
+                        _fold_text(str(rule.get("value", {}).get("normalization") or "")) in cross_form_noise_words
+                        or _fold_text(str(rule.get("value", {}).get("transliteration") or "")) in cross_form_noise_words
+                    )
+                )
+            ),
+        )
+        for constraint in cross_form_constraints:
+            root = _append_and_constraint(root, constraint)
+
+    style_constraints = _extract_style_query_constraints(user_text)
+    if style_constraints:
+        _remove_rules(root, lambda rule: rule.get("id") == "style")
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id")
+            in {"full_address", "current_location", "found_location", "parish", "district", "municipality"}
+            and _looks_like_style_location_value(rule.get("value")),
+        )
+        for constraint in style_constraints:
+            root = _append_and_constraint(root, constraint)
 
     for item in _extract_carver_constraints(user_text):
         if not _has_location_value(root, (item["id"],), item["value"]):
@@ -1782,11 +2429,27 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     for item in _extract_material_constraints(user_text):
         rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
 
+    cross_count_constraints = _extract_cross_count_constraints(user_text)
     for item in _extract_object_info_constraints(user_text):
-        rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
+        if not (
+            cross_count_constraints
+            and item["id"] == "objectInfo"
+            and _fold_text(item["value"]) == "kors"
+        ):
+            rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
 
-    for item in _extract_style_constraints(user_text):
-        rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
+    rules.extend(cross_count_constraints)
+
+    cross_form_constraints = _extract_cross_form_constraints(user_text)
+    if cross_form_constraints:
+        rules = [
+            rule
+            for rule in rules
+            if not (rule.get("id") == "objectInfo" and _fold_text(str(rule.get("value") or "")) == "kors")
+        ]
+    rules.extend(cross_form_constraints)
+
+    rules.extend(_extract_style_query_constraints(user_text))
 
     for item in _extract_carver_constraints(user_text):
         rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
@@ -1892,6 +2555,23 @@ def _is_simple_deterministic_query(user_text: str, fallback_rules: Optional[str]
             r"\b(?:carvers?|rune-?carvers?|ristare|runristare|signed|signerad\w*|signerat|"
             r"signerade|ristarsignatur\w*|signature|attributed|ascribed|attribuer\w*|"
             r"tillskriv\w*|made|carved|cut|ristad|ristade|ristat|gjord|gjorda|by|av|to|till)\b",
+            "",
+            text,
+        )
+    if _extract_cross_form_constraints(user_text):
+        for request in _extract_cross_form_requests(user_text):
+            form = str(request.get("form") or "").lower()
+            if form:
+                text = re.sub(rf"\b{re.escape(form)}\b", "", text)
+        text = re.sub(
+            r"\b(?:cross[-\s]?forms?|korsform(?:en|er|erna)?|linn\s+lager|lager(?:s)?\s+system|"
+            r"group\s+[a-g]|grupp\s+[a-g]|cross(?:es)?|kors(?:en|et)?|inside|contains?|contain|"
+            r"with|which|have|has|having|med|som|har|runes?|runic|runor|runorna|"
+            r"ornament(?:al)?|decoration|decorative|dekoration|ornamentik|ornamenterad|"
+            r"without|utan|saknar|lacks?|no|attached|runic\s+band|band|runslinga|runband|"
+            r"base|foot|fot|bas|centre|center|centrum|basic\s+construction|grundkonstruktion|"
+            r"overall\s+shape|shape|form|outer\s+part|cross[-\s]?arm|arms?|width|thickness|"
+            r"bredd|tjocklek|inscriptions?|inskrifter|find|hitta|alla|all)\b",
             "",
             text,
         )
@@ -2085,11 +2765,21 @@ def _build_meta_queryset_from_text(user_text: str, *, ignore_dating_constraint: 
         # material_type is modeled as FK to MaterialType.name in ORM.
         qs = qs.filter(materialType__name__iexact=material["value"])
 
+    cross_count_constraints = _extract_cross_count_constraints(user_text)
+    for constraint in cross_count_constraints:
+        qs = _apply_cross_count_constraint(qs, constraint)
+
+    for constraint in _extract_cross_form_constraints(user_text):
+        qs = _apply_cross_form_constraint(qs, constraint)
+
     for item in _extract_object_info_constraints(user_text):
+        if cross_count_constraints and item["id"] == "objectInfo" and _fold_text(item["value"]) == "kors":
+            continue
         qs = qs.filter(objectInfo__icontains=item["value"])
 
-    for item in _extract_style_constraints(user_text):
-        qs = qs.filter(style__icontains=item["value"])
+    style_q, _style_requests = _build_style_q(user_text)
+    if style_q is not None:
+        qs = qs.filter(style_q)
 
     for item in _extract_carver_constraints(user_text):
         qs = qs.filter(carver__icontains=item["value"])
@@ -2508,7 +3198,10 @@ def _looks_like_count_question(user_text: str) -> bool:
 def _answer_count_from_filters(user_text: str) -> AiAnswerResponse:
     qs, dating_prefix, country_codes = _build_meta_queryset_from_text(user_text)
     count = qs.count()
-    answer = f"I found {count} inscriptions matching your query."
+    answer = _with_cross_form_context(
+        _with_style_context(f"I found {count} inscriptions matching your query.", user_text),
+        user_text,
+    )
     return AiAnswerResponse(
         answer=answer,
         matched_inscriptions=count,
@@ -2516,6 +3209,8 @@ def _answer_count_from_filters(user_text: str) -> AiAnswerResponse:
             "count": count,
             "country_codes": country_codes,
             "dating_prefix": dating_prefix,
+            "style_requests": _extract_style_requests(user_text),
+            "cross_form_requests": _extract_cross_form_requests(user_text),
         },
     )
 
@@ -2537,6 +3232,7 @@ def _answer_list_from_filters(user_text: str) -> AiAnswerResponse:
         answer = f"I found {total} inscriptions: {', '.join(signatures)}"
     else:
         answer = f"I found {total} inscriptions. Showing first {limit}: {', '.join(signatures)}"
+    answer = _with_cross_form_context(_with_style_context(answer, user_text), user_text)
 
     return AiAnswerResponse(
         answer=answer,
@@ -2547,6 +3243,8 @@ def _answer_list_from_filters(user_text: str) -> AiAnswerResponse:
             "total_count": total,
             "country_codes": country_codes,
             "dating_prefix": dating_prefix,
+            "style_requests": _extract_style_requests(user_text),
+            "cross_form_requests": _extract_cross_form_requests(user_text),
         },
     )
 
@@ -2708,7 +3406,190 @@ def _looks_like_period_frequency_question(user_text: str) -> bool:
     return asks_period and (asks_compare or mentions_period_codes)
 
 
-STYLE_HELP_URL = "https://rundata-net.readthedocs.io/en/latest/db/data.html#figure-styles"
+STYLE_HELP_URL = "https://rundata-net.readthedocs.io/en/latest/db/data.html#meta-information"
+CROSS_FORM_HELP_URL = "https://rundata-net.readthedocs.io/en/latest/db/data.html#meta-information"
+
+STYLE_CODE_DESCRIPTIONS = {
+    "Rak": "Rak/plain style",
+    "Fp": "Fågelperspektiv/bird's-eye-view style",
+    "Kb": "Korsbandssten/cross-band stone style",
+    "Sod": "Sod style",
+    "Pr 1": "Pr1, older Ringerike style",
+    "Pr 2": "Pr2, younger Ringerike style",
+    "Pr 3": "Pr3, older Urnes style",
+    "Pr 4": "Pr4, middle Urnes style",
+    "Pr 5": "Pr5, later Urnes style",
+}
+
+CROSS_FORM_GROUP_DESCRIPTIONS = {
+    "A": "Group A describes the centre/basic construction of the cross.",
+    "B": "Group B describes the overall shape of the cross.",
+    "C": "Group C describes attachment to the runic band, or a base/foot.",
+    "D": "Group D describes the shape of the outer part of the cross-arm.",
+    "E": "Group E describes ornamental decoration.",
+    "F": "Group F describes the width/thickness of the cross-arms.",
+    "G": "Group G describes runes placed on the cross.",
+}
+
+
+def _format_cross_form_request(request: dict[str, str]) -> str:
+    form = request.get("form", "")
+    certainty = request.get("is_certain", "2")
+    if certainty == "1":
+        return f"{form} as certain"
+    if certainty == "0":
+        return f"{form} as uncertain"
+    return form
+
+
+def _format_cross_form_group_request(request: dict[str, Any]) -> str:
+    label = str(request.get("label") or f"Group {request.get('group', '')}").strip()
+    forms = [str(form) for form in request.get("forms") or []]
+    if not forms:
+        return label
+    if len(forms) > 4:
+        form_text = f"{forms[0]}–{forms[-1]}"
+    else:
+        form_text = ", ".join(forms)
+    certainty = request.get("is_certain", "2")
+    certainty_text = ""
+    if certainty == "1":
+        certainty_text = " as certain"
+    elif certainty == "0":
+        certainty_text = " as uncertain"
+    return f"{label} as {form_text}{certainty_text}"
+
+
+def _cross_form_context_note(user_text: str) -> str:
+    requests = _extract_cross_form_requests(user_text)
+    group_requests = _extract_cross_form_group_requests(user_text)
+    if not requests and not group_requests:
+        return ""
+    interpreted_parts = [_format_cross_form_request(request) for request in requests]
+    interpreted_parts.extend(_format_cross_form_group_request(request) for request in group_requests)
+    interpreted = ", ".join(interpreted_parts)
+    return (
+        f"\n\nCross-form note: I interpreted the Lager cross-form wording as {interpreted}. "
+        "Rundata-net uses Linn Lager's classification system for runestone crosses. "
+        "The system has seven groups A–G: A centre/basic construction, B overall shape, "
+        "C attachment/base/foot, D cross-arm ends, E ornament, F width/thickness, and "
+        f"G runes on the cross. More about the Cross form field: {CROSS_FORM_HELP_URL}"
+    )
+
+
+def _with_cross_form_context(answer: str, user_text: str) -> str:
+    return answer + _cross_form_context_note(user_text)
+
+
+def _looks_like_cross_form_explanation_question(user_text: str) -> bool:
+    text = _fold_text(user_text or "")
+    asks_definition = any(
+        token in text
+        for token in (
+            "what is",
+            "what does",
+            "explain",
+            "vad ar",
+            "vad betyder",
+            "forklara",
+            "förklara",
+        )
+    )
+    mentions_cross_form = bool(
+        re.search(
+            r"\b(korsform(?:en|er|erna)?|cross[-\s]?forms?|linn\s+lager|lager(?:s)?\s+system|"
+            r"cross\s+classification|korsets\s+form|[a-g]\s*\d{1,2})\b",
+            text,
+        )
+    )
+    return asks_definition and mentions_cross_form
+
+
+def _answer_cross_form_explanation(user_text: str) -> AiAnswerResponse:
+    requests = _extract_cross_form_requests(
+        user_text,
+        require_intent=False,
+        question_mark_uncertain=False,
+    )
+    group_requests = _extract_cross_form_group_requests(user_text)
+    requested_groups: list[str] = []
+    for request in requests:
+        form = request.get("form", "")
+        if form:
+            requested_groups.append(form[0])
+    for request in group_requests:
+        group = str(request.get("group") or "")
+        if group:
+            requested_groups.append(group)
+
+    if not requested_groups:
+        requested_groups = list(CROSS_FORM_GROUP_DESCRIPTIONS.keys())
+
+    unique_groups = []
+    seen = set()
+    for group in requested_groups:
+        group = group.upper()
+        if group in CROSS_FORM_GROUP_DESCRIPTIONS and group not in seen:
+            seen.add(group)
+            unique_groups.append(group)
+
+    group_descriptions = " ".join(CROSS_FORM_GROUP_DESCRIPTIONS[group] for group in unique_groups)
+    interpreted_parts = [_format_cross_form_request(request) for request in requests]
+    interpreted_parts.extend(_format_cross_form_group_request(request) for request in group_requests)
+    interpreted = ", ".join(interpreted_parts)
+    interpreted_sentence = f" I interpreted your wording as {interpreted}." if interpreted else ""
+    answer = (
+        "The Cross form field follows Linn Lager's classification system for Scandinavian "
+        "runestone crosses. A cross form code combines one of the groups A–G with a variable "
+        "number, for example A1, B3 or E10."
+        f"{interpreted_sentence} {group_descriptions} "
+        "In searches, uncertain forms can be requested separately from certain forms. "
+        f"More about the Cross form field: {CROSS_FORM_HELP_URL}"
+    )
+    return AiAnswerResponse(
+        answer=answer,
+        matched_inscriptions=0,
+        metadata={
+            "cross_form_groups": unique_groups,
+            "help_url": CROSS_FORM_HELP_URL,
+            "cross_form_requests": requests,
+            "cross_form_group_requests": group_requests,
+        },
+    )
+
+
+def _format_style_request(request: dict[str, Any]) -> str:
+    label = str(request.get("label") or "style").strip()
+    codes = [str(code) for code in request.get("codes") or []]
+    if not codes:
+        return label
+    code_text = ", ".join(codes)
+    if label in codes or label == code_text:
+        return code_text
+    return f"{label} as {code_text}"
+
+
+def _style_context_note(user_text: str) -> str:
+    requests = _extract_style_requests(user_text)
+    if not requests:
+        return ""
+    interpreted = "; ".join(_format_style_request(request) for request in requests)
+    uncertainty = requests[0].get("uncertainty")
+    uncertainty_note = ""
+    if uncertainty == "uncertain":
+        uncertainty_note = " I also required a question mark in the Style field, because the query asked for uncertain style attributions."
+    elif uncertainty == "certain":
+        uncertainty_note = " I excluded question marks in the Style field, because the query asked for certain style attributions."
+    return (
+        f"\n\nStyle note: I interpreted the style wording as {interpreted}. "
+        "Rundata-net uses A.-S. Gräslund's chronological style system for Viking Age runestones: "
+        "Rak, Fp, Kb and Pr1–Pr5. Pr1–Pr2 correspond to Ringerike style, and Pr3–Pr5 to Urnes style."
+        f"{uncertainty_note} More about the Style field: {STYLE_HELP_URL}"
+    )
+
+
+def _with_style_context(answer: str, user_text: str) -> str:
+    return answer + _style_context_note(user_text)
 
 
 def _looks_like_style_explanation_question(user_text: str) -> bool:
@@ -2725,38 +3606,41 @@ def _looks_like_style_explanation_question(user_text: str) -> bool:
             "förklara",
         )
     )
-    mentions_style_code = bool(re.search(r"\b(fp|kb|rak|sod|pr\s*[1-5])\b", text))
-    return asks_definition and mentions_style_code
+    mentions_style = bool(
+        re.search(r"\b(fp|kb|rak|sod|pr\s*[1-5]|urnes|ringerike|profilstil|profile style|runstensstil|style|stil)\b", text)
+    )
+    return asks_definition and mentions_style
 
 
 def _answer_style_explanation(user_text: str) -> AiAnswerResponse:
-    text = _fold_text(user_text or "")
+    requests = _extract_style_requests(user_text)
     requested_codes: list[str] = []
-    for code in ("Fp", "Kb", "Rak", "Sod"):
-        if re.search(rf"\b{re.escape(code.lower())}\b", text):
-            requested_codes.append(code)
-    for match in re.finditer(r"\bpr\s*([1-5])\b", text):
-        requested_codes.append(f"Pr {match.group(1)}")
+    for request in requests:
+        requested_codes.extend(request.get("codes") or [])
 
     if not requested_codes:
-        requested_codes = ["Pr 1-5", "Fp", "Kb", "Rak", "Sod"]
+        requested_codes = ["Rak", "Fp", "Kb", "Pr 1", "Pr 2", "Pr 3", "Pr 4", "Pr 5"]
 
     unique_codes = []
     seen = set()
     for code in requested_codes:
-        if code.lower() not in seen:
-            seen.add(code.lower())
-            unique_codes.append(code)
+        canonical = _canonical_style_code(code)
+        if canonical.lower() not in seen:
+            seen.add(canonical.lower())
+            unique_codes.append(canonical)
 
-    codes_text = ", ".join(unique_codes)
-    verb = "belongs" if len(unique_codes) == 1 else "belong"
+    code_descriptions = "; ".join(
+        f"{code}: {STYLE_CODE_DESCRIPTIONS.get(code, 'style code')}" for code in unique_codes
+    )
+    interpreted = "; ".join(_format_style_request(request) for request in requests)
+    interpreted_sentence = f" I interpreted your wording as {interpreted}." if interpreted else ""
     answer = (
-        f"{codes_text} {verb} to the Style filter. Style grouping information "
-        "(Pr1-Pr5, Fp, KB, RAK) follows A.-S. Gräslund's chronological system "
-        "for Viking Age runestones. The runestone material from the Mälar valley "
-        "was dated by A.-S. Gräslund, and other runestones by A.-S. Gräslund "
-        "and L. Lager in cooperation. See Help: Style: "
-        f"{STYLE_HELP_URL}"
+        "The Style field in Rundata-net follows A.-S. Gräslund's chronological "
+        "style system for Viking Age runestones. The main searchable codes are "
+        "Rak, Fp, Kb and Pr1–Pr5. Pr1–Pr2 correspond to Ringerike style, while "
+        "Pr3–Pr5 correspond to Urnes style."
+        f"{interpreted_sentence} Requested code information: {code_descriptions}. "
+        f"More about the Style field: {STYLE_HELP_URL}"
     )
     return AiAnswerResponse(
         answer=answer,
@@ -2764,6 +3648,7 @@ def _answer_style_explanation(user_text: str) -> AiAnswerResponse:
         metadata={
             "style_codes": unique_codes,
             "help_url": STYLE_HELP_URL,
+            "style_requests": requests,
         },
     )
 
@@ -2867,6 +3752,9 @@ def ai_answer(request, data: TextRequest):
     Answer DB-driven analytical questions. Initial response mode supports
     counting distinct carvers in user-constrained result sets.
     """
+    if _looks_like_cross_form_explanation_question(data.text):
+        return _answer_cross_form_explanation(data.text)
+
     if _looks_like_style_explanation_question(data.text):
         return _answer_style_explanation(data.text)
 

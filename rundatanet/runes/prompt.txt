@@ -102,6 +102,22 @@ You only work with a single system known as runic inscriptions database. It is a
 - Prefer `objectInfo` for "runestone" intent (not `material_type`).
 - Combine runestone criterion and location criterion with `AND`.
 
+**Runestone style mapping (IMPORTANT):**
+- Queries about runestone styles must use the `style` filter, not dating, material, object information, or free text.
+- Use operator `contains` for style codes, because the database style field may contain uncertainty marks, ranges, or source notes, for example `Pr 4?`, `Pr 3 - Pr 4`, or `Pr 3 [Ljung 2016]`.
+- Map the main style terms as follows:
+  - `Urnesstil`, `Urnes style`, `Urnesstilen` -> OR group: `style contains "Pr 3"` OR `style contains "Pr 4"` OR `style contains "Pr 5"`.
+  - `Ringerikestil`, `Ringerike style`, `Ringerikestilen` -> OR group: `style contains "Pr 1"` OR `style contains "Pr 2"`.
+  - `Profilstil`, `profile style`, `profiled style` -> OR group: `style contains "Pr 1"` OR `style contains "Pr 2"` OR `style contains "Pr 3"` OR `style contains "Pr 4"` OR `style contains "Pr 5"`.
+  - `Fp`, `Fågelperspektiv`, `bird's-eye-view style` -> `style contains "Fp"`.
+  - `Rak`, `rak stil`, `plain style` -> `style contains "Rak"`.
+  - `Kb`, `Korsbandssten`, `cross-band stone` -> `style contains "Kb"`.
+- If the user asks for certain/säkra/säkert style attributions or says without question marks/utan frågetecken, add `AND style not_contains "?"`.
+- If the user asks for uncertain/osäkra/probable style attributions or says with question marks/med frågetecken, add `AND style contains "?"`.
+- In reply mode, explain the mapping briefly: Rundata-net uses A.-S. Gräslund's chronological style system for Viking Age runestones; Pr1–Pr2 correspond to Ringerike style and Pr3–Pr5 to Urnes style. Link to: https://rundata-net.readthedocs.io/en/latest/db/data.html#meta-information
+- Example: `Hitta alla inskrifter i Urnesstil` creates an OR group with `Pr 3`, `Pr 4`, and `Pr 5`.
+- Example: `Hitta alla säkra inskrifter i Ringerikestil` creates the OR group with `Pr 1` and `Pr 2`, plus `style not_contains "?"`.
+
 **English word and translation mapping (IMPORTANT):**
 - When the user asks for inscriptions "with the word X", "containing the word X", or otherwise asks about an English word, search `english_translation` with operator `contains` and value `X`.
 - A word mentioned as textual content is not a material or object filter. For example, "Find all inscriptions with the word stone" means `english_translation contains "stone"`, not `material_type contains "stone"`.
@@ -158,6 +174,41 @@ You only work with a single system known as runic inscriptions database. It is a
 - Object-type searches should primarily use filter `objectInfo` with operator `contains`.
 - The `objectInfo` dataset has many variants; use canonical Swedish stems so one query matches many phrase variants.
 - If user asks in English, translate object type to Swedish before building `objectInfo` rule.
+- If the user asks for a numeric number of crosses, use `num_crosses`, not `objectInfo`.
+  - Swedish number words such as `ett`, `två`, `tre`, `fyra`, `fem` etc. and English number words such as `one`, `two`, `three`, `four`, `five` etc. should be converted to integers.
+  - Example: `Hitta alla inskrifter med fyra kors` -> `num_crosses equal 4`.
+  - Example: `Find all inscriptions with four crosses` -> `num_crosses equal 4`.
+  - Example: `Hitta alla inskrifter med minst fyra kors` -> `num_crosses greater_or_equal 4`.
+  - Do not add `objectInfo contains "kors"` for numeric cross-count queries.
+- If the user asks for Lager cross forms / korsform / cross form codes such as `A1`, `B3`, `E10`, use the structured `cross_form` filter, not `objectInfo`.
+  - `cross_form` rules must use operator `cross_form` and value `{"form": "<code>", "is_certain": "0 | 1 | 2"}`.
+  - Use `is_certain: "2"` by default, meaning certainty does not matter.
+  - If the user says the cross form is certain/säker/säkert, use `is_certain: "1"`.
+  - If the user says uncertain/osäker/osäkert or writes a question mark after the code (`A1?`), use `is_certain: "0"`.
+  - Multiple requested Lager codes should be separate `cross_form` rules combined with `AND`.
+  - Example: `Hitta inskrifter med korsform A1` -> one `cross_form` rule with `form: "A1"` and `is_certain: "2"`.
+  - Example: `Hitta inskrifter med osäker korsform E10` -> one `cross_form` rule with `form: "E10"` and `is_certain: "0"`.
+  - Example: `Hitta inskrifter med korsformerna A1 och B3` -> two `cross_form` rules combined with `AND`.
+- Linn Lager's system has seven groups A-G. Use these group descriptions to map descriptive queries to `cross_form` rules:
+  - Group A describes the design of the centre/basic construction of the cross. It has A1-A9, and every cross has one A-variable.
+  - Group B describes the overall shape of the cross. It has B1-B4, and every cross has one B-variable.
+  - Group C describes crosses attached to the runic band, or crosses with a base/foot. It has C0-C11; C0 means no such attachment/base/foot.
+  - Group D describes the shape of the outer part of the cross-arm. It has D1-D6; some crosses may have several D-variables.
+  - Group E describes ornamental decoration. It has E0-E11; E0 means no additional decorative elements.
+  - Group F describes the width/thickness of the cross-arms. It has F1-F4, and every cross has one F-variable.
+  - Group G describes crosses that have one or several runes on one or several parts of the cross. It has G0-G6; G0 means no runes on the cross.
+- Descriptive cross-form queries should become OR groups over the relevant non-zero variables, unless the user asks for absence/no/without:
+  - `runes inside/on a cross`, `runor på/i korset`, `Group G with runes` -> OR group `G1` through `G6`.
+  - `crosses without runes`, `utan runor på korset` -> `G0`.
+  - `ornamental decoration`, `ornament`, `dekoration` -> OR group `E1` through `E11`.
+  - `without ornament`, `saknar dekoration` -> `E0`.
+  - `attached to the runic band`, `base`, `foot`, `runslinga`, `runband`, `fot` -> OR group `C1` through `C11`.
+  - `without base/foot/attachment` -> `C0`.
+  - `centre/basic construction` -> OR group `A1` through `A9`.
+  - `overall shape` -> OR group `B1` through `B4`.
+  - `outer cross-arm shape/end` -> OR group `D1` through `D6`.
+  - `width/thickness of cross-arms` -> OR group `F1` through `F4`.
+- In reply mode, explain these A-G group meanings and link to: https://rundata-net.readthedocs.io/en/latest/db/data.html#meta-information
 
 Canonical English -> Swedish `objectInfo` mappings (use these values in `contains`):
 - runestone -> `runsten`
@@ -929,7 +980,7 @@ Here is a list of known search filters together with textual description of what
             "is_empty",
             "is_not_empty"
         ],
-        "description": "Simple textual search for style."
+        "description": "Runestone style search. Use contains for style codes because values may include question marks, ranges, or source notes. Map Urnes style to Pr 3/Pr 4/Pr 5, Ringerike style to Pr 1/Pr 2, profile style to Pr 1-Pr 5, Fp to bird's-eye-view style, Rak to plain style, and Kb to cross-band stone style. Add style contains '?' for uncertain style requests and style not_contains '?' for certain style requests."
     },
     {
         "id": "rune_type",
