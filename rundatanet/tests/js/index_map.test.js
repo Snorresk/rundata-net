@@ -321,6 +321,9 @@ test('inscriptions2markers() adds drive link and warnings to marker popup', asyn
   assert.match(marker.popupText, /Warning: this inscription is moved/);
   assert.match(marker.popupText, /Drive here!/);
   assert.match(marker.popupText, /google\.com\/maps\/dir/);
+  assert.match(marker.popupText, /target="_blank"/);
+  assert.match(marker.popupText, /rel="noopener"/);
+  assert.not.match(marker.popupText, /target="_self"/);
   assert.is(marker.popupOptions.autoClose, false);
   assert.is(marker.popupOptions.autoPan, undefined);
   assert.not.match(marker.popupText, /map-drive-link/);
@@ -359,6 +362,9 @@ test('inscriptions2markers() uses mobile-only popup helpers on mobile', async ()
   const presentMarker = result.get(1).present;
 
   assert.match(marker.popupText, /map-drive-link/);
+  assert.match(marker.popupText, /target="_blank"/);
+  assert.match(marker.popupText, /rel="noopener"/);
+  assert.not.match(marker.popupText, /target="_self"/);
   assert.match(marker.popupText, /map-open-info-link/);
   assert.match(marker.popupText, /Open info/);
   assert.match(marker.popupText, /openMobileInscriptionInfo\("1"\)/);
