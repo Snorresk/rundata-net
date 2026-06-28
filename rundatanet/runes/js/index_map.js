@@ -380,11 +380,12 @@ function inscription2marker(inscriptionData, lat, lon, locationType = 'found', l
   });
   const destinationUrl = getGeoIntentURL(lat, lon);
   const driveLinkClass = isMobile ? ' class="map-drive-link"' : '';
+  const driveLinkTarget = ' target="_blank" rel="noopener"';
   if (confirmTexts.length > 0) {
     const confirmText = confirmTexts.join('\n');
-    popupText += `<a${driveLinkClass} href="${destinationUrl}" target="_self" onclick="return window.confirm('${confirmText}')">Drive here!</a>`;
+    popupText += `<a${driveLinkClass} href="${destinationUrl}"${driveLinkTarget} onclick="return window.confirm('${confirmText}')">Drive here!</a>`;
   } else {
-    popupText += `<a${driveLinkClass} href="${destinationUrl}" target="_self">Drive here!</a>`;
+    popupText += `<a${driveLinkClass} href="${destinationUrl}"${driveLinkTarget}>Drive here!</a>`;
   }
   if (isMobile) {
     const inscriptionId = JSON.stringify(String(inscriptionData.id));

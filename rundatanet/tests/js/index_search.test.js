@@ -291,6 +291,23 @@ testSingleRuleSearch({
 });
 testSingleRuleSearch({
   id: 'inscription_id',
+  operator: 'in_separated_list',
+  value: 'Sö Fv1986;218',
+  expectedCount: 1,
+  testName: 'semicolon remains part of an inscription id',
+  firstResultCheck: 'Sö Fv1986;218',
+  multiField: true,
+});
+testSingleRuleSearch({
+  id: 'inscription_id',
+  operator: 'in_separated_list',
+  value: 'Sö Fv1986;218, Sö Fv1986;220',
+  expectedCount: 2,
+  testName: 'comma separates inscription ids with semicolons',
+  multiField: true,
+});
+testSingleRuleSearch({
+  id: 'inscription_id',
   operator: 'begins_with',
   value: 'Öl 1',
   expectedCount: 11,

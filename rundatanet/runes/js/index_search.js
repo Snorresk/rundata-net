@@ -322,6 +322,19 @@ const searchViaList = (fieldValue, ruleValue) => {
   return { match };
 };
 
+const splitSignatureListValue = (ruleValue) => {
+  if (Array.isArray(ruleValue)) {
+    return ruleValue;
+  }
+  if (typeof ruleValue === 'string') {
+    // Commas/newlines are user-facing separators for inscription IDs; pipe is
+    // the internal/backwards-compatible separator.  Do not split on semicolon:
+    // signatures such as "Sö Fv1986;218" use semicolon as part of the ID.
+    return ruleValue.split(/[|,\n]+/).map(item => item.trim()).filter(Boolean);
+  }
+  return [ruleValue];
+};
+
 /**
  * Wrapper function for searching in signature_text and aliases
  * @param {Object} record - The complete record object containing signature_text and aliases
@@ -343,10 +356,7 @@ const searchSignatureWrapper = (record, ruleValue, operatorFn, negate = false, i
   const allSignatures = [signatureText, ...aliases];
 
   // Process the rule value based on the input type
-  const items = Array.isArray(ruleValue) ? ruleValue :
-    (typeof ruleValue === 'string' && ruleValue.indexOf('|') > -1) ?
-    ruleValue.split('|') :
-    [ruleValue];
+  const items = splitSignatureListValue(ruleValue);
 
   // Apply the operator function to check if any signature matches any item
   let match = allSignatures.some(sig =>

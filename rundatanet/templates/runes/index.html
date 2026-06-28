@@ -1367,7 +1367,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260626-stable-pdf-links"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260628-mobile-map-links"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -1774,7 +1774,11 @@ function miniRuleValueToText(value) {
 
 function parseIdQueryTokens(value) {
   return String(value || '')
-    .split(/[|,;\n]+/)
+    // Commas/newlines separate multiple inscription IDs in the compact
+    // mobile builder.  Keep semicolons inside signatures such as
+    // "Sö Fv1986;218"; many Fv signatures depend on that punctuation.
+    // Pipe is kept for backwards compatibility with older saved/shared rules.
+    .split(/[|,\n]+/)
     .map(v => v.trim())
     .filter(v => v.length > 0);
 }
@@ -2284,7 +2288,13 @@ function setMobileDbPane(pane) {
   });
 
   if (isMobile && selectedPane === 'map' && gMyMap) {
-    setTimeout(() => gMyMap.invalidateSize(), 50);
+    setTimeout(() => {
+      // Searches can run while the mobile map pane is hidden.  Leaflet may
+      // compute poor bounds for a hidden map (often leaving users over the sea),
+      // so refit to the active result group after the pane becomes visible.
+      gMyMap.invalidateSize();
+      showMarkersWrapper();
+    }, 50);
   }
 
   applyWindowAlignments();
