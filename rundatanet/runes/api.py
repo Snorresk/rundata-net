@@ -168,6 +168,22 @@ def _make_contains_rule(rule_id: str, field: str, value: str) -> dict[str, Any]:
     }
 
 
+def _make_style_rule(value: str, operator: str = "contains") -> dict[str, Any]:
+    return _make_contains_rule("style", "style", value) | {"operator": operator}
+
+
+def _make_style_code_group(values: list[str]) -> dict[str, Any]:
+    rules = [_make_style_rule(value) for value in values]
+    if len(rules) == 1:
+        return rules[0]
+    return {
+        "condition": "OR",
+        "rules": rules,
+        "not": False,
+        "valid": True,
+    }
+
+
 def _make_normalization_rule(
     value: str,
     *,
@@ -375,6 +391,27 @@ def _term_maps_to_country_or_province(value: str) -> bool:
     return _fold_text(value) in COUNTRY_PROVINCE_ALIASES
 
 
+def _looks_like_style_location_value(value: Any) -> bool:
+    folded = _fold_text(str(value or ""))
+    if not folded:
+        return False
+    return bool(
+        re.search(
+            r"\b(?:stilen|stil|style)\s+(?:rak|fp|kb|sod|pr(?:\s*[1-5])?|urnes|ringerike|"
+            r"profilstil|profiled?\s+style|fagelperspektiv|bird'?s?-eye view|"
+            r"korsbandssten|cross-band\s+stone)\b",
+            folded,
+        )
+        or re.search(
+            r"\b(?:urnes(?:stil| style|stilen)?|ringerike(?:stil| style|stilen)?|"
+            r"profilstil(?:en)?|profiled?\s+style|pr\s*[1-5]|fagelperspektiv|"
+            r"bird'?s?-eye view|rak\s+stil|plain\s+style|korsbandssten(?:ar)?|"
+            r"cross-band\s+stones?)\b",
+            folded,
+        )
+    )
+
+
 def _extract_location_terms(user_text: str) -> list[str]:
     text = user_text or ""
     terms: list[str] = []
@@ -449,6 +486,8 @@ def _extract_location_terms(user_text: str) -> list[str]:
             if re.fullmatch(r"(?i)fp", cleaned):
                 continue
             if re.fullmatch(r"(?i)(rak|kb|sod)(?:\s+style)?", cleaned):
+                continue
+            if _looks_like_style_location_value(cleaned):
                 continue
             if _term_maps_to_country_or_province(cleaned):
                 continue
@@ -1132,32 +1171,196 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
     return constraints
 
 
-def _extract_style_constraints(user_text: str) -> list[dict[str, str]]:
-    constraints: list[dict[str, str]] = []
+STYLE_GROUP_ALIASES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
+    (
+        "Urnes style",
+        ("Pr 3", "Pr 4", "Pr 5"),
+        (
+            r"\burnes(?:stil| style)?\b",
+            r"\burnesstilen\b",
+        ),
+    ),
+    (
+        "Ringerike style",
+        ("Pr 1", "Pr 2"),
+        (
+            r"\bringerike(?:stil| style)?\b",
+            r"\bringerikestilen\b",
+        ),
+    ),
+    (
+        "profile style",
+        ("Pr 1", "Pr 2", "Pr 3", "Pr 4", "Pr 5"),
+        (
+            r"\bprofilstil(?:en)?\b",
+            r"\bprofile style\b",
+            r"\bprofiled style\b",
+        ),
+    ),
+    (
+        "bird's-eye-view style",
+        ("Fp",),
+        (
+            r"\bfp\b",
+            r"\bfågelperspektiv\b",
+            r"\bfagelperspektiv\b",
+            r"\bbird'?s?-eye view\b",
+        ),
+    ),
+    (
+        "plain style",
+        ("Rak",),
+        (
+            r"\brak\b",
+            r"\brak stil\b",
+            r"\bplain style\b",
+        ),
+    ),
+    (
+        "cross-band stone style",
+        ("Kb",),
+        (
+            r"\bkb\b",
+            r"\bkorsbandssten(?:ar)?\b",
+            r"\bcross-band stones?\b",
+        ),
+    ),
+    (
+        "Sod style",
+        ("Sod",),
+        (r"\bsod\b",),
+    ),
+)
+
+
+def _canonical_style_code(value: str) -> str:
+    cleaned = re.sub(r"\s+", " ", str(value or "").replace("\u00a0", " ")).strip()
+    compact = _compact_code(cleaned)
+    if compact in {"rak", "fp", "kb", "sod"}:
+        return {"rak": "Rak", "fp": "Fp", "kb": "Kb", "sod": "Sod"}[compact]
+    match = re.fullmatch(r"pr([1-5])", compact)
+    if match:
+        return f"Pr {match.group(1)}"
+    return cleaned
+
+
+def _style_uncertainty_mode(user_text: str) -> Optional[str]:
+    text = _fold_text(user_text or "")
+    if re.search(r"\b(osak(?:er|ert|ra)?|osäker(?:t|a)?|uncertain|probably|probable|med fragetecken|med frågetecken)\b", text):
+        return "uncertain"
+    if "?" in (user_text or "") and re.search(r"\b(style|stil|pr\s*[1-5]|fp|rak|kb|sod)\b", text):
+        return "uncertain"
+    if re.search(
+        r"\b(saker|säkert|sakra|säkra|certain|certainly|without question mark|"
+        r"without question marks|utan fragetecken|utan frågetecken)\b",
+        text,
+    ):
+        return "certain"
+    return None
+
+
+def _extract_style_requests(user_text: str) -> list[dict[str, Any]]:
+    text = user_text or ""
+    text_folded = _fold_text(text)
+    requests: list[dict[str, Any]] = []
     seen: set[str] = set()
 
-    def add_style(value: str) -> None:
-        normalized_value = re.sub(r"\s+", " ", value.replace("\u00a0", " ")).strip()
-        key = _fold_text(normalized_value)
+    def add_request(label: str, codes: tuple[str, ...] | list[str]) -> None:
+        canonical_codes = [_canonical_style_code(code) for code in codes]
+        canonical_codes = [code for code in canonical_codes if code]
+        if not canonical_codes:
+            return
+        key = "|".join(canonical_codes)
         if key in seen:
             return
         seen.add(key)
-        constraints.append({"id": "style", "field": "style", "value": normalized_value})
+        requests.append(
+            {
+                "label": label,
+                "codes": canonical_codes,
+                "uncertainty": _style_uncertainty_mode(user_text),
+            }
+        )
 
-    for match in re.finditer(r"\bpr(?:ofil|ofile|file|of)?\.?\s*([0-9]+)\b", user_text or "", flags=re.IGNORECASE):
-        add_style(f"Pr {match.group(1)}")
-    for match in re.finditer(r"\bfp\b|\bfågelperspektiv\b|\bfagelperspektiv\b|\bbird'?s?-eye view\b", user_text or "", flags=re.IGNORECASE):
-        add_style("Fp")
-    for match in re.finditer(r"\brak\b|\bkb\b|\bsod\b", user_text or "", flags=re.IGNORECASE):
-        add_style(match.group(0))
+    if re.search(r"\bpr\s*[1-5]\s*(?:-|–|—|to|till)\s*pr?\s*[1-5]\b", text, flags=re.IGNORECASE):
+        numbers = [int(n) for n in re.findall(r"[1-5]", text)]
+        if numbers:
+            first, last = min(numbers[0], numbers[-1]), max(numbers[0], numbers[-1])
+            add_request(f"Pr {first}–Pr {last}", [f"Pr {number}" for number in range(first, last + 1)])
 
-    text_folded = _fold_text(user_text or "")
+    if re.search(r"\bpr\s*1\s*(?:-|–|—|to|till)\s*5\b", text, flags=re.IGNORECASE):
+        add_request("Pr 1–Pr 5", [f"Pr {number}" for number in range(1, 6)])
+
+    for match in re.finditer(r"\bpr\.?\s*([1-5])\b", text, flags=re.IGNORECASE):
+        add_request(f"Pr {match.group(1)}", (f"Pr {match.group(1)}",))
+
+    for label, codes, patterns in STYLE_GROUP_ALIASES:
+        if any(re.search(pattern, text_folded, flags=re.IGNORECASE) for pattern in patterns):
+            add_request(label, codes)
+
     for value, folded_value in _get_style_values():
         if len(folded_value) < 2:
             continue
         if re.search(rf"(^|\b){re.escape(folded_value)}(\b|$)", text_folded):
-            add_style(value)
+            add_request(value, (value,))
+
+    return requests
+
+
+def _extract_style_constraints(user_text: str) -> list[dict[str, str]]:
+    constraints: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for request in _extract_style_requests(user_text):
+        for code in request["codes"]:
+            key = _fold_text(code)
+            if key in seen:
+                continue
+            seen.add(key)
+            constraints.append({"id": "style", "field": "style", "value": code})
     return constraints
+
+
+def _make_style_query_constraint(request: dict[str, Any]) -> dict[str, Any]:
+    codes = list(request.get("codes") or [])
+    code_group = _make_style_code_group(codes)
+    uncertainty = request.get("uncertainty")
+    if uncertainty == "uncertain":
+        return {
+            "condition": "AND",
+            "rules": [code_group, _make_style_rule("?")],
+            "not": False,
+            "valid": True,
+        }
+    if uncertainty == "certain":
+        return {
+            "condition": "AND",
+            "rules": [code_group, _make_style_rule("?", operator="not_contains")],
+            "not": False,
+            "valid": True,
+        }
+    return code_group
+
+
+def _extract_style_query_constraints(user_text: str) -> list[dict[str, Any]]:
+    return [_make_style_query_constraint(request) for request in _extract_style_requests(user_text)]
+
+
+def _build_style_q(user_text: str) -> tuple[Optional[Q], list[dict[str, Any]]]:
+    requests = _extract_style_requests(user_text)
+    style_q = Q()
+    has_any = False
+    for request in requests:
+        codes_q = Q()
+        for code in request.get("codes") or []:
+            codes_q |= Q(style__icontains=code)
+        uncertainty = request.get("uncertainty")
+        if uncertainty == "uncertain":
+            codes_q &= Q(style__icontains="?")
+        elif uncertainty == "certain":
+            codes_q &= ~Q(style__icontains="?")
+        style_q &= codes_q
+        has_any = True
+    return (style_q if has_any else None), requests
 
 
 @lru_cache(maxsize=1)
@@ -1647,9 +1850,17 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
         if not _has_location_value(root, (item["id"],), item["value"]):
             root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
 
-    for item in _extract_style_constraints(user_text):
-        if not _has_location_value(root, (item["id"],), item["value"]):
-            root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
+    style_constraints = _extract_style_query_constraints(user_text)
+    if style_constraints:
+        _remove_rules(root, lambda rule: rule.get("id") == "style")
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id")
+            in {"full_address", "current_location", "found_location", "parish", "district", "municipality"}
+            and _looks_like_style_location_value(rule.get("value")),
+        )
+        for constraint in style_constraints:
+            root = _append_and_constraint(root, constraint)
 
     for item in _extract_carver_constraints(user_text):
         if not _has_location_value(root, (item["id"],), item["value"]):
@@ -1785,8 +1996,7 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     for item in _extract_object_info_constraints(user_text):
         rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
 
-    for item in _extract_style_constraints(user_text):
-        rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
+    rules.extend(_extract_style_query_constraints(user_text))
 
     for item in _extract_carver_constraints(user_text):
         rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
@@ -2088,8 +2298,9 @@ def _build_meta_queryset_from_text(user_text: str, *, ignore_dating_constraint: 
     for item in _extract_object_info_constraints(user_text):
         qs = qs.filter(objectInfo__icontains=item["value"])
 
-    for item in _extract_style_constraints(user_text):
-        qs = qs.filter(style__icontains=item["value"])
+    style_q, _style_requests = _build_style_q(user_text)
+    if style_q is not None:
+        qs = qs.filter(style_q)
 
     for item in _extract_carver_constraints(user_text):
         qs = qs.filter(carver__icontains=item["value"])
@@ -2508,7 +2719,7 @@ def _looks_like_count_question(user_text: str) -> bool:
 def _answer_count_from_filters(user_text: str) -> AiAnswerResponse:
     qs, dating_prefix, country_codes = _build_meta_queryset_from_text(user_text)
     count = qs.count()
-    answer = f"I found {count} inscriptions matching your query."
+    answer = _with_style_context(f"I found {count} inscriptions matching your query.", user_text)
     return AiAnswerResponse(
         answer=answer,
         matched_inscriptions=count,
@@ -2516,6 +2727,7 @@ def _answer_count_from_filters(user_text: str) -> AiAnswerResponse:
             "count": count,
             "country_codes": country_codes,
             "dating_prefix": dating_prefix,
+            "style_requests": _extract_style_requests(user_text),
         },
     )
 
@@ -2537,6 +2749,7 @@ def _answer_list_from_filters(user_text: str) -> AiAnswerResponse:
         answer = f"I found {total} inscriptions: {', '.join(signatures)}"
     else:
         answer = f"I found {total} inscriptions. Showing first {limit}: {', '.join(signatures)}"
+    answer = _with_style_context(answer, user_text)
 
     return AiAnswerResponse(
         answer=answer,
@@ -2547,6 +2760,7 @@ def _answer_list_from_filters(user_text: str) -> AiAnswerResponse:
             "total_count": total,
             "country_codes": country_codes,
             "dating_prefix": dating_prefix,
+            "style_requests": _extract_style_requests(user_text),
         },
     )
 
@@ -2708,7 +2922,53 @@ def _looks_like_period_frequency_question(user_text: str) -> bool:
     return asks_period and (asks_compare or mentions_period_codes)
 
 
-STYLE_HELP_URL = "https://rundata-net.readthedocs.io/en/latest/db/data.html#figure-styles"
+STYLE_HELP_URL = "https://rundata-net.readthedocs.io/en/latest/db/data.html#meta-information"
+
+STYLE_CODE_DESCRIPTIONS = {
+    "Rak": "Rak/plain style",
+    "Fp": "Fågelperspektiv/bird's-eye-view style",
+    "Kb": "Korsbandssten/cross-band stone style",
+    "Sod": "Sod style",
+    "Pr 1": "Pr1, older Ringerike style",
+    "Pr 2": "Pr2, younger Ringerike style",
+    "Pr 3": "Pr3, older Urnes style",
+    "Pr 4": "Pr4, middle Urnes style",
+    "Pr 5": "Pr5, later Urnes style",
+}
+
+
+def _format_style_request(request: dict[str, Any]) -> str:
+    label = str(request.get("label") or "style").strip()
+    codes = [str(code) for code in request.get("codes") or []]
+    if not codes:
+        return label
+    code_text = ", ".join(codes)
+    if label in codes or label == code_text:
+        return code_text
+    return f"{label} as {code_text}"
+
+
+def _style_context_note(user_text: str) -> str:
+    requests = _extract_style_requests(user_text)
+    if not requests:
+        return ""
+    interpreted = "; ".join(_format_style_request(request) for request in requests)
+    uncertainty = requests[0].get("uncertainty")
+    uncertainty_note = ""
+    if uncertainty == "uncertain":
+        uncertainty_note = " I also required a question mark in the Style field, because the query asked for uncertain style attributions."
+    elif uncertainty == "certain":
+        uncertainty_note = " I excluded question marks in the Style field, because the query asked for certain style attributions."
+    return (
+        f"\n\nStyle note: I interpreted the style wording as {interpreted}. "
+        "Rundata-net uses A.-S. Gräslund's chronological style system for Viking Age runestones: "
+        "Rak, Fp, Kb and Pr1–Pr5. Pr1–Pr2 correspond to Ringerike style, and Pr3–Pr5 to Urnes style."
+        f"{uncertainty_note} More about the Style field: {STYLE_HELP_URL}"
+    )
+
+
+def _with_style_context(answer: str, user_text: str) -> str:
+    return answer + _style_context_note(user_text)
 
 
 def _looks_like_style_explanation_question(user_text: str) -> bool:
@@ -2725,38 +2985,41 @@ def _looks_like_style_explanation_question(user_text: str) -> bool:
             "förklara",
         )
     )
-    mentions_style_code = bool(re.search(r"\b(fp|kb|rak|sod|pr\s*[1-5])\b", text))
-    return asks_definition and mentions_style_code
+    mentions_style = bool(
+        re.search(r"\b(fp|kb|rak|sod|pr\s*[1-5]|urnes|ringerike|profilstil|profile style|runstensstil|style|stil)\b", text)
+    )
+    return asks_definition and mentions_style
 
 
 def _answer_style_explanation(user_text: str) -> AiAnswerResponse:
-    text = _fold_text(user_text or "")
+    requests = _extract_style_requests(user_text)
     requested_codes: list[str] = []
-    for code in ("Fp", "Kb", "Rak", "Sod"):
-        if re.search(rf"\b{re.escape(code.lower())}\b", text):
-            requested_codes.append(code)
-    for match in re.finditer(r"\bpr\s*([1-5])\b", text):
-        requested_codes.append(f"Pr {match.group(1)}")
+    for request in requests:
+        requested_codes.extend(request.get("codes") or [])
 
     if not requested_codes:
-        requested_codes = ["Pr 1-5", "Fp", "Kb", "Rak", "Sod"]
+        requested_codes = ["Rak", "Fp", "Kb", "Pr 1", "Pr 2", "Pr 3", "Pr 4", "Pr 5"]
 
     unique_codes = []
     seen = set()
     for code in requested_codes:
-        if code.lower() not in seen:
-            seen.add(code.lower())
-            unique_codes.append(code)
+        canonical = _canonical_style_code(code)
+        if canonical.lower() not in seen:
+            seen.add(canonical.lower())
+            unique_codes.append(canonical)
 
-    codes_text = ", ".join(unique_codes)
-    verb = "belongs" if len(unique_codes) == 1 else "belong"
+    code_descriptions = "; ".join(
+        f"{code}: {STYLE_CODE_DESCRIPTIONS.get(code, 'style code')}" for code in unique_codes
+    )
+    interpreted = "; ".join(_format_style_request(request) for request in requests)
+    interpreted_sentence = f" I interpreted your wording as {interpreted}." if interpreted else ""
     answer = (
-        f"{codes_text} {verb} to the Style filter. Style grouping information "
-        "(Pr1-Pr5, Fp, KB, RAK) follows A.-S. Gräslund's chronological system "
-        "for Viking Age runestones. The runestone material from the Mälar valley "
-        "was dated by A.-S. Gräslund, and other runestones by A.-S. Gräslund "
-        "and L. Lager in cooperation. See Help: Style: "
-        f"{STYLE_HELP_URL}"
+        "The Style field in Rundata-net follows A.-S. Gräslund's chronological "
+        "style system for Viking Age runestones. The main searchable codes are "
+        "Rak, Fp, Kb and Pr1–Pr5. Pr1–Pr2 correspond to Ringerike style, while "
+        "Pr3–Pr5 correspond to Urnes style."
+        f"{interpreted_sentence} Requested code information: {code_descriptions}. "
+        f"More about the Style field: {STYLE_HELP_URL}"
     )
     return AiAnswerResponse(
         answer=answer,
@@ -2764,6 +3027,7 @@ def _answer_style_explanation(user_text: str) -> AiAnswerResponse:
         metadata={
             "style_codes": unique_codes,
             "help_url": STYLE_HELP_URL,
+            "style_requests": requests,
         },
     )
 

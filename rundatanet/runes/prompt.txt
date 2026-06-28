@@ -102,6 +102,22 @@ You only work with a single system known as runic inscriptions database. It is a
 - Prefer `objectInfo` for "runestone" intent (not `material_type`).
 - Combine runestone criterion and location criterion with `AND`.
 
+**Runestone style mapping (IMPORTANT):**
+- Queries about runestone styles must use the `style` filter, not dating, material, object information, or free text.
+- Use operator `contains` for style codes, because the database style field may contain uncertainty marks, ranges, or source notes, for example `Pr 4?`, `Pr 3 - Pr 4`, or `Pr 3 [Ljung 2016]`.
+- Map the main style terms as follows:
+  - `Urnesstil`, `Urnes style`, `Urnesstilen` -> OR group: `style contains "Pr 3"` OR `style contains "Pr 4"` OR `style contains "Pr 5"`.
+  - `Ringerikestil`, `Ringerike style`, `Ringerikestilen` -> OR group: `style contains "Pr 1"` OR `style contains "Pr 2"`.
+  - `Profilstil`, `profile style`, `profiled style` -> OR group: `style contains "Pr 1"` OR `style contains "Pr 2"` OR `style contains "Pr 3"` OR `style contains "Pr 4"` OR `style contains "Pr 5"`.
+  - `Fp`, `Fågelperspektiv`, `bird's-eye-view style` -> `style contains "Fp"`.
+  - `Rak`, `rak stil`, `plain style` -> `style contains "Rak"`.
+  - `Kb`, `Korsbandssten`, `cross-band stone` -> `style contains "Kb"`.
+- If the user asks for certain/säkra/säkert style attributions or says without question marks/utan frågetecken, add `AND style not_contains "?"`.
+- If the user asks for uncertain/osäkra/probable style attributions or says with question marks/med frågetecken, add `AND style contains "?"`.
+- In reply mode, explain the mapping briefly: Rundata-net uses A.-S. Gräslund's chronological style system for Viking Age runestones; Pr1–Pr2 correspond to Ringerike style and Pr3–Pr5 to Urnes style. Link to: https://rundata-net.readthedocs.io/en/latest/db/data.html#meta-information
+- Example: `Hitta alla inskrifter i Urnesstil` creates an OR group with `Pr 3`, `Pr 4`, and `Pr 5`.
+- Example: `Hitta alla säkra inskrifter i Ringerikestil` creates the OR group with `Pr 1` and `Pr 2`, plus `style not_contains "?"`.
+
 **English word and translation mapping (IMPORTANT):**
 - When the user asks for inscriptions "with the word X", "containing the word X", or otherwise asks about an English word, search `english_translation` with operator `contains` and value `X`.
 - A word mentioned as textual content is not a material or object filter. For example, "Find all inscriptions with the word stone" means `english_translation contains "stone"`, not `material_type contains "stone"`.
@@ -929,7 +945,7 @@ Here is a list of known search filters together with textual description of what
             "is_empty",
             "is_not_empty"
         ],
-        "description": "Simple textual search for style."
+        "description": "Runestone style search. Use contains for style codes because values may include question marks, ranges, or source notes. Map Urnes style to Pr 3/Pr 4/Pr 5, Ringerike style to Pr 1/Pr 2, profile style to Pr 1-Pr 5, Fp to bird's-eye-view style, Rak to plain style, and Kb to cross-band stone style. Add style contains '?' for uncertain style requests and style not_contains '?' for certain style requests."
     },
     {
         "id": "rune_type",
