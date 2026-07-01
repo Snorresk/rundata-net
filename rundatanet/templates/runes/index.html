@@ -1416,6 +1416,21 @@ function hideAiAssistantResponse() {
   }
   responseObj.classList.add('d-none');
   responseObj.textContent = '';
+  responseObj.innerHTML = '';
+}
+
+function escapeAiResponseHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderAiAssistantMessage(message) {
+  return escapeAiResponseHtml(message)
+    .replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
 }
 
 function showAiAssistantResponse(message) {
@@ -1425,7 +1440,7 @@ function showAiAssistantResponse(message) {
   }
   responseObj.classList.remove('d-none');
   responseObj.style.whiteSpace = 'pre-line';
-  responseObj.textContent = message;
+  responseObj.innerHTML = renderAiAssistantMessage(message);
 }
 
 const AI_RULE_LABELS = {
@@ -1596,40 +1611,169 @@ function getAiCarverNames(item) {
     .filter(part => !/^\d+$/.test(part));
 }
 
-function getAiMatchedTextExamples(results, limit = 5) {
-  const examples = [];
-  for (const item of results || []) {
+const AI_MATCHED_TEXT_FIELDS = {
+  transliteration: {
+    wordsField: 'transliteration_words',
+    label: 'transliterations',
+    type: 'transliteration',
+  },
+  normalisation_norse: {
+    wordsField: 'normalisation_norse_words',
+    label: 'Old West Norse normalisations',
+    type: 'normalisation',
+  },
+  normalisation_scandinavian: {
+    wordsField: 'normalisation_scandinavian_words',
+    label: 'Old Scandinavian normalisations',
+    type: 'normalisation',
+  },
+};
+
+function addAiMatchedTextContext(contexts, field) {
+  if (!AI_MATCHED_TEXT_FIELDS[field] || contexts.some(context => context.field === field)) {
+    return;
+  }
+  contexts.push({ field, ...AI_MATCHED_TEXT_FIELDS[field] });
+}
+
+function getAiMatchedTextContextsFromRules(rules) {
+  const contexts = [];
+
+  function visit(rule) {
+    if (!rule || typeof rule !== 'object') {
+      return;
+    }
+    if (Array.isArray(rule.rules)) {
+      rule.rules.forEach(visit);
+      return;
+    }
+
+    const value = rule.value && typeof rule.value === 'object' ? rule.value : {};
+    if (rule.id === 'normalization_norse_to_transliteration') {
+      if (value.normalization) {
+        addAiMatchedTextContext(contexts, 'normalisation_norse');
+      }
+      if (value.transliteration) {
+        addAiMatchedTextContext(contexts, 'transliteration');
+      }
+      return;
+    }
+
+    if (rule.id === 'normalization_scandinavian_to_transliteration') {
+      if (value.normalization) {
+        addAiMatchedTextContext(contexts, 'normalisation_scandinavian');
+      }
+      if (value.transliteration) {
+        addAiMatchedTextContext(contexts, 'transliteration');
+      }
+      return;
+    }
+
+    if (rule.id === 'search_runic_texts' || rule.field === 'transliteration') {
+      addAiMatchedTextContext(contexts, 'transliteration');
+      return;
+    }
+
+    if (AI_MATCHED_TEXT_FIELDS[rule.field]) {
+      addAiMatchedTextContext(contexts, rule.field);
+    }
+  }
+
+  visit(rules);
+  return contexts;
+}
+
+function decodeAiTokenEntities(value) {
+  return String(value || '')
+    .replace(/&quot;|&#34;|&#x22;/gi, '"')
+    .replace(/&#x2F;|&#47;/gi, '/')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
+function isAiNormalisationNameToken(value) {
+  return /^[\[\(]*["“”]/.test(decodeAiTokenEntities(value).trim());
+}
+
+function cleanAiNormalisationToken(value) {
+  return compactAiValue(
+    decodeAiTokenEntities(value)
+      .replace(/[\[\]\(\)]/g, '')
+      .replace(/[.,]+$/g, '')
+      .replace(/^[.,]+/g, '')
+      .replace(/["“”]+/g, '')
+      .replace(/["“”.,?;:!]+$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+    70
+  );
+}
+
+function incrementAiCount(counts, value) {
+  if (!value) {
+    return;
+  }
+  counts.set(value, (counts.get(value) || 0) + 1);
+}
+
+function formatAiCounts(counts, limit = 8, formatter = value => value) {
+  return Array.from(counts.entries())
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, limit)
+    .map(([value, count]) => `${formatter(value)} (${count})`)
+    .join(', ');
+}
+
+function getAiMatchedTextStatistics(results, rules, limit = 8) {
+  const contexts = getAiMatchedTextContextsFromRules(rules);
+  if (!contexts.length) {
+    return [];
+  }
+
+  const lines = [];
+  contexts.forEach(context => {
+    const counts = new Map();
+    const nameCounts = new Map();
+    for (const item of results || []) {
     const indices = item?.matchDetails?.wordIndices;
     if (!Array.isArray(indices) || indices.length === 0) {
       continue;
     }
-    const selected = indices.slice(0, 4);
-    const transliterationWords = Array.isArray(item.transliteration_words) ? item.transliteration_words : [];
-    const oldWestWords = Array.isArray(item.normalisation_norse_words) ? item.normalisation_norse_words : [];
-    const oldScandinavianWords = Array.isArray(item.normalisation_scandinavian_words) ? item.normalisation_scandinavian_words : [];
-    const transliteration = selected.map(index => transliterationWords[index]).filter(Boolean).join(' ');
-    const oldWest = selected.map(index => oldWestWords[index]).filter(Boolean).join(' ');
-    const oldScandinavian = selected.map(index => oldScandinavianWords[index]).filter(Boolean).join(' ');
-    const pieces = [];
-    if (transliteration) {
-      pieces.push(`transliteration: ${compactAiValue(transliteration, 70)}`);
+      const words = Array.isArray(item[context.wordsField]) ? item[context.wordsField] : [];
+      const uniqueIndices = Array.from(new Set(indices));
+      uniqueIndices.forEach(index => {
+        const rawWord = words[index];
+        if (!rawWord) {
+          return;
+        }
+        if (context.type === 'normalisation') {
+          const cleanedWord = cleanAiNormalisationToken(rawWord);
+          if (isAiNormalisationNameToken(rawWord)) {
+            incrementAiCount(nameCounts, cleanedWord);
+          } else {
+            incrementAiCount(counts, cleanedWord);
+          }
+          return;
+        }
+        incrementAiCount(counts, compactAiValue(rawWord, 70));
+      });
     }
-    if (oldWest) {
-      pieces.push(`Old West Norse: ${compactAiValue(oldWest, 70)}`);
-    } else if (oldScandinavian) {
-      pieces.push(`Old Scandinavian: ${compactAiValue(oldScandinavian, 70)}`);
+
+    if (counts.size) {
+      const formatter = context.type === 'transliteration'
+        ? value => `**${value}**`
+        : value => value;
+      lines.push(`Matched ${context.label}: ${formatAiCounts(counts, limit, formatter)}.`);
     }
-    if (pieces.length) {
-      examples.push(`${item.signature_text}: ${pieces.join('; ')}`);
+    if (nameCounts.size) {
+      lines.push(`Names in ${context.label}: ${formatAiCounts(nameCounts, limit)}.`);
     }
-    if (examples.length >= limit) {
-      break;
-    }
-  }
-  return examples;
+  });
+  return lines;
 }
 
-function summarizeDirectDbInformation(results) {
+function summarizeDirectDbInformation(results, rules) {
   const total = Array.isArray(results) ? results.length : 0;
   if (total === 0) {
     return 'No matched records to summarize directly from the DB.';
@@ -1656,20 +1800,12 @@ function summarizeDirectDbInformation(results) {
     lines.push(`Top object information: ${objectTypes.join(', ')}.`);
   }
 
-  const carverStatuses = getTopAiValues(results, getAiCarverStatuses, 4);
-  if (carverStatuses.length) {
-    lines.push(`Carver markers present: ${carverStatuses.join(', ')}.`);
-  }
-
   const carvers = getTopAiValues(results, getAiCarverNames, 5);
   if (carvers.length) {
     lines.push(`Top carvers in this result set: ${carvers.join(', ')}.`);
   }
 
-  const matchedTextExamples = getAiMatchedTextExamples(results, 5);
-  if (matchedTextExamples.length) {
-    lines.push(`Matched text examples: ${matchedTextExamples.join(' | ')}.`);
-  }
+  lines.push(...getAiMatchedTextStatistics(results, rules, 8));
 
   if (!lines.length) {
     return 'The matched DB records did not contain enough non-empty metadata for a compact summary.';
@@ -2492,8 +2628,8 @@ document.addEventListener('DOMContentLoaded', function() {
           '',
           summarizeAiSearchResults(searchOutcome.results, parsedRules),
           '',
-          'Direct DB summary:',
-          summarizeDirectDbInformation(searchOutcome.results),
+          'Statistics directly from the database:',
+          summarizeDirectDbInformation(searchOutcome.results, parsedRules),
         ];
         if (searchOutcome.blockedBySymbolHint) {
           responseLines.push('');

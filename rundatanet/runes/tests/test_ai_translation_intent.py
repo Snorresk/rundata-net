@@ -10,13 +10,16 @@ from rundatanet.runes.api import (
     _extract_carver_status,
     _extract_english_translation_terms,
     _extract_excluded_initial_rune,
+    _extract_location_terms,
     _extract_long_vowel,
     _extract_material_constraints,
     _extract_name_element,
     _extract_phrase_query,
     _extract_required_initial_runes,
+    _extract_rune_type_constraints,
     _extract_sound_term,
     _extract_standalone_transliteration_rune,
+    _has_coordinate_rune_intent,
     _excludes_palatal_r,
     _extract_rune_spelling,
     _extract_swedish_word_terms,
@@ -49,6 +52,29 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(len(result["rules"]), 1)
         self.assertEqual(result["rules"][0]["id"], "english_translation")
         self.assertEqual(result["rules"][0]["value"], "stone")
+
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_scandinavian")
+    def test_english_word_query_can_target_old_scandinavian_normalisation(self, _language):
+        prompt = "Find inscriptions with the word þiagn"
+
+        self.assertEqual(_extract_english_translation_terms(prompt), [])
+        self.assertEqual(_extract_swedish_word_terms(prompt), ["þiagn"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_scandinavian")
+    def test_fallback_targets_old_scandinavian_for_english_word_query(
+        self, _language, _styles, _objects
+    ):
+        prompt = "Find inscriptions with the word þiagn"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "normalization_scandinavian_to_transliteration")
+        self.assertEqual(result["rules"][0]["value"]["normalization"], "þiagn")
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
@@ -241,6 +267,107 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(
             word_rule["value"],
             {"normalization": "stæin", "transliteration": "stan", "names_mode": "includeAll"},
+        )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._normalization_contains_word", return_value=True)
+    def test_english_word_written_in_runes_uses_transliteration_not_location(
+        self, _contains, _styles, _objects
+    ):
+        prompt = "Find inscriptions with the word þegn written in runes þikn."
+
+        self.assertEqual(_extract_aligned_word_spelling(prompt), ("þegn", "þikn"))
+        self.assertEqual(_extract_rune_spelling(prompt), "þikn")
+        self.assertEqual(_extract_location_terms(prompt), [])
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "normalization_scandinavian_to_transliteration")
+        self.assertEqual(
+            result["rules"][0]["value"],
+            {"normalization": "þegn", "transliteration": "þikn", "names_mode": "includeAll"},
+        )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_west_norse")
+    def test_swedish_word_written_with_single_rune_pairs_normalization_and_transliteration(
+        self, _language, _styles, _objects
+    ):
+        prompt = "Hitta inskrifter med ordet reisti i Södermanland som skrivs med þ runa"
+
+        self.assertEqual(_extract_aligned_word_spelling(prompt), ("reisti", "þ"))
+        self.assertEqual(_extract_rune_spelling(prompt), "þ")
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(result["condition"], "AND")
+        self.assertEqual(len(result["rules"]), 2)
+        country_rule, word_rule = result["rules"]
+        self.assertEqual(country_rule["id"], "inscription_country")
+        self.assertEqual(country_rule["value"], ["Sö "])
+        self.assertEqual(word_rule["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(
+            word_rule["value"],
+            {"normalization": "reisti", "transliteration": "þ", "names_mode": "includeAll"},
+        )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_west_norse")
+    def test_postprocess_adds_missing_transliteration_to_combined_word_rune_query(
+        self, _language, _styles, _objects
+    ):
+        prompt = "Hitta inskrifter med ordet reisti i Södermanland som skrivs med þ runa"
+        llm_rules = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "inscription_country",
+                        "field": "signature_text",
+                        "type": "string",
+                        "input": "select",
+                        "operator": "in",
+                        "value": ["Sö "],
+                        "data": {"multiField": True},
+                    },
+                    {
+                        "id": "normalization_norse_to_transliteration",
+                        "field": "normalization_norse",
+                        "type": "string",
+                        "operator": "contains",
+                        "value": {
+                            "normalization": "reisti",
+                            "transliteration": "",
+                            "names_mode": "includeAll",
+                        },
+                        "data": {"multiField": True},
+                        "ignoreCase": True,
+                        "includeSpecialSymbols": False,
+                    },
+                ],
+                "not": False,
+                "valid": True,
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(prompt, llm_rules))
+
+        self.assertEqual(result["condition"], "AND")
+        self.assertEqual(len(result["rules"]), 2)
+        country_rule, word_rule = result["rules"]
+        self.assertEqual(country_rule["id"], "inscription_country")
+        self.assertEqual(country_rule["value"], ["Sö "])
+        self.assertEqual(word_rule["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(
+            word_rule["value"],
+            {"normalization": "reisti", "transliteration": "þ", "names_mode": "includeAll"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -503,6 +630,60 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(rune_type_rule["id"], "rune_type")
         self.assertEqual(rune_type_rule["value"], "bind")
         self.assertFalse(rune_type_rule["includeSpecialSymbols"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_staveless_runes_target_rune_type(self, _styles, _objects):
+        prompt = "Hitta inskrifter med stavlösa runor"
+
+        self.assertEqual(
+            _extract_rune_type_constraints(prompt),
+            [{"id": "rune_type", "field": "rune_type", "value": "stavlösa"}],
+        )
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(result["condition"], "AND")
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "rune_type")
+        self.assertEqual(result["rules"][0]["value"], "stavlösa")
+        self.assertTrue(result["rules"][0]["ignoreCase"])
+        self.assertFalse(result["rules"][0]["includeSpecialSymbols"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_coordinate_rune_terms_target_transliteration_symbol(self, _styles, _objects):
+        prompts = (
+            "Hitta inskrifter med kvistrunor",
+            "Hitta inskrifter skrivna med koordinatrunor",
+            "Hitta inskrifter som använder chifferrunor",
+            "Hitta inskrifter med lönnrunor",
+            "Find inscriptions written with coordinate runes",
+            "Find inscriptions with cipher runes",
+            "Find inscriptions with secret runes",
+            "Find inscriptions with twig runes",
+            "Find inscriptions with branch runes",
+        )
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                self.assertTrue(_has_coordinate_rune_intent(prompt))
+                self.assertEqual(_extract_rune_type_constraints(prompt), [])
+                self.assertIsNone(_extract_standalone_transliteration_rune(prompt))
+
+                fallback = _build_rules_fallback_from_text(prompt)
+                result = json.loads(fallback)
+
+                self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+                self.assertEqual(result["condition"], "AND")
+                self.assertEqual(len(result["rules"]), 1)
+                rule = result["rules"][0]
+                self.assertEqual(rule["id"], "normalization_scandinavian_to_transliteration")
+                self.assertEqual(
+                    rule["value"],
+                    {"normalization": "", "transliteration": "<", "names_mode": "includeAll"},
+                )
+                self.assertTrue(rule["includeSpecialSymbols"])
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
