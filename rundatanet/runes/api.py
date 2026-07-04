@@ -255,6 +255,51 @@ def _has_bind_rune_intent(user_text: str) -> bool:
     return bool(re.search(r"\b(?:bind[ -]?runes?|bindrun\w*)\b", _fold_text(user_text or "")))
 
 
+def _has_coordinate_rune_intent(user_text: str) -> bool:
+    text = _fold_text(user_text or "")
+    return bool(
+        re.search(
+            r"\b(?:kvistrunor|koordinatrunor|chifferrunor|lonnrunor|"
+            r"coordinate\s+runes?|cipher\s+runes?|secret\s+runes?|"
+            r"twig\s+runes?|branch\s+runes?)\b",
+            text,
+        )
+    )
+
+
+RUNE_TYPE_INTENT_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("stavlösa", ("stavlosa", "stavlos", "staveless")),
+    ("kortkvist", ("kortkvist", "short twig", "short-twig")),
+    ("långkvist", ("langkvist", "langkvistrunor", "long branch", "long-branch")),
+    ("stung", ("stung", "stungna", "stungen", "dotted")),
+    ("spegelvända", ("spegelvanda", "mirror runes")),
+    ("urnordisk", ("urnordisk", "urnordiska", "proto norse", "proto-norse", "early norse")),
+)
+
+
+def _extract_rune_type_constraints(user_text: str) -> list[dict[str, str]]:
+    if _has_bind_rune_intent(user_text) or _has_coordinate_rune_intent(user_text):
+        return []
+
+    text = _fold_text(user_text or "")
+    has_rune_context = bool(
+        re.search(r"\b(?:runes?|runor|runa|runorna|rune\s+type|runtyp(?:er|en)?|runor\s+av\s+typen)\b", text)
+    )
+    if not has_rune_context:
+        return []
+
+    constraints: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for canonical, aliases in RUNE_TYPE_INTENT_PATTERNS:
+        if not any(re.search(rf"(^|\b){re.escape(alias)}(\b|$)", text) for alias in aliases):
+            continue
+        if canonical in seen:
+            continue
+        seen.add(canonical)
+        constraints.append({"id": "rune_type", "field": "rune_type", "value": canonical})
+    return constraints
+
+
 def _make_bind_rune_group() -> dict[str, Any]:
     return {
         "condition": "OR",
@@ -270,6 +315,15 @@ def _make_bind_rune_group() -> dict[str, Any]:
         "not": False,
         "valid": True,
     }
+
+
+def _make_coordinate_rune_rule() -> dict[str, Any]:
+    return _make_normalization_rule(
+        "",
+        old_west_norse=False,
+        transliteration="<",
+        include_special_symbols=True,
+    )
 
 
 def _is_bind_rune_rule(rule: dict[str, Any]) -> bool:
@@ -448,7 +502,7 @@ def _looks_like_style_location_value(value: Any) -> bool:
 
 
 def _extract_location_terms(user_text: str) -> list[str]:
-    text = user_text or ""
+    text = _strip_aligned_word_spelling_clauses(user_text or "")
     terms: list[str] = []
 
     # Prefer explicit "found in" style location phrases.
@@ -499,6 +553,11 @@ def _extract_location_terms(user_text: str) -> list[str]:
         "all inscriptions",
         "stavning",
         "spelling",
+        "runes",
+        "rune",
+        "runor",
+        "runa",
+        "runorna",
     )
     for pattern in patterns:
         for match in re.finditer(pattern, text, flags=re.IGNORECASE):
@@ -601,6 +660,41 @@ def _extract_lost_constraint(user_text: str) -> Optional[int]:
     return None
 
 
+def _extract_personal_name_presence_constraint(user_text: str) -> Optional[int]:
+    if _extract_full_personal_name(user_text):
+        return None
+
+    text = _fold_text(user_text or "")
+    name_noun = r"(?:personnamn|personal names?|personliga namn)"
+    generic_name_noun = r"(?:namn|names?)"
+
+    negative_patterns = (
+        rf"\b(?:utan|without|no|saknar|lacks?)\s+{name_noun}\b",
+        rf"\b(?:utan|without|no|saknar|lacks?)\s+{generic_name_noun}\b",
+        rf"\b(?:inte|not)\b.{{0,40}}\b(?:innehaller|contains?|har|has)\b.{{0,40}}\b{name_noun}\b",
+    )
+    if any(re.search(pattern, text) for pattern in negative_patterns):
+        return 0
+
+    positive_patterns = (
+        rf"\b(?:med|with|har|has|innehaller|contains?|containing)\s+{name_noun}\b",
+        rf"\b(?:med|with|har|has|innehaller|contains?|containing)\s+{generic_name_noun}\b",
+        rf"\b{ name_noun }\b",
+    )
+    if any(re.search(pattern, text) for pattern in positive_patterns):
+        return 1
+    return None
+
+
+def _make_personal_name_presence_rule(value: int) -> dict[str, Any]:
+    return _make_integer_rule("has_personal_name", "num_names", int(value))
+
+
+def _looks_like_personal_name_presence_value(value: Any) -> bool:
+    text = _fold_text(str(value or ""))
+    return bool(re.search(r"\b(?:personnamn|personal names?|personliga namn|namn|names?)\b", text))
+
+
 def _extract_english_translation_terms(user_text: str) -> list[str]:
     """Extract words explicitly requested as English lexical content."""
     if _extract_aligned_word_spelling(user_text):
@@ -608,30 +702,56 @@ def _extract_english_translation_terms(user_text: str) -> list[str]:
 
     text = user_text or ""
     terms: list[str] = []
-    patterns = [
-        # "the word stone", "English word 'stone'", "words stone and ship"
-        r"\b(?:english\s+)?words?\s+(?:is\s+|are\s+|like\s+)?[\"'“”]?([A-Za-z][A-Za-z'’-]*)",
+    patterns: list[tuple[str, bool]] = [
+        # "the word stone", "words stone and ship"
+        (r"\bwords?\s+(?:is\s+|are\s+|like\s+)?[\"'“”]?([\wþðæøœÞÐÆØŒ'’-]+)", False),
+        # "English word 'stone'", "English words stone and ship"
+        (r"\benglish\s+words?\s+(?:is\s+|are\s+|like\s+)?[\"'“”]?([\wþðæøœÞÐÆØŒ'’-]+)", True),
         # "English translation contains stone"
-        r"\benglish\s+translation\s+(?:that\s+)?(?:contains?|includes?|with)\s+(?:the\s+word\s+)?[\"'“”]?([A-Za-z][A-Za-z'’-]*)",
+        (
+            r"\benglish\s+translation\s+(?:that\s+)?(?:contains?|includes?|with)\s+"
+            r"(?:the\s+word\s+)?[\"'“”]?([\wþðæøœÞÐÆØŒ'’-]+)",
+            True,
+        ),
     ]
-    for pattern in patterns:
+    for pattern, force_english in patterns:
         for match in re.finditer(pattern, text, flags=re.IGNORECASE):
             term = match.group(1).strip(" .,!?:;\"'“”")
+            if (
+                term
+                and not force_english
+                and _language_containing_word(term) in {"old_west_norse", "old_scandinavian"}
+            ):
+                continue
             if term and term.lower() not in {value.lower() for value in terms}:
                 terms.append(term)
     return terms
 
 
 def _extract_swedish_word_terms(user_text: str) -> list[str]:
-    """Extract separately requested Swedish lexical terms such as words and verbs."""
+    """Extract separately requested language-aware lexical terms such as words and verbs."""
     text = user_text or ""
     terms: list[str] = []
+
+    def add_term(term: str) -> None:
+        term = term.strip(" .,!?:;\"'“”")
+        if term and term.lower() not in {value.lower() for value in terms}:
+            terms.append(term)
+
     lexical_label = r"(?:ord(?:et)?|verb(?:et)?|substantiv(?:et)?|adjektiv(?:et)?|form(?:en)?)"
     pattern = rf"\b{lexical_label}\s+[\"'“”]?([\wþðæøœÞÐÆØŒ'’-]+)"
     for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+        add_term(match.group(1))
+
+    # English "word X" usually means an English translation word, but a form
+    # such as þiagn is not English lexical content. If the corpus contains it
+    # in a normalisation language, route it through the same language-aware
+    # normalisation selector used by Swedish `ordet X` queries.
+    english_pattern = r"\b(?:the\s+)?words?\s+[\"'“”]?([\wþðæøœÞÐÆØŒ'’-]+)"
+    for match in re.finditer(english_pattern, text, flags=re.IGNORECASE):
         term = match.group(1).strip(" .,!?:;\"'“”")
-        if term and term.lower() not in {value.lower() for value in terms}:
-            terms.append(term)
+        if _language_containing_word(term) in {"old_west_norse", "old_scandinavian"}:
+            add_term(term)
     return terms
 
 
@@ -646,9 +766,15 @@ def _extract_aligned_word_spelling(user_text: str) -> Optional[tuple[str, str]]:
     word = r"[\wþðæøœÞÐÆØŒ^'’-]+"
     patterns = (
         rf"\b(?:the\s+)?word\s+[\"'“”]?({word})[\"'“”]?\s+"
-        rf"(?:is|was|being)?\s*(?:written|spelled|spelt)\s+with\s+runes?\s+[\"'“”]?({word})",
+        rf"(?:is|was|being)?\s*(?:written|spelled|spelt)\s+(?:in|with)\s+runes?\s+[\"'“”]?({word})",
         rf"\bwhere\s+(?:the\s+)?word\s+[\"'“”]?({word})[\"'“”]?\s+"
-        rf"(?:is|was|being)?\s*(?:written|spelled|spelt)\s+with\s+runes?\s+[\"'“”]?({word})",
+        rf"(?:is|was|being)?\s*(?:written|spelled|spelt)\s+(?:in|with)\s+runes?\s+[\"'“”]?({word})",
+        rf"\b(?:ord(?:et)?|verb(?:et)?|substantiv(?:et)?|adjektiv(?:et)?|form(?:en)?)\s+"
+        rf"[\"'“”]?({word})[\"'“”]?(?:[^.;?!]{{0,160}}?)\b(?:skriv(?:s|et|as)?|stavas?)\s+"
+        rf"med\s+[\"'“”]?({word})[\"'“”]?\s+run(?:a|an|orna|or)\b",
+        rf"\b(?:ord(?:et)?|verb(?:et)?|substantiv(?:et)?|adjektiv(?:et)?|form(?:en)?)\s+"
+        rf"[\"'“”]?({word})[\"'“”]?(?:[^.;?!]{{0,160}}?)\b(?:skriv(?:s|et|as)?|stavas?)\s+"
+        rf"med\s+run(?:a|an|orna|or)\s+(?:(?:som|as)\s+)?[\"'“”]?({word})\b",
     )
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
@@ -658,6 +784,29 @@ def _extract_aligned_word_spelling(user_text: str) -> Optional[tuple[str, str]]:
             if normalized and transliteration:
                 return normalized, transliteration
     return None
+
+
+def _strip_aligned_word_spelling_clauses(user_text: str) -> str:
+    """Remove protected word+runic-spelling clauses before generic inference.
+
+    This prevents `written in runes þikn` from being reinterpreted as the
+    location phrase `in runes`.
+    """
+    text = user_text or ""
+    word = r"[\wþðæøœÞÐÆØŒ^'’-]+"
+    patterns = (
+        rf"\b(?:where\s+)?(?:the\s+)?word\s+[\"'“”]?{word}[\"'“”]?\s+"
+        rf"(?:is|was|being)?\s*(?:written|spelled|spelt)\s+(?:in|with)\s+runes?\s+[\"'“”]?{word}",
+        rf"\b(?:ord(?:et)?|verb(?:et)?|substantiv(?:et)?|adjektiv(?:et)?|form(?:en)?)\s+"
+        rf"[\"'“”]?{word}[\"'“”]?(?:[^.;?!]{{0,160}}?)\b(?:skriv(?:s|et|as)?|stavas?)\s+"
+        rf"med\s+[\"'“”]?{word}[\"'“”]?\s+run(?:a|an|orna|or)\b",
+        rf"\b(?:ord(?:et)?|verb(?:et)?|substantiv(?:et)?|adjektiv(?:et)?|form(?:en)?)\s+"
+        rf"[\"'“”]?{word}[\"'“”]?(?:[^.;?!]{{0,160}}?)\b(?:skriv(?:s|et|as)?|stavas?)\s+"
+        rf"med\s+run(?:a|an|orna|or)\s+(?:(?:som|as)\s+)?[\"'“”]?{word}\b",
+    )
+    for pattern in patterns:
+        text = re.sub(pattern, " ", text, flags=re.IGNORECASE)
+    return text
 
 
 def _extract_sound_term(user_text: str) -> Optional[str]:
@@ -752,6 +901,23 @@ def _extract_name_element(user_text: str) -> Optional[str]:
     return match.group(1).strip("- .,!?:;\"'“”") or None
 
 
+def _extract_full_personal_name(user_text: str) -> Optional[str]:
+    text = user_text or ""
+    word = r"[\wþðæøœÞÐÆØŒ'’-]+"
+    patterns = (
+        rf"\b(?:personnamn(?:et)?|mansnamn(?:et)?|kvinnonamn(?:et)?|namnet)\s+[\"'“”]?({word})",
+        rf"\b(?:the\s+)?personal\s+name\s+[\"'“”]?({word})",
+        rf"\b(?:with|containing|contains?|has)\s+(?:the\s+)?name\s+(?!element\b)[\"'“”]?({word})",
+        rf"\bnamed\s+[\"'“”]?({word})",
+        rf"\bthe\s+name\s+(?!element\b)[\"'“”]?({word})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip("- .,!?:;\"'“”") or None
+    return None
+
+
 def _extract_rune_spelling(user_text: str) -> Optional[str]:
     """Extract an explicitly supplied runic spelling/transliteration."""
     aligned = _extract_aligned_word_spelling(user_text)
@@ -761,13 +927,25 @@ def _extract_rune_spelling(user_text: str) -> Optional[str]:
     text = user_text or ""
     word = r"[\wþðæøœÞÐÆØŒ^'’-]+"
     separator = r"\s*(?:(?:är|is|as|som)\s*)?[:=,-]?\s*"
+    name_label = (
+        r"(?:personnamn(?:et)?|mansnamn(?:et)?|kvinnonamn(?:et)?|namnet|"
+        r"(?:the\s+)?personal\s+name|(?:the\s+)?name(?!\s+element\b)|named)"
+    )
     patterns = (
+        rf"\b{name_label}\s+[\"'“”]?{word}[\"'“”]?(?:[^.;?!]{{0,160}}?)"
+        rf"\b(?:skriv(?:s|et|as|na)?|stava\w*|written|spelled|spelt)\s+"
+        rf"(?:in|with|med)\s+(?:run(?:a|an|orna|or)|runes?)\s+[\"'“”]?({word})",
+        rf"\b{name_label}\s+[\"'“”]?{word}[\"'“”]?(?:[^.;?!]{{0,160}}?)"
+        rf"\b(?:skriv(?:s|et|as|na)?|stava\w*)\s+med\s+[\"'“”]?({word})[\"'“”]?\s+"
+        rf"run(?:a|an|orna|or)\b",
         rf"\b(?:i|med)\s+(?:stavning|skrivning)(?:en)?{separator}[\"'“”]?({word})",
         rf"\b(?:rune\s+spelling|spelling\s+in\s+runes?){separator}[\"'“”]?({word})",
-        rf"\b(?:skriv(?:s|et|as)?|stavas?)\s+[\"'“”]?({word})[\"'“”]?\s+med\s+run(?:an|orna|or)\b",
+        rf"\b(?:skriv(?:s|et|as)?|stavas?)\s+[\"'“”]?({word})[\"'“”]?\s+med\s+run(?:a|an|orna|or)\b",
         rf"\bwritten\s+(?:as\s+)?[\"'“”]?({word})[\"'“”]?\s+(?:in|with)\s+runes?\b",
-        rf"\b(?:skriv(?:as|et|s)?\s+med\s+run(?:an|orna|or)){separator}[\"'“”]?({word})",
-        rf"\bhur\s+det\s+ska\s+skrivas\s+med\s+run(?:an|orna|or){separator}[\"'“”]?({word})",
+        rf"\b(?:skriv(?:s|et|as)?|stavas?)\s+med\s+[\"'“”]?({word})[\"'“”]?\s+run(?:a|an|orna|or)?\b",
+        rf"\b(?:skriv(?:s|et|as)?|stavas?)\s+med\s+run(?:a|an|orna|or)\s+(?:(?:som|as)\s+)?[\"'“”]?({word})\b",
+        rf"\b(?:skriv(?:as|et|s)?\s+med\s+run(?:a|an|orna|or)){separator}[\"'“”]?({word})",
+        rf"\bhur\s+det\s+ska\s+skrivas\s+med\s+run(?:a|an|orna|or){separator}[\"'“”]?({word})",
     )
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
@@ -784,11 +962,13 @@ def _extract_standalone_transliteration_rune(user_text: str) -> Optional[str]:
     """
     if (
         _has_bind_rune_intent(user_text)
+        or _has_coordinate_rune_intent(user_text)
         or _extract_aligned_word_spelling(user_text)
         or _extract_swedish_word_terms(user_text)
         or _extract_sound_term(user_text)
         or _extract_long_vowel(user_text)
         or _extract_name_element(user_text)
+        or _extract_full_personal_name(user_text)
     ):
         return None
 
@@ -1008,6 +1188,63 @@ def _resolve_old_west_name_element(term: str) -> str:
     return term.strip("-").casefold().replace("ö", "ô")
 
 
+@lru_cache(maxsize=256)
+def _resolve_full_personal_name(term: str) -> tuple[str, bool]:
+    target = _fold_text(term.strip("-"))
+    candidates: list[tuple[int, int, str, bool]] = []
+
+    def edit_distance(left: str, right: str) -> int:
+        previous = list(range(len(right) + 1))
+        for left_index, left_char in enumerate(left, start=1):
+            current = [left_index]
+            for right_index, right_char in enumerate(right, start=1):
+                current.append(
+                    min(
+                        current[-1] + 1,
+                        previous[right_index] + 1,
+                        previous[right_index - 1] + (left_char != right_char),
+                    )
+                )
+            previous = current
+        return previous[-1]
+
+    def spelling_variants(value: str) -> set[str]:
+        variants = {value}
+        if value == "sten":
+            variants.update({"stein", "steinn", "stæin", "stæinn"})
+        return variants
+
+    target_variants = spelling_variants(target)
+
+    try:
+        values = NameUsage.objects.values("name__value").annotate(usage_count=Count("id"))
+        for item in values:
+            raw_value = str(item["name__value"] or "")
+            usage_count = int(item["usage_count"])
+            for alternative in raw_value.split("/"):
+                cleaned = alternative.strip(" .,!?:;\"'“”[](){}?-")
+                folded = _fold_text(cleaned)
+                if not cleaned or not folded or folded in {"", "..."}:
+                    continue
+                if folded in target_variants:
+                    quality = 10000
+                else:
+                    distance = min(edit_distance(variant, folded) for variant in target_variants)
+                    if distance > 1:
+                        continue
+                    quality = 8000 - distance * 500
+                old_west_norse = _normalization_contains_word(cleaned, old_west_norse=True)
+                candidates.append((quality, usage_count, cleaned, old_west_norse))
+    except Exception:
+        logger.warning("Could not resolve personal name %r", term, exc_info=True)
+
+    if candidates:
+        candidates.sort(key=lambda item: (item[0], item[1], int(item[3]), item[2]), reverse=True)
+        _quality, _usage_count, name, old_west_norse = candidates[0]
+        return name, old_west_norse
+    return term.strip("-"), True
+
+
 @lru_cache(maxsize=512)
 def _language_containing_word(term: str) -> str:
     word_pattern = rf"(?<!\w){re.escape(term)}(?!\w)"
@@ -1023,9 +1260,33 @@ def _language_containing_word(term: str) -> str:
                 return language
         except Exception:
             logger.warning("Could not inspect %s for %r", language, term, exc_info=True)
-            return "old_west_norse"
+            return "english_translation"
     # Preserve the established Norse fallback when no corpus contains the word.
     return "old_scandinavian"
+
+
+@lru_cache(maxsize=512)
+def _normalization_contains_word(term: str, *, old_west_norse: bool) -> bool:
+    word_pattern = rf"(?<!\w){re.escape(term)}(?!\w)"
+    model = NormalisationNorse if old_west_norse else NormalisationScandinavian
+    try:
+        return model.objects.filter(search_value__iregex=word_pattern).exists()
+    except Exception:
+        logger.warning("Could not inspect normalization corpus for %r", term, exc_info=True)
+        return False
+
+
+def _is_english_aligned_word_spelling_query(user_text: str) -> bool:
+    text = user_text or ""
+    word = r"[\wþðæøœÞÐÆØŒ^'’-]+"
+    return bool(
+        re.search(
+            rf"\b(?:where\s+)?(?:the\s+)?word\s+[\"'“”]?{word}[\"'“”]?\s+"
+            rf"(?:is|was|being)?\s*(?:written|spelled|spelt)\s+(?:in|with)\s+runes?\s+[\"'“”]?{word}",
+            text,
+            flags=re.IGNORECASE,
+        )
+    )
 
 
 def _make_requested_word_rule(
@@ -1048,6 +1309,12 @@ def _make_requested_word_rule(
         language = "english_translation"
     elif explicitly_swedish:
         language = "swedish_translation"
+    elif (
+        transliteration
+        and _is_english_aligned_word_spelling_query(user_text)
+        and _normalization_contains_word(term, old_west_norse=False)
+    ):
+        language = "old_scandinavian"
     else:
         language = _language_containing_word(term)
 
@@ -1076,6 +1343,17 @@ def _make_name_element_rule(element: str, transliteration: str) -> dict[str, Any
     )
 
 
+def _make_full_personal_name_rule(name: str, transliteration: str = "") -> dict[str, Any]:
+    normalized_name, old_west_norse = _resolve_full_personal_name(name)
+    return _make_normalization_rule(
+        normalized_name,
+        old_west_norse=old_west_norse,
+        transliteration=transliteration,
+        names_mode="namesOnly",
+        operator="equal",
+    )
+
+
 def _rule_has_word_term(rule: dict[str, Any], term: str) -> bool:
     value = rule.get("value")
     if isinstance(value, dict):
@@ -1085,7 +1363,7 @@ def _rule_has_word_term(rule: dict[str, Any], term: str) -> bool:
 
 def _wants_special_symbols(user_text: str) -> bool:
     text = _fold_text(user_text or "")
-    return "^" in (user_text or "") or bool(
+    return "^" in (user_text or "") or _has_coordinate_rune_intent(user_text) or bool(
         re.search(
             r"\b(bind[ -]?runes?|bindrun\w*|include special symbols?|include symbols?|"
             r"inkludera specialsymbol\w*|inkludera symbol\w*)\b",
@@ -1140,12 +1418,16 @@ def _extract_material_constraints(user_text: str) -> list[dict[str, str]]:
     translation_terms = {_fold_text(term) for term in _extract_english_translation_terms(user_text)}
     name_element = _extract_name_element(user_text)
     name_element_terms = {_fold_text(name_element)} if name_element else set()
+    full_personal_name = _extract_full_personal_name(user_text)
+    full_personal_name_terms = {_fold_text(full_personal_name)} if full_personal_name else set()
     explicit_material_terms = _extract_explicit_material_terms(user_text)
 
     def add_material(value: str, aliases: frozenset[str]) -> None:
         if translation_terms.intersection(aliases) and not explicit_material_terms.intersection(aliases):
             return
         if name_element_terms.intersection(aliases) and not explicit_material_terms.intersection(aliases):
+            return
+        if full_personal_name_terms.intersection(aliases) and not explicit_material_terms.intersection(aliases):
             return
         if value in seen_values:
             return
@@ -1166,9 +1448,13 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
     seen_values: set[str] = set()
     name_element = _extract_name_element(user_text)
     name_element_folded = _fold_text(name_element) if name_element else ""
+    full_personal_name = _extract_full_personal_name(user_text)
+    full_personal_name_folded = _fold_text(full_personal_name) if full_personal_name else ""
 
     def add_object(value: str) -> None:
         if name_element_folded and _fold_text(value) == name_element_folded:
+            return
+        if full_personal_name_folded and _fold_text(value) == full_personal_name_folded:
             return
         if value in seen_values:
             return
@@ -1672,11 +1958,12 @@ def _extract_style_requests(user_text: str) -> list[dict[str, Any]]:
         if any(re.search(pattern, text_folded, flags=re.IGNORECASE) for pattern in patterns):
             add_request(label, codes)
 
-    for value, folded_value in _get_style_values():
-        if len(folded_value) < 2:
-            continue
-        if re.search(rf"(^|\b){re.escape(folded_value)}(\b|$)", text_folded):
-            add_request(value, (value,))
+    if requests or re.search(r"\b(?:style|stil|stilen|runstensstil|pr\s*[1-5]|fp|rak|kb|sod)\b", text_folded):
+        for value, folded_value in _get_style_values():
+            if len(folded_value) < 2:
+                continue
+            if re.search(rf"(^|\b){re.escape(folded_value)}(\b|$)", text_folded):
+                add_request(value, (value,))
 
     return requests
 
@@ -1988,6 +2275,46 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
         else:
             root = _make_bind_rune_group()
 
+    coordinate_rune_intent = _has_coordinate_rune_intent(user_text)
+    if coordinate_rune_intent:
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") in {"rune_type", "search_runic_texts"}
+            or (
+                rule.get("id")
+                in {
+                    "normalization_norse_to_transliteration",
+                    "normalization_scandinavian_to_transliteration",
+                }
+                and isinstance(rule.get("value"), dict)
+                and rule.get("value", {}).get("transliteration") in {"", "<"}
+            ),
+        )
+        root = _append_and_constraint(root, _make_coordinate_rune_rule())
+
+    rune_type_constraints = _extract_rune_type_constraints(user_text)
+    if rune_type_constraints:
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id")
+            in {
+                "normalization_norse_to_transliteration",
+                "normalization_scandinavian_to_transliteration",
+                "search_runic_texts",
+            }
+            and any(
+                _rule_has_word_term(rule, item["value"])
+                or _fold_text(str(rule.get("value") or "")) == _fold_text(item["value"])
+                for item in rune_type_constraints
+            ),
+        )
+        for item in rune_type_constraints:
+            if not _has_location_value(root, (item["id"],), item["value"]):
+                root = _append_and_constraint(
+                    root,
+                    _make_contains_rule(item["id"], item["field"], item["value"]),
+                )
+
     if not _wants_special_symbols(user_text):
         language_rule_ids = {
             "normalization_norse_to_transliteration",
@@ -2001,6 +2328,7 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
                 rule["includeSpecialSymbols"] = False
 
     english_translation_terms = _extract_english_translation_terms(user_text)
+    english_translation_term_keys = {_fold_text(term) for term in english_translation_terms}
     if english_translation_terms:
         folded_terms = {_fold_text(term) for term in english_translation_terms}
         explicit_material_terms = _extract_explicit_material_terms(user_text)
@@ -2081,8 +2409,10 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
         )
 
     aligned_word_spelling = _extract_aligned_word_spelling(user_text)
+    aligned_word_terms: set[str] = set()
     if aligned_word_spelling:
         term, spelling = aligned_word_spelling
+        aligned_word_terms.add(_fold_text(term))
         language_rule_ids = {
             "normalization_norse_to_transliteration",
             "normalization_scandinavian_to_transliteration",
@@ -2141,6 +2471,10 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
             and _is_all_inscriptions_scope(rule.get("value")),
         )
     for term in swedish_word_terms:
+        if _fold_text(term) in english_translation_term_keys:
+            continue
+        if _fold_text(term) in aligned_word_terms:
+            continue
         if excluded_initial_rune:
             _remove_rules(
                 root,
@@ -2189,6 +2523,33 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
             root,
             lambda rule: rule.get("id") in normalization_ids
             and _rule_has_word_term(rule, name_element),
+        )
+        root = _append_and_constraint(root, name_rule)
+
+    full_personal_name = _extract_full_personal_name(user_text)
+    if full_personal_name:
+        name_rule = _make_full_personal_name_rule(full_personal_name, rune_spelling)
+        folded_name = _fold_text(full_personal_name)
+        material_values_for_name = _material_values_for_terms({folded_name})
+        normalization_ids = {
+            "normalization_norse_to_transliteration",
+            "normalization_scandinavian_to_transliteration",
+        }
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") in normalization_ids
+            and _rule_has_word_term(rule, full_personal_name),
+        )
+        _remove_rules(
+            root,
+            lambda rule: (
+                rule.get("id") == "objectInfo"
+                and _fold_text(str(rule.get("value") or "")) == folded_name
+            )
+            or (
+                rule.get("id") == "material_type"
+                and _fold_text(str(rule.get("value") or "")) in material_values_for_name
+            ),
         )
         root = _append_and_constraint(root, name_rule)
 
@@ -2316,6 +2677,30 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
     if lost_value is not None and not _has_rule(root, "lost"):
         root = _append_and_constraint(root, _make_lost_rule(lost_value))
 
+    personal_name_presence = _extract_personal_name_presence_constraint(user_text)
+    if personal_name_presence is not None:
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id")
+            in {
+                "full_address",
+                "found_location",
+                "current_location",
+                "parish",
+                "district",
+                "municipality",
+                "english_translation",
+                "swedish_translation",
+                "objectInfo",
+            }
+            and _looks_like_personal_name_presence_value(rule.get("value")),
+        )
+        if not _has_rule(root, "has_personal_name"):
+            root = _append_and_constraint(
+                root,
+                _make_personal_name_presence_rule(personal_name_presence),
+            )
+
     root.setdefault("valid", True)
     return json.dumps(root, ensure_ascii=False)
 
@@ -2332,6 +2717,12 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
 
     if bind_rune_intent:
         rules.append(_make_bind_rune_group())
+
+    if _has_coordinate_rune_intent(user_text):
+        rules.append(_make_coordinate_rune_rule())
+
+    for item in _extract_rune_type_constraints(user_text):
+        rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
 
     dating_prefix = None
     if re.search(r"\b(viking|vikingatid)\w*\b", text):
@@ -2351,7 +2742,9 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     if country_codes:
         rules.append(_make_inscription_country_rule(country_codes))
 
-    for term in _extract_english_translation_terms(user_text):
+    english_translation_terms = _extract_english_translation_terms(user_text)
+    english_translation_term_keys = {_fold_text(term) for term in english_translation_terms}
+    for term in english_translation_terms:
         rules.append(_make_contains_rule("english_translation", "english_translation", term))
 
     phrase_query = _extract_phrase_query(user_text)
@@ -2381,8 +2774,10 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
         )
 
     aligned_word_spelling = _extract_aligned_word_spelling(user_text)
+    aligned_word_terms: set[str] = set()
     if aligned_word_spelling:
         term, spelling = aligned_word_spelling
+        aligned_word_terms.add(_fold_text(term))
         rules.append(_make_requested_word_rule(user_text, term, transliteration=spelling))
 
     standalone_transliteration_rune = _extract_standalone_transliteration_rune(user_text)
@@ -2400,6 +2795,10 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     excluded_initial_rune = _extract_excluded_initial_rune(user_text) or ""
     excludes_palatal_r = _excludes_palatal_r(user_text)
     for term in _extract_swedish_word_terms(user_text):
+        if _fold_text(term) in english_translation_term_keys:
+            continue
+        if _fold_text(term) in aligned_word_terms:
+            continue
         if excluded_initial_rune:
             rules.extend(_make_normalization_exclusion_rules(term, excluded_initial_rune))
         else:
@@ -2422,6 +2821,10 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     name_element = _extract_name_element(user_text)
     if name_element:
         rules.append(_make_name_element_rule(name_element, rune_spelling))
+
+    full_personal_name = _extract_full_personal_name(user_text)
+    if full_personal_name:
+        rules.append(_make_full_personal_name_rule(full_personal_name, rune_spelling))
 
     for item in _extract_specific_location_constraints(user_text):
         rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
@@ -2462,6 +2865,10 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     lost_value = _extract_lost_constraint(user_text)
     if lost_value is not None:
         rules.append(_make_lost_rule(lost_value))
+
+    personal_name_presence = _extract_personal_name_presence_constraint(user_text)
+    if personal_name_presence is not None:
+        rules.append(_make_personal_name_presence_rule(personal_name_presence))
 
     if not rules:
         return None
@@ -2528,6 +2935,31 @@ def _is_simple_deterministic_query(user_text: str, fallback_rules: Optional[str]
             "",
             text,
         )
+    if _has_coordinate_rune_intent(user_text):
+        text = re.sub(
+            r"\b(?:kvistrunor|koordinatrunor|chifferrunor|lonnrunor|coordinate\s+runes?|"
+            r"cipher\s+runes?|secret\s+runes?|twig\s+runes?|branch\s+runes?|"
+            r"written|skrivna|skrivet|skrivna|anvander|använder|uses?|using|with|med|som|"
+            r"inscriptions?|inskrifter|hitta|find|alla|all|runes?|runor|runa|runorna)\b",
+            "",
+            text,
+        )
+    rune_type_constraints = _extract_rune_type_constraints(user_text)
+    if rune_type_constraints:
+        for item in rune_type_constraints:
+            value = _fold_text(item.get("value"))
+            if value:
+                text = re.sub(rf"\b{re.escape(value)}\b", "", text)
+        text = re.sub(
+            r"\b(?:stavlosa|stavlos|staveless|kortkvist|short[-\s]?twig|langkvist|"
+            r"langkvistrunor|long[-\s]?branch|stung(?:na|en)?|dotted|kvistrunor|"
+            r"branch\s+runes?|lonnrunor|cipher\s+runes?|spegelvanda|mirror\s+runes?|"
+            r"urnordisk(?:a)?|proto[-\s]?norse|early\s+norse|with|med|"
+            r"inscriptions?|inskrifter|hitta|find|alla|all|runes?|runor|runa|runorna|"
+            r"rune\s+type|runtyp(?:er|en)?|typen)\b",
+            "",
+            text,
+        )
     rune_spelling = _extract_rune_spelling(user_text)
     if rune_spelling:
         text = re.sub(rf"\b{re.escape(rune_spelling.lower())}\b", "", text)
@@ -2546,6 +2978,25 @@ def _is_simple_deterministic_query(user_text: str, fallback_rules: Optional[str]
     name_element = _extract_name_element(user_text)
     if name_element:
         text = re.sub(rf"\b{re.escape(name_element.lower())}\b", "", text)
+    full_personal_name = _extract_full_personal_name(user_text)
+    if full_personal_name:
+        text = re.sub(rf"\b{re.escape(full_personal_name.lower())}\b", "", text)
+        text = re.sub(
+            r"\b(?:personnamn(?:et)?|mansnamn(?:et)?|kvinnonamn(?:et)?|namnet|"
+            r"personal\s+name|the\s+name|name|named|with|containing|contains?|has|med|inscriptions?|inskrifter|"
+            r"hitta|find|alla|all)\b",
+            "",
+            text,
+        )
+    if _extract_personal_name_presence_constraint(user_text) is not None:
+        text = re.sub(
+            r"\b(?:personnamn|personliga\s+namn|personal\s+names?|namn|names?|"
+            r"med|with|har|has|innehaller|innehåller|contains?|containing|"
+            r"utan|without|no|saknar|lacks?|inte|not|inscriptions?|inskrifter|"
+            r"hitta|find|alla|all|som)\b",
+            "",
+            text,
+        )
     for item in _extract_carver_constraints(user_text):
         value = str(item.get("value") or "").lower()
         if value:
