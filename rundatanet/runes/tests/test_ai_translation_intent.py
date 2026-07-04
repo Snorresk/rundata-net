@@ -10,10 +10,12 @@ from rundatanet.runes.api import (
     _extract_carver_status,
     _extract_english_translation_terms,
     _extract_excluded_initial_rune,
+    _extract_full_personal_name,
     _extract_location_terms,
     _extract_long_vowel,
     _extract_material_constraints,
     _extract_name_element,
+    _extract_personal_name_presence_constraint,
     _extract_phrase_query,
     _extract_required_initial_runes,
     _extract_rune_type_constraints,
@@ -684,6 +686,178 @@ class EnglishTranslationIntentTests(SimpleTestCase):
                     {"normalization": "", "transliteration": "<", "names_mode": "includeAll"},
                 )
                 self.assertTrue(rule["includeSpecialSymbols"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_personal_name_presence_queries_use_name_count_filter(self, _styles, _objects):
+        prompts = (
+            "Hitta inskrifter med personnamn",
+            "Hitta inskrifter som innehåller personnamn",
+            "Find inscriptions with personal names",
+            "Find inscriptions containing personal names",
+        )
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_personal_name_presence_constraint(prompt), 1)
+                fallback = _build_rules_fallback_from_text(prompt)
+                result = json.loads(fallback)
+
+                self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+                self.assertEqual(result["condition"], "AND")
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(
+                    result["rules"][0],
+                    {
+                        "id": "has_personal_name",
+                        "field": "num_names",
+                        "type": "integer",
+                        "input": "number",
+                        "operator": "equal",
+                        "value": 1,
+                    },
+                )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_without_personal_name_queries_use_name_count_filter(self, _styles, _objects):
+        prompts = (
+            "Hitta inskrifter utan personnamn",
+            "Find inscriptions without personal names",
+            "Find inscriptions with no personal names",
+        )
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_personal_name_presence_constraint(prompt), 0)
+                fallback = _build_rules_fallback_from_text(prompt)
+                result = json.loads(fallback)
+
+                self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+                self.assertEqual(result["condition"], "AND")
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(result["rules"][0]["id"], "has_personal_name")
+                self.assertEqual(result["rules"][0]["value"], 0)
+
+    def test_full_name_query_is_not_personal_name_presence_query(self):
+        self.assertIsNone(_extract_personal_name_presence_constraint("Hitta inskrifter med namnet Björn"))
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._resolve_full_personal_name", return_value=("Bjôrn", True))
+    def test_full_personal_name_query_uses_names_only_normalisation(
+        self, _resolver, _styles, _objects
+    ):
+        prompts = (
+            "Hitta inskrifter med namnet Björn",
+            "Hitta inskrifter med personnamnet Björn",
+            "Find inscriptions with the personal name Björn",
+            "Find inscriptions with the name Björn",
+            "Find inscriptions with name Björn",
+            "Find inscriptions containing name Björn",
+            "Find inscriptions named Björn",
+        )
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_full_personal_name(prompt), "Björn")
+                self.assertIsNone(_extract_personal_name_presence_constraint(prompt))
+                fallback = _build_rules_fallback_from_text(prompt)
+                result = json.loads(fallback)
+
+                self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+                self.assertEqual(result["condition"], "AND")
+                self.assertEqual(len(result["rules"]), 1)
+                rule = result["rules"][0]
+                self.assertEqual(rule["id"], "normalization_norse_to_transliteration")
+                self.assertEqual(rule["operator"], "equal")
+                self.assertEqual(
+                    rule["value"],
+                    {"normalization": "Bjôrn", "transliteration": "", "names_mode": "namesOnly"},
+                )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._resolve_full_personal_name", return_value=("Steinn", True))
+    def test_full_personal_name_from_translation_can_resolve_to_normalised_form(
+        self, _resolver, _styles, _objects
+    ):
+        prompt = "Hitta inskrifter med namnet Sten"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(result["rules"][0]["operator"], "equal")
+        self.assertEqual(result["rules"][0]["value"]["normalization"], "Steinn")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "namesOnly")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._resolve_full_personal_name", return_value=("Biorn", False))
+    def test_full_personal_name_can_target_old_scandinavian(
+        self, _resolver, _styles, _objects
+    ):
+        prompt = "Find inscriptions with the personal name Biorn"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(result["rules"][0]["id"], "normalization_scandinavian_to_transliteration")
+        self.assertEqual(result["rules"][0]["operator"], "equal")
+        self.assertEqual(result["rules"][0]["value"]["normalization"], "Biorn")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "namesOnly")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._resolve_full_personal_name", return_value=("Bjôrn", True))
+    def test_full_personal_name_spelling_pairs_name_and_transliteration(
+        self, _resolver, _styles, _objects
+    ):
+        prompts = (
+            "Hitta inskrifter med namnet Björn skrivet med runor biurn",
+            "Hitta inskrifter med namnet Björn stavat med runor biurn",
+            "Find inscriptions with the personal name Björn written in runes biurn",
+            "Find inscriptions with the name Björn spelled with runes biurn",
+            "Find inscriptions with name Björn spelled in runes biurn",
+        )
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_full_personal_name(prompt), "Björn")
+                self.assertEqual(_extract_rune_spelling(prompt), "biurn")
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                rule = result["rules"][0]
+                self.assertEqual(rule["id"], "normalization_norse_to_transliteration")
+                self.assertEqual(rule["operator"], "equal")
+                self.assertEqual(
+                    rule["value"],
+                    {"normalization": "Bjôrn", "transliteration": "biurn", "names_mode": "namesOnly"},
+                )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._resolve_full_personal_name", return_value=("Alli", True))
+    def test_full_personal_name_uses_exact_operator_to_avoid_substring_matches(
+        self, _resolver, _styles, _objects
+    ):
+        prompts = (
+            "Hitta inskrifter med namnet Alli",
+            "Find inscriptions with the personal name Alli",
+            "Find inscriptions with name Alli",
+            "Find inscriptions named Alli",
+        )
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(result["rules"][0]["operator"], "equal")
+                self.assertEqual(result["rules"][0]["value"]["normalization"], "Alli")
+                self.assertEqual(result["rules"][0]["value"]["names_mode"], "namesOnly")
+
+    def test_english_name_element_is_not_misread_as_full_personal_name(self):
+        prompt = "Find inscriptions with the name element Björn"
+
+        self.assertEqual(_extract_name_element(prompt), "Björn")
+        self.assertIsNone(_extract_full_personal_name(prompt))
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
