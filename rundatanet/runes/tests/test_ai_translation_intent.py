@@ -1,16 +1,18 @@
 import json
 from unittest.mock import patch
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 from rundatanet.runes.api import (
     _build_rules_fallback_from_text,
     _extract_aligned_word_spelling,
     _extract_carver_constraints,
     _extract_carver_status,
+    _extract_cross_form_group_requests,
     _extract_english_translation_terms,
     _extract_excluded_initial_rune,
     _extract_full_personal_name,
+    _extract_full_personal_names,
     _extract_location_terms,
     _extract_long_vowel,
     _extract_material_constraints,
@@ -28,6 +30,20 @@ from rundatanet.runes.api import (
     _has_bind_rune_intent,
     _is_simple_deterministic_query,
     _postprocess_ai_rules,
+    _resolve_full_personal_name,
+    _resolve_full_personal_name_from_translation,
+    _resolve_old_west_name_element,
+    _full_personal_name_spelling_variants,
+    _normalization_contains_word,
+)
+from rundatanet.runes.models import (
+    NameUsage,
+    NormalisationNorse,
+    NormalisationScandinavian,
+    PersonalName,
+    Signature,
+    TranslationEnglish,
+    TranslationSwedish,
 )
 
 
@@ -466,6 +482,62 @@ class EnglishTranslationIntentTests(SimpleTestCase):
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_name_element_words_do_not_trigger_cross_form_group_c(
+        self, _styles, _objects
+    ):
+        prompts = (
+            "Hitta inskrifter med namnelementet fast",
+            "Hitta inskrifter med namnleden fast",
+            "Hitta inskrifter med namnelementet fot",
+            "Hitta inskrifter med namnelementet bas",
+            "Hitta inskrifter med namnelementet fäst",
+            "Find inscriptions with name element fast",
+            "Find inscriptions with name element foot",
+            "Find inscriptions with name element base",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                fallback = _build_rules_fallback_from_text(prompt)
+                result = json.loads(fallback)
+
+                self.assertEqual(_extract_cross_form_group_requests(prompt), [])
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+                self.assertEqual(result["rules"][0]["value"]["names_mode"], "namesOnly")
+                self.assertIsNone(_extract_personal_name_presence_constraint(prompt))
+
+    def test_cross_form_group_c_still_works_with_explicit_cross_context(self):
+        prompts = (
+            "Hitta inskrifter med kors med bas",
+            "Find inscriptions with crosses attached to the runic band",
+            "Find inscriptions attached to the runic band",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                groups = _extract_cross_form_group_requests(prompt)
+
+                self.assertEqual(len(groups), 1)
+                self.assertEqual(groups[0]["group"], "C")
+                self.assertEqual(groups[0]["forms"][0], "C1")
+
+    def test_cross_form_group_c_ambiguous_words_need_cross_context(self):
+        prompts = (
+            "Hitta inskrifter med fast",
+            "Hitta inskrifter med fot",
+            "Hitta inskrifter med bas",
+            "Find inscriptions with foot",
+            "Find inscriptions with base",
+            "Find inscriptions that are attached",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_cross_form_group_requests(prompt), [])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
     @patch(
         "rundatanet.runes.api._resolve_swedish_word_normalizations",
         return_value=("hjó", "hiogg"),
@@ -767,7 +839,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
                 self.assertEqual(len(result["rules"]), 1)
                 rule = result["rules"][0]
                 self.assertEqual(rule["id"], "normalization_norse_to_transliteration")
-                self.assertEqual(rule["operator"], "equal")
+                self.assertEqual(rule["operator"], "begins_with")
                 self.assertEqual(
                     rule["value"],
                     {"normalization": "Bjôrn", "transliteration": "", "names_mode": "namesOnly"},
@@ -785,7 +857,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
 
         self.assertEqual(len(result["rules"]), 1)
         self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
-        self.assertEqual(result["rules"][0]["operator"], "equal")
+        self.assertEqual(result["rules"][0]["operator"], "begins_with")
         self.assertEqual(result["rules"][0]["value"]["normalization"], "Steinn")
         self.assertEqual(result["rules"][0]["value"]["names_mode"], "namesOnly")
 
@@ -800,7 +872,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         result = json.loads(_build_rules_fallback_from_text(prompt))
 
         self.assertEqual(result["rules"][0]["id"], "normalization_scandinavian_to_transliteration")
-        self.assertEqual(result["rules"][0]["operator"], "equal")
+        self.assertEqual(result["rules"][0]["operator"], "begins_with")
         self.assertEqual(result["rules"][0]["value"]["normalization"], "Biorn")
         self.assertEqual(result["rules"][0]["value"]["names_mode"], "namesOnly")
 
@@ -826,7 +898,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
                 self.assertEqual(len(result["rules"]), 1)
                 rule = result["rules"][0]
                 self.assertEqual(rule["id"], "normalization_norse_to_transliteration")
-                self.assertEqual(rule["operator"], "equal")
+                self.assertEqual(rule["operator"], "begins_with")
                 self.assertEqual(
                     rule["value"],
                     {"normalization": "Bjôrn", "transliteration": "biurn", "names_mode": "namesOnly"},
@@ -835,7 +907,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
     @patch("rundatanet.runes.api._resolve_full_personal_name", return_value=("Alli", True))
-    def test_full_personal_name_uses_exact_operator_to_avoid_substring_matches(
+    def test_full_personal_name_uses_begins_with_to_avoid_substring_matches_and_include_case_forms(
         self, _resolver, _styles, _objects
     ):
         prompts = (
@@ -849,15 +921,98 @@ class EnglishTranslationIntentTests(SimpleTestCase):
                 result = json.loads(_build_rules_fallback_from_text(prompt))
 
                 self.assertEqual(len(result["rules"]), 1)
-                self.assertEqual(result["rules"][0]["operator"], "equal")
+                self.assertEqual(result["rules"][0]["operator"], "begins_with")
                 self.assertEqual(result["rules"][0]["value"]["normalization"], "Alli")
                 self.assertEqual(result["rules"][0]["value"]["names_mode"], "namesOnly")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._resolve_full_personal_name", return_value=("Fót", True))
+    def test_full_personal_name_fot_does_not_trigger_cross_form_group_c(
+        self, _resolver, _styles, _objects
+    ):
+        prompt = "Hitta inskrifter med namnet Fot"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertEqual(_extract_cross_form_group_requests(prompt), [])
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(result["rules"][0]["operator"], "begins_with")
+        self.assertEqual(result["rules"][0]["value"]["normalization"], "Fót")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "namesOnly")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch("rundatanet.runes.api._resolve_full_personal_name", return_value=("Þorbjôrn", True))
+    def test_swedish_bare_namn_with_value_is_full_personal_name_query(
+        self, _resolver, _styles, _objects
+    ):
+        prompt = "Hitta inskrifter med namn Torbjörn"
+
+        self.assertEqual(_extract_full_personal_name(prompt), "Torbjörn")
+        self.assertEqual(_extract_full_personal_names(prompt), ["Torbjörn"])
+        self.assertIsNone(_extract_personal_name_presence_constraint(prompt))
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(result["rules"][0]["operator"], "begins_with")
+        self.assertEqual(
+            result["rules"][0]["value"],
+            {"normalization": "Þorbjôrn", "transliteration": "", "names_mode": "namesOnly"},
+        )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    @patch(
+        "rundatanet.runes.api._resolve_full_personal_name",
+        side_effect=[("Bjôrn", True), ("Holmfastr", True)],
+    )
+    def test_swedish_name_list_creates_one_rule_per_full_personal_name(
+        self, _resolver, _styles, _objects
+    ):
+        prompt = "Hitta inskrifter med namn Björn och Holmfast"
+
+        self.assertEqual(_extract_full_personal_names(prompt), ["Björn", "Holmfast"])
+        self.assertIsNone(_extract_personal_name_presence_constraint(prompt))
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(result["condition"], "AND")
+        self.assertEqual(len(result["rules"]), 2)
+        self.assertEqual(
+            [rule["value"]["normalization"] for rule in result["rules"]],
+            ["Bjôrn", "Holmfast"],
+        )
+        self.assertEqual(
+            [rule["value"]["names_mode"] for rule in result["rules"]],
+            ["namesOnly", "namesOnly"],
+        )
 
     def test_english_name_element_is_not_misread_as_full_personal_name(self):
         prompt = "Find inscriptions with the name element Björn"
 
         self.assertEqual(_extract_name_element(prompt), "Björn")
         self.assertIsNone(_extract_full_personal_name(prompt))
+
+    def test_full_personal_name_variants_cover_t_th_thorn_and_nominative_r(self):
+        variants = _full_personal_name_spelling_variants("torunn")
+
+        self.assertIn("torunn", variants)
+        self.assertIn("thorunn", variants)
+        self.assertIn("þorunn", variants)
+        self.assertIn("þorunnr", variants)
+
+        holmfast_variants = _full_personal_name_spelling_variants("holmfast")
+        self.assertIn("holmfast", holmfast_variants)
+        self.assertNotIn("holmfastr", holmfast_variants)
+
+        alli_variants = _full_personal_name_spelling_variants("alli")
+        self.assertIn("alli", alli_variants)
+        self.assertNotIn("allir", alli_variants)
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
@@ -1056,3 +1211,171 @@ class CarverIntentTests(SimpleTestCase):
             transliteration_rule["value"],
             {"normalization": "", "transliteration": "R", "names_mode": "includeAll"},
         )
+
+
+class PersonalNameResolverDataTests(TestCase):
+    databases = {"default", "runes_db"}
+
+    def setUp(self):
+        _resolve_full_personal_name.cache_clear()
+        _resolve_full_personal_name_from_translation.cache_clear()
+        _resolve_old_west_name_element.cache_clear()
+        _normalization_contains_word.cache_clear()
+
+    def tearDown(self):
+        _resolve_full_personal_name.cache_clear()
+        _resolve_full_personal_name_from_translation.cache_clear()
+        _resolve_old_west_name_element.cache_clear()
+        _normalization_contains_word.cache_clear()
+
+    def _signature_with_texts(
+        self,
+        signature_text,
+        *,
+        swedish="",
+        english="",
+        norse="",
+        scandinavian="",
+    ):
+        signature = Signature.objects.create(signature_text=signature_text)
+        TranslationSwedish.objects.create(signature=signature, value=swedish, search_value=swedish)
+        TranslationEnglish.objects.create(signature=signature, value=english, search_value=english)
+        NormalisationNorse.objects.create(signature=signature, value=norse, search_value=norse)
+        NormalisationScandinavian.objects.create(
+            signature=signature,
+            value=scandinavian,
+            search_value=scandinavian,
+        )
+        return signature
+
+    def _add_name_usage(self, signature, value, word_index=0):
+        name, _created = PersonalName.objects.get_or_create(value=value)
+        return NameUsage.objects.create(signature=signature, name=name, word_index=word_index)
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_name_element_fot_prefers_old_west_fot_over_frequent_bot(
+        self, _styles, _objects
+    ):
+        for index in range(12):
+            bot_signature = self._signature_with_texts(
+                f"Bót test {index}",
+                norse=f'"Bótviðr reisti stein {index}.',
+                scandinavian=f'"Botviðr ræisti stæin {index}.',
+            )
+            self._add_name_usage(bot_signature, "Bótviðr", 0)
+
+        fot_signature = self._signature_with_texts(
+            "Fót test",
+            norse='"Fótr reisti stein.',
+            scandinavian='"Fotr ræisti stæin.',
+        )
+        self._add_name_usage(fot_signature, "Fótr", 0)
+
+        self.assertEqual(_resolve_old_west_name_element("fot"), "fót")
+
+        result = json.loads(_build_rules_fallback_from_text("Hitta inskrifter med namnelementet fot"))
+        self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(result["rules"][0]["operator"], "contains")
+        self.assertEqual(result["rules"][0]["value"]["normalization"], "fót")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "namesOnly")
+
+    def test_name_element_exact_short_form_beats_frequent_first_letter_neighbor(self):
+        for index in range(12):
+            ger_signature = self._signature_with_texts(
+                f"Ger test {index}",
+                norse=f'"Gerðr reisti stein {index}.',
+                scandinavian=f'"Gerðr ræisti stæin {index}.',
+            )
+            self._add_name_usage(ger_signature, "Gerðr", 0)
+
+        gyr_signature = self._signature_with_texts(
+            "Gyr test",
+            norse='"Gyrðr reisti stein.',
+            scandinavian='"Gyrðr ræisti stæin.',
+        )
+        self._add_name_usage(gyr_signature, "Gyrðr", 0)
+
+        self.assertEqual(_resolve_old_west_name_element("gyr"), "gyr")
+
+    def test_name_element_hints_keep_known_mappings_away_from_frequent_neighbors(self):
+        self.assertEqual(_resolve_old_west_name_element("sten"), "stein")
+        self.assertEqual(_resolve_old_west_name_element("björn"), "bjôrn")
+        self.assertEqual(_resolve_old_west_name_element("tor"), "þor")
+        self.assertEqual(_resolve_old_west_name_element("ulv"), "ulf")
+        self.assertEqual(_resolve_old_west_name_element("sven"), "svein")
+        self.assertEqual(_resolve_old_west_name_element("svein"), "svein")
+        self.assertEqual(_resolve_old_west_name_element("fred"), "freð")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_translated_torunn_resolves_from_matching_translation_not_jorunn(
+        self, _styles, _objects
+    ):
+        torunn_signature = self._signature_with_texts(
+            "U test",
+            swedish="Torunn reste stenen.",
+            norse="Þórunnr reisti stein.",
+            scandinavian="Þorunn ræisti stæin.",
+        )
+        self._add_name_usage(torunn_signature, "Þórunnr", 0)
+        self._add_name_usage(torunn_signature, "Þorunn", 0)
+
+        for index in range(8):
+            jorunn_signature = self._signature_with_texts(
+                f"J test {index}",
+                swedish="En annan översättning.",
+                english="Jórunn raised the stone.",
+                norse="Jórunnr reisti stein.",
+                scandinavian="Iorunn ræisti stæin.",
+            )
+            self._add_name_usage(jorunn_signature, "Jórunn", 0)
+
+        self.assertEqual(_resolve_full_personal_name("Torunn"), ("Þórunnr", True))
+
+        result = json.loads(_build_rules_fallback_from_text("Find inscriptions with name Torunn"))
+        self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(result["rules"][0]["operator"], "begins_with")
+        self.assertEqual(result["rules"][0]["value"]["normalization"], "Þórunn")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "namesOnly")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_translated_holmfast_searches_non_r_prefix_to_include_case_forms(
+        self, _styles, _objects
+    ):
+        accusative_signature = self._signature_with_texts(
+            "Sö acc",
+            swedish="Björn gjorde minnesmärket efter Holmfast.",
+            english="Bjôrn made the monument in memory of Holmfastr.",
+            norse='"Bjôrn gerði kuml þetta at "Holmfast.',
+            scandinavian='"Biorn gærði kumbl þetta at "Holmfast.',
+        )
+        self._add_name_usage(accusative_signature, "Holmfast", 0)
+
+        nominative_signature = self._signature_with_texts(
+            "Sö nom",
+            swedish="Holmfast reste stenen.",
+            english="Holmfastr raised the stone.",
+            norse='"Holmfastr reisti stein.',
+            scandinavian='"Holmfastr ræisti stæin.',
+        )
+        self._add_name_usage(nominative_signature, "Holmfastr", 0)
+
+        self.assertEqual(_resolve_full_personal_name("Holmfast"), ("Holmfast", True))
+
+        result = json.loads(_build_rules_fallback_from_text("Hitta inskrifter med namn Holmfast"))
+        self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(result["rules"][0]["operator"], "begins_with")
+        self.assertEqual(result["rules"][0]["value"]["normalization"], "Holmfast")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "namesOnly")
+
+    def test_th_spelling_can_resolve_to_thorn_normalisation_without_translation(self):
+        signature = self._signature_with_texts(
+            "N test",
+            norse="Þórunnr reisti stein.",
+            scandinavian="Þorunn ræisti stæin.",
+        )
+        self._add_name_usage(signature, "Þórunnr", 0)
+
+        self.assertEqual(_resolve_full_personal_name("Thorunn"), ("Þórunnr", True))

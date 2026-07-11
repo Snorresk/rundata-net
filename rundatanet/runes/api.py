@@ -661,7 +661,7 @@ def _extract_lost_constraint(user_text: str) -> Optional[int]:
 
 
 def _extract_personal_name_presence_constraint(user_text: str) -> Optional[int]:
-    if _extract_full_personal_name(user_text):
+    if _extract_full_personal_name(user_text) or _extract_name_element(user_text):
         return None
 
     text = _fold_text(user_text or "")
@@ -902,20 +902,43 @@ def _extract_name_element(user_text: str) -> Optional[str]:
 
 
 def _extract_full_personal_name(user_text: str) -> Optional[str]:
+    names = _extract_full_personal_names(user_text)
+    return names[0] if names else None
+
+
+def _extract_full_personal_names(user_text: str) -> list[str]:
     text = user_text or ""
     word = r"[\wþðæøœÞÐÆØŒ'’-]+"
-    patterns = (
-        rf"\b(?:personnamn(?:et)?|mansnamn(?:et)?|kvinnonamn(?:et)?|namnet)\s+[\"'“”]?({word})",
-        rf"\b(?:the\s+)?personal\s+name\s+[\"'“”]?({word})",
-        rf"\b(?:with|containing|contains?|has)\s+(?:the\s+)?name\s+(?!element\b)[\"'“”]?({word})",
-        rf"\bnamed\s+[\"'“”]?({word})",
-        rf"\bthe\s+name\s+(?!element\b)[\"'“”]?({word})",
+    connector = r"(?:,|och|and)"
+    swedish_label = r"(?:personnamn(?:et)?|mansnamn(?:et)?|kvinnonamn(?:et)?|namnet|namn)"
+    english_label = (
+        r"(?:(?:the\s+)?personal\s+names?|"
+        r"(?:with|containing|contains?|has)\s+(?:the\s+)?names?(?!\s+element\b)|"
+        r"named|the\s+names?(?!\s+element\b))"
     )
+    patterns = (
+        rf"\b{swedish_label}\s+[\"'“”]?({word})(?:[\"'“”]?\s*{connector}\s*[\"'“”]?({word}))*",
+        rf"\b{english_label}\s+[\"'“”]?({word})(?:[\"'“”]?\s*{connector}\s*[\"'“”]?({word}))*",
+    )
+    names: list[str] = []
+    seen: set[str] = set()
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
-            return match.group(1).strip("- .,!?:;\"'“”") or None
-    return None
+            matched_text = match.group(0)
+            matched_text = re.sub(rf"^\b(?:{swedish_label}|{english_label})\s+", "", matched_text, flags=re.IGNORECASE)
+            for value in re.split(rf"\s*{connector}\s*", matched_text, flags=re.IGNORECASE):
+                cleaned = value.strip("- .,!?:;\"'“”")
+                if not cleaned:
+                    continue
+                key = _fold_text(cleaned)
+                if key in seen:
+                    continue
+                seen.add(key)
+                names.append(cleaned)
+            if names:
+                return names
+    return []
 
 
 def _extract_rune_spelling(user_text: str) -> Optional[str]:
@@ -1130,25 +1153,34 @@ def _make_normalization_exclusion_rules(term: str, excluded_initial: str) -> lis
     return [positive_rule, negated_transliteration_group]
 
 
-@lru_cache(maxsize=256)
-def _resolve_old_west_name_element(term: str) -> str:
-    target = _fold_text(term.strip("-"))
-    candidates: Counter[str] = Counter()
+NAME_ELEMENT_NORMALIZATION_HINTS: dict[str, str] = {
+    # Common modern/translated Scandinavian forms where the Old West Norse
+    # name element has a predictable normalised spelling.
+    "bjorn": "bjôrn",
+    "björn": "bjôrn",
+    "sten": "stein",
+    "tor": "þor",
+    "thor": "þor",
+    "ulv": "ulf",
+    "sven": "svein",
+    "svein": "svein",
+    "fot": "fót",
+    "fred": "freð",
+}
 
-    def edit_distance(left: str, right: str) -> int:
-        previous = list(range(len(right) + 1))
-        for left_index, left_char in enumerate(left, start=1):
-            current = [left_index]
-            for right_index, right_char in enumerate(right, start=1):
-                current.append(
-                    min(
-                        current[-1] + 1,
-                        previous[right_index] + 1,
-                        previous[right_index - 1] + (left_char != right_char),
-                    )
-                )
-            previous = current
-        return previous[-1]
+
+def _has_diacritic(value: str) -> bool:
+    normalized = unicodedata.normalize("NFD", str(value or ""))
+    return any(unicodedata.category(ch) == "Mn" for ch in normalized)
+
+
+def _name_element_candidate_windows(
+    target: str,
+    *,
+    max_distance: int,
+    allow_first_letter_change: bool,
+) -> Counter[str]:
+    candidates: Counter[str] = Counter()
 
     try:
         values = NameUsage.objects.values("name__value").annotate(usage_count=Count("id"))
@@ -1168,53 +1200,183 @@ def _resolve_old_west_name_element(term: str) -> str:
                 for size in range(max(1, len(target)), len(target) + 2):
                     for start in range(0, len(folded) - size + 1):
                         folded_candidate = folded[start : start + size]
-                        distance = edit_distance(target, folded_candidate)
+                        distance = _edit_distance(target, folded_candidate)
                         if distance > 1:
+                            continue
+                        if distance > max_distance:
+                            continue
+                        if (
+                            distance
+                            and not allow_first_letter_change
+                            and target
+                            and folded_candidate
+                            and target[0] != folded_candidate[0]
+                        ):
                             continue
                         candidate = cleaned[start : start + size].casefold()
                         if candidate in seen_in_alternative:
                             continue
                         seen_in_alternative.add(candidate)
-                        # Exact forms get a modest preference, while frequent
-                        # canonical forms can outrank rare modernized variants.
-                        quality = (20 if distance == 0 else 10) + size
+                        # Exact forms get a strong preference. Diacritic
+                        # spellings usually represent Old West Norse forms
+                        # better than undiacritised duplicates (fót over fot,
+                        # bjôrn over biorn).
+                        quality = (100 if distance == 0 else 10) + size
+                        if distance == 0 and _has_diacritic(candidate):
+                            quality += 50
                         candidates[candidate] += usage_count * quality
     except Exception:
-        logger.warning("Could not resolve Old West Norse name element %r", term, exc_info=True)
+        logger.warning("Could not inspect personal-name data for %r", target, exc_info=True)
 
+    return candidates
+
+
+@lru_cache(maxsize=256)
+def _resolve_old_west_name_element(term: str) -> str:
+    target = _fold_text(term.strip("-"))
+    if not target:
+        return term.strip("-").casefold()
+
+    hinted = NAME_ELEMENT_NORMALIZATION_HINTS.get(target)
+    if hinted:
+        return hinted
+
+    exact_candidates = _name_element_candidate_windows(
+        target,
+        max_distance=0,
+        allow_first_letter_change=False,
+    )
+    if exact_candidates:
+        return exact_candidates.most_common(1)[0][0]
+
+    # Fuzzy fallback: for short elements, do not allow the first letter to
+    # change. This prevents frequent neighbours such as bót from swallowing a
+    # rarer but intended query like fot.
+    candidates = _name_element_candidate_windows(
+        target,
+        max_distance=1,
+        allow_first_letter_change=len(target) > 4,
+    )
     if candidates:
         return candidates.most_common(1)[0][0]
     # Reasonable orthographic fallback for Swedish ö when DB lookup is unavailable.
     return term.strip("-").casefold().replace("ö", "ô")
 
 
+def _edit_distance(left: str, right: str) -> int:
+    previous = list(range(len(right) + 1))
+    for left_index, left_char in enumerate(left, start=1):
+        current = [left_index]
+        for right_index, right_char in enumerate(right, start=1):
+            current.append(
+                min(
+                    current[-1] + 1,
+                    previous[right_index] + 1,
+                    previous[right_index - 1] + (left_char != right_char),
+                )
+            )
+        previous = current
+    return previous[-1]
+
+
+def _full_personal_name_spelling_variants(value: str) -> set[str]:
+    variants = {value}
+    if value == "sten":
+        variants.update({"stein", "steinn", "stæin", "stæinn"})
+
+    # Modern/translated Scandinavian names may use T/Th where the
+    # normalisation has þ, e.g. Torunn/Thorunn -> Þórunnr/Þorunn.
+    for variant in list(variants):
+        if variant.startswith("th") and len(variant) > 2:
+            variants.update({"þ" + variant[2:], "t" + variant[2:]})
+        elif variant.startswith("t") and len(variant) > 1:
+            variants.update({"þ" + variant[1:], "th" + variant[1:]})
+        elif variant.startswith("þ") and len(variant) > 1:
+            variants.update({"t" + variant[1:], "th" + variant[1:]})
+
+    # Some personal names in normalisation preserve nominative -r where the
+    # translated form does not. Keep this narrow for the Torunn/Þórunnr type;
+    # general consonant-final names are better searched with begins_with on the
+    # non-r form, because many examples are accusative and lack -r.
+    for variant in list(variants):
+        if variant.endswith(("unn", "un")) and not variant.endswith("r"):
+            variants.add(variant + "r")
+
+    return variants
+
+
+def _score_personal_name_candidate(
+    cleaned: str,
+    target_variants: set[str],
+    *,
+    max_distance: int = 1,
+) -> Optional[int]:
+    folded = _fold_text(cleaned)
+    if not cleaned or not folded or folded in {"", "..."}:
+        return None
+    if folded in target_variants:
+        return 10000
+    distance = min(_edit_distance(variant, folded) for variant in target_variants)
+    if distance > max_distance:
+        return None
+    return 8000 - distance * 500
+
+
+@lru_cache(maxsize=256)
+def _resolve_full_personal_name_from_translation(term: str) -> Optional[tuple[str, bool]]:
+    """Resolve a translated full name using names from matching translations.
+
+    If a user asks for a modern/translated name such as Torunn, the strongest
+    evidence is the set of personal-name normalisations attached to inscriptions
+    where that translated name actually occurs.
+    """
+
+    target = _fold_text(term.strip("-"))
+    if not target:
+        return None
+    target_variants = _full_personal_name_spelling_variants(target)
+    word_pattern = rf"(?<!\w){re.escape(term)}(?!\w)"
+    candidates: list[tuple[int, int, str, bool]] = []
+
+    try:
+        values = (
+            NameUsage.objects.filter(
+                Q(signature__translation_swedish__search_value__iregex=word_pattern)
+                | Q(signature__translation_english__search_value__iregex=word_pattern)
+            )
+            .values("name__value")
+            .annotate(usage_count=Count("id"))
+        )
+        for item in values:
+            raw_value = str(item["name__value"] or "")
+            usage_count = int(item["usage_count"])
+            for alternative in raw_value.split("/"):
+                cleaned = alternative.strip(" .,!?:;\"'“”[](){}?-")
+                quality = _score_personal_name_candidate(cleaned, target_variants)
+                if quality is None:
+                    continue
+                old_west_norse = _normalization_contains_word(cleaned, old_west_norse=True)
+                candidates.append((quality, usage_count, cleaned, old_west_norse))
+    except Exception:
+        logger.warning("Could not resolve translated personal name %r", term, exc_info=True)
+        return None
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1], int(item[3]), item[2]), reverse=True)
+    _quality, _usage_count, name, old_west_norse = candidates[0]
+    return name, old_west_norse
+
+
 @lru_cache(maxsize=256)
 def _resolve_full_personal_name(term: str) -> tuple[str, bool]:
     target = _fold_text(term.strip("-"))
+    translated_name = _resolve_full_personal_name_from_translation(term)
+    if translated_name:
+        return translated_name
+
     candidates: list[tuple[int, int, str, bool]] = []
-
-    def edit_distance(left: str, right: str) -> int:
-        previous = list(range(len(right) + 1))
-        for left_index, left_char in enumerate(left, start=1):
-            current = [left_index]
-            for right_index, right_char in enumerate(right, start=1):
-                current.append(
-                    min(
-                        current[-1] + 1,
-                        previous[right_index] + 1,
-                        previous[right_index - 1] + (left_char != right_char),
-                    )
-                )
-            previous = current
-        return previous[-1]
-
-    def spelling_variants(value: str) -> set[str]:
-        variants = {value}
-        if value == "sten":
-            variants.update({"stein", "steinn", "stæin", "stæinn"})
-        return variants
-
-    target_variants = spelling_variants(target)
+    target_variants = _full_personal_name_spelling_variants(target)
 
     try:
         values = NameUsage.objects.values("name__value").annotate(usage_count=Count("id"))
@@ -1223,16 +1385,9 @@ def _resolve_full_personal_name(term: str) -> tuple[str, bool]:
             usage_count = int(item["usage_count"])
             for alternative in raw_value.split("/"):
                 cleaned = alternative.strip(" .,!?:;\"'“”[](){}?-")
-                folded = _fold_text(cleaned)
-                if not cleaned or not folded or folded in {"", "..."}:
+                quality = _score_personal_name_candidate(cleaned, target_variants)
+                if quality is None:
                     continue
-                if folded in target_variants:
-                    quality = 10000
-                else:
-                    distance = min(edit_distance(variant, folded) for variant in target_variants)
-                    if distance > 1:
-                        continue
-                    quality = 8000 - distance * 500
                 old_west_norse = _normalization_contains_word(cleaned, old_west_norse=True)
                 candidates.append((quality, usage_count, cleaned, old_west_norse))
     except Exception:
@@ -1343,14 +1498,27 @@ def _make_name_element_rule(element: str, transliteration: str) -> dict[str, Any
     )
 
 
+def _full_personal_name_search_prefix(name: str, normalized_name: str) -> str:
+    folded_normalized = _fold_text(normalized_name)
+    target_variants = _full_personal_name_spelling_variants(_fold_text(name.strip("-")))
+    if (
+        len(normalized_name) > 2
+        and folded_normalized.endswith("r")
+        and folded_normalized[:-1] in target_variants
+    ):
+        return normalized_name[:-1]
+    return normalized_name
+
+
 def _make_full_personal_name_rule(name: str, transliteration: str = "") -> dict[str, Any]:
     normalized_name, old_west_norse = _resolve_full_personal_name(name)
+    normalized_name = _full_personal_name_search_prefix(name, normalized_name)
     return _make_normalization_rule(
         normalized_name,
         old_west_norse=old_west_norse,
         transliteration=transliteration,
         names_mode="namesOnly",
-        operator="equal",
+        operator="begins_with",
     )
 
 
@@ -1720,6 +1888,13 @@ def _extract_cross_form_group_requests(user_text: str) -> list[dict[str, Any]]:
     requests: list[dict[str, Any]] = []
     seen: set[tuple[str, str, bool, bool]] = set()
     certainty = _cross_form_global_certainty(user_text) or "2"
+    explicit_cross_context = bool(
+        re.search(
+            r"\b(?:kors(?:en|et|form(?:en|er|erna)?)?|cross(?:es)?|cross[-\s]?forms?|"
+            r"linn\s+lager|lager(?:s)?\s+system|runic\s+band|runslinga|runband)\b",
+            text,
+        )
+    )
 
     def add_group(group: str, label: str, *, include_zero: bool = False, only_zero: bool = False) -> None:
         group = group.upper()
@@ -1766,7 +1941,18 @@ def _extract_cross_form_group_requests(user_text: str) -> list[dict[str, Any]]:
         else:
             add_group("E", "Group E, ornamental decoration")
 
-    if re.search(r"\b(?:attached|fast|fäst|fastsatt|attached\s+to\s+the\s+runic\s+band|runic\s+band|runslinga|runband|base|foot|fot|bas)\b", text):
+    group_c_match = re.search(
+        r"\b(attached\s+to\s+the\s+runic\s+band|runic\s+band|runslinga|runband|attached|fast|fäst|fastsatt|base|foot|fot|bas)\b",
+        text,
+    )
+    group_c_term = _fold_text(group_c_match.group(1)) if group_c_match else ""
+    group_c_requires_cross_context = group_c_term not in {
+        "attached to the runic band",
+        "runic band",
+        "runslinga",
+        "runband",
+    }
+    if group_c_match and not (group_c_requires_cross_context and not explicit_cross_context):
         if re.search(r"\b(?:without|utan|saknar|lacks?|no)\b", text):
             add_group("C", "Group C, no attachment/base/foot", only_zero=True)
         else:
@@ -2822,8 +3008,7 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     if name_element:
         rules.append(_make_name_element_rule(name_element, rune_spelling))
 
-    full_personal_name = _extract_full_personal_name(user_text)
-    if full_personal_name:
+    for full_personal_name in _extract_full_personal_names(user_text):
         rules.append(_make_full_personal_name_rule(full_personal_name, rune_spelling))
 
     for item in _extract_specific_location_constraints(user_text):
@@ -2978,13 +3163,14 @@ def _is_simple_deterministic_query(user_text: str, fallback_rules: Optional[str]
     name_element = _extract_name_element(user_text)
     if name_element:
         text = re.sub(rf"\b{re.escape(name_element.lower())}\b", "", text)
-    full_personal_name = _extract_full_personal_name(user_text)
-    if full_personal_name:
-        text = re.sub(rf"\b{re.escape(full_personal_name.lower())}\b", "", text)
+    full_personal_names = _extract_full_personal_names(user_text)
+    if full_personal_names:
+        for full_personal_name in full_personal_names:
+            text = re.sub(rf"\b{re.escape(full_personal_name.lower())}\b", "", text)
         text = re.sub(
-            r"\b(?:personnamn(?:et)?|mansnamn(?:et)?|kvinnonamn(?:et)?|namnet|"
+            r"\b(?:personnamn(?:et)?|mansnamn(?:et)?|kvinnonamn(?:et)?|namnet|namn|"
             r"personal\s+name|the\s+name|name|named|with|containing|contains?|has|med|inscriptions?|inskrifter|"
-            r"hitta|find|alla|all)\b",
+            r"hitta|find|alla|all|och|and)\b",
             "",
             text,
         )
