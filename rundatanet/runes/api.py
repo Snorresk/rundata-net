@@ -504,6 +504,7 @@ def _looks_like_style_location_value(value: Any) -> bool:
 def _extract_location_terms(user_text: str) -> list[str]:
     text = _strip_aligned_word_spelling_clauses(user_text or "")
     terms: list[str] = []
+    active_material_values = {item["value"] for item in _extract_material_constraints(user_text)}
 
     # Prefer explicit "found in" style location phrases.
     patterns = [
@@ -587,7 +588,8 @@ def _extract_location_terms(user_text: str) -> list[str]:
                 continue
             if any(cleaned.lower().startswith(prefix) for prefix in blocked_location_starts):
                 continue
-            if _fold_text(cleaned) in {"ben", "bone", "metal", "metall"}:
+            material_values_for_location_term = _material_values_for_terms({_fold_text(cleaned)})
+            if material_values_for_location_term.intersection(active_material_values):
                 continue
             if cleaned.lower() in {"their", "there", "here", "original", "site", "place"}:
                 continue
@@ -1614,12 +1616,15 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
     text = _fold_text(user_text or "")
     constraints: list[dict[str, str]] = []
     seen_values: set[str] = set()
+    active_material_values = {item["value"] for item in _extract_material_constraints(user_text)}
     name_element = _extract_name_element(user_text)
     name_element_folded = _fold_text(name_element) if name_element else ""
     full_personal_name = _extract_full_personal_name(user_text)
     full_personal_name_folded = _fold_text(full_personal_name) if full_personal_name else ""
 
     def add_object(value: str) -> None:
+        if _material_values_for_terms({_fold_text(value)}).intersection(active_material_values):
+            return
         if name_element_folded and _fold_text(value) == name_element_folded:
             return
         if full_personal_name_folded and _fold_text(value) == full_personal_name_folded:
@@ -3235,6 +3240,136 @@ def _is_simple_deterministic_query(user_text: str, fallback_rules: Optional[str]
     )
     return not any(marker in text for marker in advanced_markers)
 
+
+def _query_builder_guidance_message(
+    user_text: str,
+    fallback_rules: Optional[str] = None,
+    *,
+    early_only: bool = False,
+) -> Optional[str]:
+    """Return a user-facing message when a request should not be forced into rules."""
+
+    text = _fold_text(user_text or "")
+    if not text:
+        return (
+            "I need a question or search description before I can build database search "
+            "parameters. Try specifying a word, name, place, material, carver, style, "
+            "rune type, transliteration, translation, or cross form."
+        )
+
+    explanation_intent = bool(
+        re.search(
+            r"\b(?:varfor|varför|vad\s+betyder|beratta|berätta|forklara|förklara|"
+            r"why|what\s+does|what\s+is|explain|tell\s+me\s+about|meaning\s+of|"
+            r"history\s+of|background\s+of)\b",
+            text,
+        )
+    )
+    search_intent = bool(
+        re.search(
+            r"\b(?:hitta|sok|sök|leta|visa|find|search|show|list|lista|"
+            r"inskrifter|inscription(?:s)?|runinskrifter|runestones?|runstenar)\b",
+            text,
+        )
+    )
+    vague_value_intent = bool(
+        re.search(
+            r"\b(?:intressant(?:a)?|interesting|beautiful|vackra|important|viktiga|"
+            r"famous|kanda|kända|bra|good|some|nagot|något|something|anything)\b",
+            text,
+        )
+    )
+    yes_no_universal_intent = bool(
+        re.search(
+            r"^(?:are|is|were|was|do|does|did|can|could|should|would|"
+            r"ar|är|var|kan|finns)\s+"
+            r"(?:all|every|each|alla|samtliga|varje)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:all|every|each|alla|samtliga|varje)\s+"
+            r"(?:inscriptions?|runestones?|runes?|inskrifter|runstenar|runor)\s+"
+            r"(?:are|is|were|was|ar|är|var)\b",
+            text,
+        )
+    )
+    explicit_text_search_intent = bool(
+        re.search(
+            r"\b(?:word|words|ord|ordet|orden|phrase|fras|frasen|translation|"
+            r"översättning|oversattning|english\s+translation|swedish\s+translation)\b",
+            text,
+        )
+    )
+    unsupported_concept_intent = bool(
+        re.search(
+            r"\b(?:family|familj|slakt|släkt|belonging\s+to|related\s+to|relatives?|"
+            r"descendants?|ancestors?|genealog(?:y|ical)|water\s+levels?|near\s+water|"
+            r"by\s+water|beside\s+water|close\s+to\s+water|lake|river|stream|sea|"
+            r"shore|coast|vatten(?:niva|nivå)?|nara\s+vatten|nära\s+vatten|sjo|sjö|"
+            r"alv|älv|a|å|hav|strand|kust)\b",
+            text,
+        )
+    )
+
+    if explanation_intent:
+        return (
+            "This looks like an explanation or interpretation question rather than a "
+            "query-builder search. I cannot turn it into reliable search parameters. "
+            "Please reformulate it as a database search, for example by specifying a "
+            "word, name, place, material, carver, style, rune type, transliteration, "
+            "translation, or cross form."
+        )
+
+    if yes_no_universal_intent:
+        return (
+            "This looks like a yes/no or general interpretation question, not a "
+            "query-builder search. I did not create search parameters from one "
+            "recognized field such as Viking Age alone. Please reformulate it as a "
+            "searchable request, for example: 'Find inscriptions dated to the Viking "
+            "Age' or 'How many inscriptions are dated to the Viking Age?'."
+        )
+
+    if unsupported_concept_intent and not explicit_text_search_intent:
+        return (
+            "This question needs information that is not available as reliable "
+            "query-builder fields, such as family relations or landscape/water "
+            "proximity. I did not create search parameters from a generic word like "
+            "runestone alone. Please reformulate the question using searchable fields "
+            "such as word/name, transliteration, translation, place/province, "
+            "material, carver, style, rune type, dating, or cross form."
+        )
+
+    if vague_value_intent:
+        return (
+            "I cannot identify a reliable database field for this search, so I did not "
+            "create query-builder rules. Please make the question more specific: say "
+            "whether you want to search in normalisation, transliteration/runes, "
+            "translation, inscription place, material, carver, style, rune type, "
+            "personal names, cross form, or another database field."
+        )
+
+    if early_only:
+        return None
+
+    if fallback_rules:
+        return None
+
+    if search_intent:
+        return (
+            "I cannot identify a reliable database field for this search, so I did not "
+            "create query-builder rules. Please make the question more specific: say "
+            "whether you want to search in normalisation, transliteration/runes, "
+            "translation, inscription place, material, carver, style, rune type, "
+            "personal names, cross form, or another database field."
+        )
+
+    return (
+        "I cannot turn this into reliable query-builder rules yet. Please formulate it "
+        "as a database search with a clear field, such as word/name, transliteration, "
+        "translation, place, material, carver, style, rune type, or cross form."
+    )
+
+
 api = NinjaAPI(
     title="Rundata API",
     version="1.0.0",
@@ -3260,6 +3395,16 @@ class AiAnswerResponse(Schema):
     matched_inscriptions: int
     metadata: dict[str, Any]
     error: Optional[str] = None
+
+
+def _answer_query_builder_guidance(user_text: str) -> AiAnswerResponse:
+    message = _query_builder_guidance_message(user_text) or ""
+    return AiAnswerResponse(
+        answer=message,
+        matched_inscriptions=0,
+        metadata={"intent": "needs_query_builder_clarification"},
+        error="Question cannot be converted to reliable query-builder rules",
+    )
 
 
 class InscriptionResponse(Schema):
@@ -4344,7 +4489,17 @@ def txt2rules(request, data: TextRequest):
     inference step fails.
     """
     try:
+        early_guidance_message = _query_builder_guidance_message(data.text, early_only=True)
+        if early_guidance_message:
+            logger.info("Skipping query builder conversion for clearly unsupported or vague request.")
+            return TextResponse(rules="", error=early_guidance_message)
+
         fallback_rules = _build_rules_fallback_from_text(data.text)
+        guidance_message = _query_builder_guidance_message(data.text, fallback_rules)
+        if guidance_message:
+            logger.info("Skipping query builder conversion for unsupported or vague request.")
+            return TextResponse(rules="", error=guidance_message)
+
         if _is_simple_deterministic_query(data.text, fallback_rules):
             logger.info("Using deterministic preflight rules for simple query.")
             return TextResponse(rules=fallback_rules or "")
@@ -4401,6 +4556,10 @@ def ai_answer(request, data: TextRequest):
     if _looks_like_similarity_over_filters_question(data.text):
         return _answer_similarity_from_filters(data.text)
 
+    early_guidance_message = _query_builder_guidance_message(data.text, early_only=True)
+    if early_guidance_message:
+        return _answer_query_builder_guidance(data.text)
+
     if _looks_like_period_frequency_question(data.text):
         return _answer_period_frequency_from_filters(data.text)
 
@@ -4421,6 +4580,11 @@ def ai_answer(request, data: TextRequest):
 
     if _looks_like_list_question(data.text):
         return _answer_list_from_filters(data.text)
+
+    fallback_rules = _build_rules_fallback_from_text(data.text)
+    guidance_message = _query_builder_guidance_message(data.text, fallback_rules)
+    if guidance_message:
+        return _answer_query_builder_guidance(data.text)
 
     return AiAnswerResponse(
         answer=(

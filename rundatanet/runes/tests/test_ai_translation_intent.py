@@ -17,6 +17,7 @@ from rundatanet.runes.api import (
     _extract_long_vowel,
     _extract_material_constraints,
     _extract_name_element,
+    _extract_object_info_constraints,
     _extract_personal_name_presence_constraint,
     _extract_phrase_query,
     _extract_required_initial_runes,
@@ -30,11 +31,15 @@ from rundatanet.runes.api import (
     _has_bind_rune_intent,
     _is_simple_deterministic_query,
     _postprocess_ai_rules,
+    _query_builder_guidance_message,
     _resolve_full_personal_name,
     _resolve_full_personal_name_from_translation,
     _resolve_old_west_name_element,
     _full_personal_name_spelling_variants,
     _normalization_contains_word,
+    ai_answer,
+    TextRequest,
+    txt2rules,
 )
 from rundatanet.runes.models import (
     NameUsage,
@@ -52,6 +57,115 @@ class EnglishTranslationIntentTests(SimpleTestCase):
 
     def test_extracts_word_as_english_translation_term(self):
         self.assertEqual(_extract_english_translation_terms(self.prompt), ["stone"])
+
+    def test_query_builder_guidance_blocks_explanation_or_vague_requests_without_rules(self):
+        prompts = (
+            "Varför använde man runor?",
+            "Vad betyder runstenen?",
+            "Berätta om vikingatiden",
+            "Find beautiful inscriptions",
+            "Search something about names",
+            "Are all runes from Viking age?",
+            "Are all inscriptions from the Viking Age?",
+            "Är alla runor från vikingatiden?",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                message = _query_builder_guidance_message(prompt, early_only=True)
+
+                self.assertIsNotNone(message)
+                self.assertTrue(
+                    "database" in message.lower()
+                    or "query-builder" in message.lower()
+                    or "search" in message.lower()
+                )
+
+    @patch("rundatanet.runes.api.inference")
+    def test_txt2rules_guidance_returns_error_without_calling_llm(self, inference_mock):
+        response = txt2rules(None, TextRequest(text="Varför använde man runor?"))
+
+        inference_mock.assert_not_called()
+        self.assertEqual(response.rules, "")
+        self.assertIsNotNone(response.error)
+        self.assertIn("query-builder", response.error)
+
+    def test_ai_answer_guidance_explains_unsupported_vague_query(self):
+        response = ai_answer(None, TextRequest(text="Find beautiful inscriptions"))
+
+        self.assertEqual(response.matched_inscriptions, 0)
+        self.assertEqual(response.metadata["intent"], "needs_query_builder_clarification")
+        self.assertIn("database field", response.answer)
+
+    @patch("rundatanet.runes.api.inference")
+    def test_family_and_water_question_is_not_reduced_to_generic_runestone_search(
+        self, inference_mock
+    ):
+        prompt = "How many runestones belonging to Jarlabanki's family are raised near water?"
+
+        response = txt2rules(None, TextRequest(text=prompt))
+
+        inference_mock.assert_not_called()
+        self.assertEqual(response.rules, "")
+        self.assertIsNotNone(response.error)
+        self.assertIn("family relations", response.error)
+        self.assertIn("water", response.error)
+
+    def test_ai_answer_guidance_runs_before_count_for_unsupported_relations(self):
+        prompt = "How many runestones belonging to Jarlabanki's family are raised near water?"
+
+        response = ai_answer(None, TextRequest(text=prompt))
+
+        self.assertEqual(response.matched_inscriptions, 0)
+        self.assertEqual(response.metadata["intent"], "needs_query_builder_clarification")
+        self.assertIn("family relations", response.answer)
+
+    @patch("rundatanet.runes.api.inference")
+    def test_yes_no_universal_question_is_not_reduced_to_viking_age_filter(
+        self, inference_mock
+    ):
+        prompt = "Are all runes from Viking age?"
+
+        response = txt2rules(None, TextRequest(text=prompt))
+
+        inference_mock.assert_not_called()
+        self.assertEqual(response.rules, "")
+        self.assertIsNotNone(response.error)
+        self.assertIn("yes/no", response.error)
+        self.assertIn("Viking Age", response.error)
+
+    def test_ai_answer_guidance_handles_yes_no_universal_question_before_counting(self):
+        response = ai_answer(None, TextRequest(text="Are all runes from Viking age?"))
+
+        self.assertEqual(response.matched_inscriptions, 0)
+        self.assertEqual(response.metadata["intent"], "needs_query_builder_clarification")
+        self.assertIn("yes/no", response.answer)
+
+    def test_unsupported_concept_words_can_still_be_searched_as_text(self):
+        prompt = "Find inscriptions with the word family"
+
+        self.assertIsNone(_query_builder_guidance_message(prompt, early_only=True))
+        self.assertIsNone(
+            _query_builder_guidance_message(prompt, '{"condition":"AND","rules":[]}')
+        )
+
+    def test_query_builder_guidance_does_not_block_valid_searches(self):
+        prompts = (
+            "Hitta inskrifter med namnet Fot",
+            "Hitta inskrifter med namnelementet fot",
+            "Hitta inskrifter i stilen Rak",
+            "Find inscriptions with the word stone",
+            "Find inscriptions with the word family",
+            "Hitta inskrifter med kors med fot",
+            "How many runestones",
+            "How many inscriptions are dated to the Viking Age?",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                self.assertIsNone(
+                    _query_builder_guidance_message(prompt, '{"condition":"AND","rules":[]}')
+                )
 
     def test_word_stone_is_not_treated_as_material(self):
         self.assertEqual(_extract_material_constraints(self.prompt), [])
@@ -121,6 +235,83 @@ class EnglishTranslationIntentTests(SimpleTestCase):
 
         self.assertEqual(constraints[0]["id"], "material_type")
         self.assertEqual(constraints[0]["value"], "stone")
+
+    def test_material_terms_are_not_reused_as_any_location(self):
+        prompts = (
+            "Hitta alla signa ristade i trä",
+            "Hitta alla inskrifter ristade i trä",
+            "Find all inscriptions carved in wood",
+            "Hitta alla inskrifter ristade i sten",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_location_terms(prompt), [])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_keeps_wood_material_without_any_location(self, _styles, _objects):
+        prompt = "Hitta alla inskrifter ristade i trä"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [("material_type", "wood")],
+        )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_keeps_stone_material_without_any_location(self, _styles, _objects):
+        prompt = "Hitta alla inskrifter ristade i sten"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [("material_type", "stone")],
+        )
+
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("sten", "sten"),))
+    def test_material_term_is_not_reused_as_object_info(self, _objects):
+        self.assertEqual(_extract_object_info_constraints("Hitta alla inskrifter ristade i sten"), [])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_material_phrase_can_still_combine_with_real_province(self, _styles, _objects):
+        prompt = "Hitta alla inskrifter ristade i trä från Södermanland"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [("inscription_country", ["Sö "]), ("material_type", "wood")],
+        )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_does_not_add_location_for_active_material_term(self, _styles, _objects):
+        prompt = "Hitta alla signa ristade i trä"
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "material_type",
+                        "field": "material_type",
+                        "operator": "contains",
+                        "value": "wood",
+                    }
+                ],
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(prompt, model_output))
+
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [("material_type", "wood")],
+        )
 
     def test_word_and_different_explicit_material_are_kept_separate(self):
         constraints = _extract_material_constraints(
