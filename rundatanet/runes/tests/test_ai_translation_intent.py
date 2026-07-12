@@ -27,6 +27,7 @@ from rundatanet.runes.api import (
     _has_coordinate_rune_intent,
     _excludes_palatal_r,
     _extract_rune_spelling,
+    _extract_signature_candidates,
     _extract_swedish_word_terms,
     _has_bind_rune_intent,
     _is_simple_deterministic_query,
@@ -364,6 +365,97 @@ class EnglishTranslationIntentTests(SimpleTestCase):
                 ("english_translation", "runes"),
             ],
         )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_signature_list_uses_inscription_id_rule(self, _styles, _objects):
+        prompt = "Hitta följande inskrifter U 212, Sö 46, DR 42"
+
+        self.assertEqual(_extract_signature_candidates(prompt), ["U 212", "Sö 46", "DR 42"])
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(len(result["rules"]), 1)
+        rule = result["rules"][0]
+        self.assertEqual(rule["id"], "inscription_id")
+        self.assertEqual(rule["field"], "signature_text")
+        self.assertEqual(rule["operator"], "in")
+        self.assertEqual(rule["value"], "U 212|Sö 46|DR 42")
+        self.assertTrue(rule["data"]["multiField"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_english_signature_list_uses_inscription_id_rule(self, _styles, _objects):
+        prompt = "Find inscriptions U 212, Sö 46 and DR 42"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "inscription_id")
+        self.assertEqual(result["rules"][0]["value"], "U 212|Sö 46|DR 42")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_signature_list_expands_shorthand_numbers_after_prefix(self, _styles, _objects):
+        prompt = "Hitta dessa inskrifter från Södermanland: Sö 9, 14, 15, 19, 20"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "inscription_id")
+        self.assertEqual(result["rules"][0]["value"], "Sö 9|Sö 14|Sö 15|Sö 19|Sö 20")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_english_signature_list_expands_shorthand_after_and(self, _styles, _objects):
+        prompt = "Find these inscriptions from Södermanland: Sö 9 and 14"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "inscription_id")
+        self.assertEqual(result["rules"][0]["value"], "Sö 9|Sö 14")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_single_signature_search_uses_inscription_id_rule(self, _styles, _objects):
+        prompt = "Hitta U 212"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "inscription_id")
+        self.assertEqual(result["rules"][0]["value"], "U 212")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_signature_list_preserves_semicolon_inside_signature(self, _styles, _objects):
+        prompt = "Hitta följande inskrifter Sö Fv1986;218, U 212"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "inscription_id")
+        self.assertEqual(result["rules"][0]["value"], "Sö Fv1986;218|U 212")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_style_values", return_value=(("Pr 1", "pr 1"),))
+    def test_style_code_is_not_misread_as_inscription_id(self, _styles, _objects):
+        prompt = "Hitta alla inskrifter i stilen Pr1"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "style")
+        self.assertEqual(result["rules"][0]["value"], "Pr 1")
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
@@ -1250,15 +1342,138 @@ class EnglishTranslationIntentTests(SimpleTestCase):
             {"normalization": "ó", "transliteration": "u", "names_mode": "includeAll"},
         )
 
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_long_vowel_sound_ristas_with_runes_pairs_transliteration(self, _styles, _objects):
+        prompts = (
+            "Hitta ord med långt a ljud där detta ljud ristas au",
+            "Hitta ord med långt a ljud där detta ljud ristas med runor au",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_long_vowel(prompt), "á")
+                self.assertEqual(_extract_rune_spelling(prompt), "au")
+                self.assertEqual(_extract_swedish_word_terms(prompt), [])
+
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                rule = result["rules"][0]
+                self.assertEqual(rule["id"], "normalization_norse_to_transliteration")
+                self.assertEqual(
+                    rule["value"],
+                    {"normalization": "á", "transliteration": "au", "names_mode": "includeAll"},
+                )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_words_with_long_vowel_does_not_search_grammar_word(self, _styles, _objects):
+        prompt = "Find words with long vowel a written with runes au"
+
+        self.assertEqual(_extract_english_translation_terms(prompt), [])
+        self.assertEqual(_extract_rune_spelling(prompt), "au")
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(
+            result["rules"][0]["value"],
+            {"normalization": "á", "transliteration": "au", "names_mode": "includeAll"},
+        )
+
     def test_rune_spelling_after_sound_wording_variants(self):
         prompts = (
             "ljudet skrivs u med runor",
             "ljudet stavas u med runor",
+            "ljudet ristas u",
+            "ljudet ristas med runor u",
             "the sound is written as u in runes",
+            "the sound is written with rune u",
         )
         for prompt in prompts:
             with self.subTest(prompt=prompt):
                 self.assertEqual(_extract_rune_spelling(prompt), "u")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_sound_queries_do_not_search_grammar_words(self, _styles, _objects):
+        prompts = (
+            "Hitta ord där ljudet þ initialt skrivs med runan t",
+            "Hitta ord med ljudet þ som skrivs med runan t",
+            "Find words where the sound þ is written with rune t",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_swedish_word_terms(prompt), [])
+                self.assertEqual(_extract_english_translation_terms(prompt), [])
+
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+                self.assertNotIn("med", json.dumps(result, ensure_ascii=False).lower())
+                self.assertNotIn("där", json.dumps(result, ensure_ascii=False).lower())
+                self.assertNotIn("where", json.dumps(result, ensure_ascii=False).lower())
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_diagnostic_prompts_do_not_emit_grammar_word_language_rules(self, _styles, _objects):
+        grammar_words = {
+            "med",
+            "i",
+            "på",
+            "som",
+            "där",
+            "detta",
+            "with",
+            "where",
+            "in",
+            "the",
+            "word",
+            "words",
+            "ord",
+            "ordet",
+        }
+        prompts = (
+            "Hitta ord med lång vokal a",
+            "Hitta ord med långt a ljud där detta ljud ristas med runor au",
+            "Hitta ord där ljudet þ initialt skrivs med runan t",
+            "Hitta ord med namnet Fot",
+            "Hitta ord med namnelementet fot",
+            "Find words with long vowel a written with runes au",
+            "Find words where the sound þ is written with rune t",
+            "Find words with name Fot",
+        )
+
+        def iter_rules(node):
+            if isinstance(node, dict) and "rules" in node:
+                for child in node["rules"]:
+                    yield from iter_rules(child)
+            elif isinstance(node, dict):
+                yield node
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+                for rule in iter_rules(result):
+                    if rule.get("id") not in {
+                        "normalization_norse_to_transliteration",
+                        "normalization_scandinavian_to_transliteration",
+                        "search_runic_texts",
+                        "english_translation",
+                        "swedish_translation",
+                    }:
+                        continue
+                    value = rule.get("value")
+                    if isinstance(value, dict):
+                        checked_values = [value.get("normalization")]
+                    else:
+                        checked_values = [value]
+                    self.assertTrue(
+                        all(str(item or "").lower() not in grammar_words for item in checked_values),
+                        f"{prompt} produced grammar-word search rule {rule}",
+                    )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])

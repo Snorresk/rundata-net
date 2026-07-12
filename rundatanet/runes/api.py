@@ -142,6 +142,22 @@ def _make_inscription_country_rule(codes: list[str]) -> dict[str, Any]:
     }
 
 
+def _make_inscription_id_rule(signatures: list[str]) -> dict[str, Any]:
+    return {
+        "id": "inscription_id",
+        "field": "signature_text",
+        "type": "string",
+        "input": "text",
+        "operator": "in",
+        "value": "|".join(signatures),
+        "data": {
+            "multiField": True,
+        },
+        "ignoreCase": True,
+        "includeSpecialSymbols": False,
+    }
+
+
 def _make_full_address_rule(value: str) -> dict[str, Any]:
     return {
         "id": "full_address",
@@ -381,6 +397,105 @@ def _fold_text(value: str) -> str:
     normalized = unicodedata.normalize("NFD", str(value or ""))
     without_diacritics = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
     return re.sub(r"\s+", " ", without_diacritics).strip().lower()
+
+
+QUOTE_CHARS = "\"'“”"
+
+GRAMMAR_WORD_VALUES = {
+    "a",
+    "all",
+    "alla",
+    "and",
+    "ar",
+    "are",
+    "as",
+    "av",
+    "by",
+    "dar",
+    "där",
+    "den",
+    "denna",
+    "det",
+    "detta",
+    "dessa",
+    "där",
+    "efter",
+    "find",
+    "for",
+    "fran",
+    "från",
+    "from",
+    "har",
+    "has",
+    "hitta",
+    "i",
+    "in",
+    "inscription",
+    "inscriptions",
+    "inskrift",
+    "inskrifter",
+    "is",
+    "ljud",
+    "med",
+    "och",
+    "on",
+    "ord",
+    "ordet",
+    "pa",
+    "på",
+    "ristar",
+    "ristas",
+    "ristat",
+    "rists",
+    "search",
+    "skrivs",
+    "som",
+    "sound",
+    "stavas",
+    "that",
+    "the",
+    "this",
+    "where",
+    "which",
+    "with",
+    "word",
+    "words",
+}
+
+
+def _match_group_is_quoted(text: str, match: re.Match[str], group_index: int = 1) -> bool:
+    try:
+        start = match.start(group_index)
+        end = match.end(group_index)
+    except IndexError:
+        return False
+    if start > 0 and text[start - 1] in QUOTE_CHARS:
+        return True
+    if end < len(text) and text[end] in QUOTE_CHARS:
+        return True
+    return False
+
+
+def _value_is_quoted_in_text(user_text: str, value: str) -> bool:
+    if not value:
+        return False
+    escaped = re.escape(str(value).strip())
+    return bool(re.search(rf"[{re.escape(QUOTE_CHARS)}]\s*{escaped}\s*[{re.escape(QUOTE_CHARS)}]", user_text or "", flags=re.IGNORECASE))
+
+
+def _is_unquoted_grammar_value(
+    value: str,
+    user_text: str = "",
+    match: Optional[re.Match[str]] = None,
+    group_index: int = 1,
+) -> bool:
+    if _fold_text(value) not in GRAMMAR_WORD_VALUES:
+        return False
+    if match is not None and _match_group_is_quoted(user_text or "", match, group_index):
+        return False
+    if _value_is_quoted_in_text(user_text or "", value):
+        return False
+    return True
 
 
 def _compact_code(value: str) -> str:
@@ -719,6 +834,8 @@ def _extract_english_translation_terms(user_text: str) -> list[str]:
     for pattern, force_english in patterns:
         for match in re.finditer(pattern, text, flags=re.IGNORECASE):
             term = match.group(1).strip(" .,!?:;\"'“”")
+            if term and _is_unquoted_grammar_value(term, text, match):
+                continue
             if (
                 term
                 and not force_english
@@ -743,7 +860,10 @@ def _extract_swedish_word_terms(user_text: str) -> list[str]:
     lexical_label = r"(?:ord(?:et)?|verb(?:et)?|substantiv(?:et)?|adjektiv(?:et)?|form(?:en)?)"
     pattern = rf"\b{lexical_label}\s+[\"'“”]?([\wþðæøœÞÐÆØŒ'’-]+)"
     for match in re.finditer(pattern, text, flags=re.IGNORECASE):
-        add_term(match.group(1))
+        term = match.group(1)
+        if _is_unquoted_grammar_value(term, text, match):
+            continue
+        add_term(term)
 
     # English "word X" usually means an English translation word, but a form
     # such as þiagn is not English lexical content. If the corpus contains it
@@ -752,6 +872,8 @@ def _extract_swedish_word_terms(user_text: str) -> list[str]:
     english_pattern = r"\b(?:the\s+)?words?\s+[\"'“”]?([\wþðæøœÞÐÆØŒ'’-]+)"
     for match in re.finditer(english_pattern, text, flags=re.IGNORECASE):
         term = match.group(1).strip(" .,!?:;\"'“”")
+        if _is_unquoted_grammar_value(term, text, match):
+            continue
         if _language_containing_word(term) in {"old_west_norse", "old_scandinavian"}:
             add_term(term)
     return terms
@@ -783,6 +905,8 @@ def _extract_aligned_word_spelling(user_text: str) -> Optional[tuple[str, str]]:
         if match:
             normalized = match.group(1).strip(" .,!?:;\"'“”")
             transliteration = match.group(2).strip(" .,!?:;\"'“”")
+            if _is_unquoted_grammar_value(normalized, text, match, 1):
+                continue
             if normalized and transliteration:
                 return normalized, transliteration
     return None
@@ -957,6 +1081,13 @@ def _extract_rune_spelling(user_text: str) -> Optional[str]:
         r"(?:the\s+)?personal\s+name|(?:the\s+)?name(?!\s+element\b)|named)"
     )
     patterns = (
+        rf"\b(?:detta\s+ljud|ljudet|fonemet|this\s+sound|the\s+sound|sound)"
+        rf"(?:[^.;?!]{{0,120}}?)\b(?:rist(?:as|at|ade|ad|ar|s)?|rists?|carved|cut)\s+"
+        rf"(?:med\s+run(?:a|an|orna|or)\s+|(?:in|with)\s+runes?\s+)[\"'“”]?({word})\b",
+        rf"\b(?:detta\s+ljud|ljudet|fonemet|this\s+sound|the\s+sound|sound)"
+        rf"(?:[^.;?!]{{0,120}}?)\b(?:rist(?:as|at|ade|ad|ar|s)?|rists?|carved|cut)\s+"
+        rf"[\"'“”]?({word})\b",
+        rf"\b(?:written|spelled|spelt|carved|cut)\s+(?:in|with)\s+runes?\s+[\"'“”]?({word})\b",
         rf"\b{name_label}\s+[\"'“”]?{word}[\"'“”]?(?:[^.;?!]{{0,160}}?)"
         rf"\b(?:skriv(?:s|et|as|na)?|stava\w*|written|spelled|spelt)\s+"
         rf"(?:in|with|med)\s+(?:run(?:a|an|orna|or)|runes?)\s+[\"'“”]?({word})",
@@ -975,7 +1106,10 @@ def _extract_rune_spelling(user_text: str) -> Optional[str]:
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
-            return match.group(1).strip(" .,!?:;\"'“”")
+            value = match.group(1).strip(" .,!?:;\"'“”")
+            if _is_unquoted_grammar_value(value, text, match):
+                continue
+            return value
     return None
 
 
@@ -2444,6 +2578,24 @@ def _enforce_dating_prefix(root: dict[str, Any], prefix: str) -> dict[str, Any]:
     return root
 
 
+def _is_unquoted_grammar_language_rule(rule: dict[str, Any], user_text: str) -> bool:
+    if rule.get("id") not in {
+        "normalization_norse_to_transliteration",
+        "normalization_scandinavian_to_transliteration",
+        "search_runic_texts",
+        "english_translation",
+        "swedish_translation",
+    }:
+        return False
+    value = rule.get("value")
+    if isinstance(value, dict):
+        normalization = str(value.get("normalization") or "")
+        return bool(normalization and _is_unquoted_grammar_value(normalization, user_text))
+    if isinstance(value, str):
+        return _is_unquoted_grammar_value(value, user_text)
+    return False
+
+
 def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
     """
     Deterministic safety net for high-value intent that should never be dropped
@@ -2457,6 +2609,7 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
     root = _normalize_root(parsed)
     text = (user_text or "").lower()
     _split_carver_status_rules(root)
+    _remove_rules(root, lambda rule: _is_unquoted_grammar_language_rule(rule, user_text))
 
     bind_rune_intent = _has_bind_rune_intent(user_text)
     if bind_rune_intent:
@@ -2929,8 +3082,18 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     if re.search(r"\bshm\b|statens historiska museum", text):
         rules.append(_make_current_location_rule("SHM"))
 
+    inscription_id_candidates = _extract_inscription_id_query_candidates(user_text)
+    has_inscription_id_rule = False
+    if (
+        inscription_id_candidates
+        and _has_explicit_inscription_id_list_intent(user_text, inscription_id_candidates)
+        and not _extract_style_query_constraints(user_text)
+    ):
+        rules.append(_make_inscription_id_rule(inscription_id_candidates))
+        has_inscription_id_rule = True
+
     country_codes = _extract_inscription_country_codes(user_text)
-    if country_codes:
+    if country_codes and not has_inscription_id_rule:
         rules.append(_make_inscription_country_rule(country_codes))
 
     english_translation_terms = _extract_english_translation_terms(user_text)
@@ -3757,7 +3920,7 @@ def _looks_like_uninterpreted_question(user_text: str) -> bool:
 def _extract_signature_candidates(user_text: str) -> list[str]:
     text = user_text or ""
     # Broad candidate matcher; real validation happens via SlugIndex.resolve.
-    pattern = r"\b[A-Za-zÅÄÖåäö]{1,4}\s*[A-Za-z0-9;:.\-]+\b"
+    pattern = r"\b[A-Za-zÅÄÖåäö]{1,4}\s*[A-Za-z]*\d[A-Za-z0-9;:.\-]*\b"
     candidates: list[str] = []
     seen: set[str] = set()
     for match in re.finditer(pattern, text):
@@ -3771,6 +3934,119 @@ def _extract_signature_candidates(user_text: str) -> list[str]:
         seen.add(folded)
         candidates.append(candidate)
     return candidates
+
+
+def _signature_candidate_has_known_prefix(candidate: str) -> bool:
+    match = re.match(r"\s*([A-Za-zÅÄÖåäö]{1,4})", candidate or "")
+    if not match:
+        return False
+    prefix = _fold_text(match.group(1))
+    known_prefixes = {
+        _fold_text(code.strip())
+        for code in COUNTRY_PROVINCE_ALIASES.values()
+        if isinstance(code, str) and code.strip() and code != "all_sweden"
+    }
+    # A few corpus signature prefixes are not provinces/countries but still
+    # occur as inscription IDs.
+    known_prefixes.update({"b", "fv", "kj"})
+    return prefix in known_prefixes
+
+
+def _signature_prefix_for_shorthand_continuation(candidate: str) -> str:
+    candidate = (candidate or "").strip()
+    match = re.match(r"^([A-Za-zÅÄÖåäö]{1,4})\s+\d", candidate)
+    if match:
+        return match.group(1)
+    match = re.match(r"^([A-Za-zÅÄÖåäö]{1,4})(?=\d)", candidate)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def _dedupe_signature_candidates(candidates: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        normalized = re.sub(r"\s+", " ", (candidate or "").strip())
+        if not normalized:
+            continue
+        folded = _fold_text(normalized)
+        if folded in seen:
+            continue
+        seen.add(folded)
+        deduped.append(normalized)
+    return deduped
+
+
+def _expand_shorthand_inscription_id_list(user_text: str) -> list[str]:
+    text = user_text or ""
+    if not text:
+        return []
+    list_text = text
+    if ":" in text and _extract_signature_candidates(text.split(":", 1)[1]):
+        list_text = text.split(":", 1)[1]
+    list_text = re.sub(r"\s+(?:och|and)\s+", ",", list_text, flags=re.IGNORECASE)
+    pieces = re.split(r"[,|\n]+", list_text)
+
+    expanded: list[str] = []
+    last_prefix = ""
+    bare_number_pattern = re.compile(r"^\s*([0-9][A-Za-z0-9:.\-]*(?:;[A-Za-z0-9:.\-]+)?)\s*[).!?\s]*$")
+    for piece in pieces:
+        piece = piece.strip()
+        if not piece:
+            continue
+        full_candidates = _extract_signature_candidates(piece)
+        if full_candidates:
+            for candidate in full_candidates:
+                expanded.append(candidate)
+                prefix = _signature_prefix_for_shorthand_continuation(candidate)
+                if prefix and _signature_candidate_has_known_prefix(prefix):
+                    last_prefix = prefix
+            continue
+        if not last_prefix:
+            continue
+        match = bare_number_pattern.match(piece)
+        if match:
+            expanded.append(f"{last_prefix} {match.group(1)}")
+    return _dedupe_signature_candidates(expanded)
+
+
+def _extract_inscription_id_query_candidates(user_text: str) -> list[str]:
+    candidates = _expand_shorthand_inscription_id_list(user_text) or _extract_signature_candidates(user_text)
+    if not candidates:
+        return []
+    known_candidates = [candidate for candidate in candidates if _signature_candidate_has_known_prefix(candidate)]
+    if known_candidates:
+        return known_candidates
+    folded = _fold_text(user_text or "")
+    if re.search(r"\b(?:följande|foljande|dessa|these|following|id(?:-|\s*)nummer|ids?)\b", folded):
+        return candidates
+    return []
+
+
+def _has_explicit_inscription_id_list_intent(user_text: str, candidates: Optional[list[str]] = None) -> bool:
+    candidates = candidates if candidates is not None else _extract_inscription_id_query_candidates(user_text)
+    if not candidates:
+        return False
+    text = user_text or ""
+    folded = _fold_text(text)
+    if re.search(
+        r"\b(?:följande|foljande|dessa|these|following|list(?:a)?|visa|show|hitta|find|sök|sok)\b"
+        r".{0,80}\b(?:inskrifter|inscription(?:s)?|runinskrifter|id(?:-|\s*)nummer|ids?)\b",
+        folded,
+    ):
+        return True
+    if re.search(
+        r"\b(?:inskrifter|inscription(?:s)?|runinskrifter|id(?:-|\s*)nummer|ids?)\b"
+        r".{0,80}\b(?:följande|foljande|dessa|these|following|list(?:a)?|visa|show|hitta|find|sök|sok)\b",
+        folded,
+    ):
+        return True
+    if len(candidates) >= 2 and re.search(r"[,|\n]", text):
+        return True
+    if len(candidates) == 1 and re.search(r"\b(?:hitta|find|visa|show|sök|sok)\b", folded):
+        return True
+    return False
 
 
 def _looks_like_similarity_question(user_text: str) -> bool:
