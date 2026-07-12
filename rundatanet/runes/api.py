@@ -142,6 +142,22 @@ def _make_inscription_country_rule(codes: list[str]) -> dict[str, Any]:
     }
 
 
+def _make_inscription_id_rule(signatures: list[str]) -> dict[str, Any]:
+    return {
+        "id": "inscription_id",
+        "field": "signature_text",
+        "type": "string",
+        "input": "text",
+        "operator": "in",
+        "value": "|".join(signatures),
+        "data": {
+            "multiField": True,
+        },
+        "ignoreCase": True,
+        "includeSpecialSymbols": False,
+    }
+
+
 def _make_full_address_rule(value: str) -> dict[str, Any]:
     return {
         "id": "full_address",
@@ -383,6 +399,105 @@ def _fold_text(value: str) -> str:
     return re.sub(r"\s+", " ", without_diacritics).strip().lower()
 
 
+QUOTE_CHARS = "\"'“”"
+
+GRAMMAR_WORD_VALUES = {
+    "a",
+    "all",
+    "alla",
+    "and",
+    "ar",
+    "are",
+    "as",
+    "av",
+    "by",
+    "dar",
+    "där",
+    "den",
+    "denna",
+    "det",
+    "detta",
+    "dessa",
+    "där",
+    "efter",
+    "find",
+    "for",
+    "fran",
+    "från",
+    "from",
+    "har",
+    "has",
+    "hitta",
+    "i",
+    "in",
+    "inscription",
+    "inscriptions",
+    "inskrift",
+    "inskrifter",
+    "is",
+    "ljud",
+    "med",
+    "och",
+    "on",
+    "ord",
+    "ordet",
+    "pa",
+    "på",
+    "ristar",
+    "ristas",
+    "ristat",
+    "rists",
+    "search",
+    "skrivs",
+    "som",
+    "sound",
+    "stavas",
+    "that",
+    "the",
+    "this",
+    "where",
+    "which",
+    "with",
+    "word",
+    "words",
+}
+
+
+def _match_group_is_quoted(text: str, match: re.Match[str], group_index: int = 1) -> bool:
+    try:
+        start = match.start(group_index)
+        end = match.end(group_index)
+    except IndexError:
+        return False
+    if start > 0 and text[start - 1] in QUOTE_CHARS:
+        return True
+    if end < len(text) and text[end] in QUOTE_CHARS:
+        return True
+    return False
+
+
+def _value_is_quoted_in_text(user_text: str, value: str) -> bool:
+    if not value:
+        return False
+    escaped = re.escape(str(value).strip())
+    return bool(re.search(rf"[{re.escape(QUOTE_CHARS)}]\s*{escaped}\s*[{re.escape(QUOTE_CHARS)}]", user_text or "", flags=re.IGNORECASE))
+
+
+def _is_unquoted_grammar_value(
+    value: str,
+    user_text: str = "",
+    match: Optional[re.Match[str]] = None,
+    group_index: int = 1,
+) -> bool:
+    if _fold_text(value) not in GRAMMAR_WORD_VALUES:
+        return False
+    if match is not None and _match_group_is_quoted(user_text or "", match, group_index):
+        return False
+    if _value_is_quoted_in_text(user_text or "", value):
+        return False
+    return True
+
+
 def _compact_code(value: str) -> str:
     folded = _fold_text(value)
     return re.sub(r"[^a-z0-9]+", "", folded)
@@ -504,6 +619,7 @@ def _looks_like_style_location_value(value: Any) -> bool:
 def _extract_location_terms(user_text: str) -> list[str]:
     text = _strip_aligned_word_spelling_clauses(user_text or "")
     terms: list[str] = []
+    active_material_values = {item["value"] for item in _extract_material_constraints(user_text)}
 
     # Prefer explicit "found in" style location phrases.
     patterns = [
@@ -587,7 +703,8 @@ def _extract_location_terms(user_text: str) -> list[str]:
                 continue
             if any(cleaned.lower().startswith(prefix) for prefix in blocked_location_starts):
                 continue
-            if _fold_text(cleaned) in {"ben", "bone", "metal", "metall"}:
+            material_values_for_location_term = _material_values_for_terms({_fold_text(cleaned)})
+            if material_values_for_location_term.intersection(active_material_values):
                 continue
             if cleaned.lower() in {"their", "there", "here", "original", "site", "place"}:
                 continue
@@ -661,7 +778,7 @@ def _extract_lost_constraint(user_text: str) -> Optional[int]:
 
 
 def _extract_personal_name_presence_constraint(user_text: str) -> Optional[int]:
-    if _extract_full_personal_name(user_text):
+    if _extract_full_personal_name(user_text) or _extract_name_element(user_text):
         return None
 
     text = _fold_text(user_text or "")
@@ -717,6 +834,8 @@ def _extract_english_translation_terms(user_text: str) -> list[str]:
     for pattern, force_english in patterns:
         for match in re.finditer(pattern, text, flags=re.IGNORECASE):
             term = match.group(1).strip(" .,!?:;\"'“”")
+            if term and _is_unquoted_grammar_value(term, text, match):
+                continue
             if (
                 term
                 and not force_english
@@ -741,7 +860,10 @@ def _extract_swedish_word_terms(user_text: str) -> list[str]:
     lexical_label = r"(?:ord(?:et)?|verb(?:et)?|substantiv(?:et)?|adjektiv(?:et)?|form(?:en)?)"
     pattern = rf"\b{lexical_label}\s+[\"'“”]?([\wþðæøœÞÐÆØŒ'’-]+)"
     for match in re.finditer(pattern, text, flags=re.IGNORECASE):
-        add_term(match.group(1))
+        term = match.group(1)
+        if _is_unquoted_grammar_value(term, text, match):
+            continue
+        add_term(term)
 
     # English "word X" usually means an English translation word, but a form
     # such as þiagn is not English lexical content. If the corpus contains it
@@ -750,6 +872,8 @@ def _extract_swedish_word_terms(user_text: str) -> list[str]:
     english_pattern = r"\b(?:the\s+)?words?\s+[\"'“”]?([\wþðæøœÞÐÆØŒ'’-]+)"
     for match in re.finditer(english_pattern, text, flags=re.IGNORECASE):
         term = match.group(1).strip(" .,!?:;\"'“”")
+        if _is_unquoted_grammar_value(term, text, match):
+            continue
         if _language_containing_word(term) in {"old_west_norse", "old_scandinavian"}:
             add_term(term)
     return terms
@@ -781,6 +905,8 @@ def _extract_aligned_word_spelling(user_text: str) -> Optional[tuple[str, str]]:
         if match:
             normalized = match.group(1).strip(" .,!?:;\"'“”")
             transliteration = match.group(2).strip(" .,!?:;\"'“”")
+            if _is_unquoted_grammar_value(normalized, text, match, 1):
+                continue
             if normalized and transliteration:
                 return normalized, transliteration
     return None
@@ -902,20 +1028,43 @@ def _extract_name_element(user_text: str) -> Optional[str]:
 
 
 def _extract_full_personal_name(user_text: str) -> Optional[str]:
+    names = _extract_full_personal_names(user_text)
+    return names[0] if names else None
+
+
+def _extract_full_personal_names(user_text: str) -> list[str]:
     text = user_text or ""
     word = r"[\wþðæøœÞÐÆØŒ'’-]+"
-    patterns = (
-        rf"\b(?:personnamn(?:et)?|mansnamn(?:et)?|kvinnonamn(?:et)?|namnet)\s+[\"'“”]?({word})",
-        rf"\b(?:the\s+)?personal\s+name\s+[\"'“”]?({word})",
-        rf"\b(?:with|containing|contains?|has)\s+(?:the\s+)?name\s+(?!element\b)[\"'“”]?({word})",
-        rf"\bnamed\s+[\"'“”]?({word})",
-        rf"\bthe\s+name\s+(?!element\b)[\"'“”]?({word})",
+    connector = r"(?:,|och|and)"
+    swedish_label = r"(?:personnamn(?:et)?|mansnamn(?:et)?|kvinnonamn(?:et)?|namnet|namn)"
+    english_label = (
+        r"(?:(?:the\s+)?personal\s+names?|"
+        r"(?:with|containing|contains?|has)\s+(?:the\s+)?names?(?!\s+element\b)|"
+        r"named|the\s+names?(?!\s+element\b))"
     )
+    patterns = (
+        rf"\b{swedish_label}\s+[\"'“”]?({word})(?:[\"'“”]?\s*{connector}\s*[\"'“”]?({word}))*",
+        rf"\b{english_label}\s+[\"'“”]?({word})(?:[\"'“”]?\s*{connector}\s*[\"'“”]?({word}))*",
+    )
+    names: list[str] = []
+    seen: set[str] = set()
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
-            return match.group(1).strip("- .,!?:;\"'“”") or None
-    return None
+            matched_text = match.group(0)
+            matched_text = re.sub(rf"^\b(?:{swedish_label}|{english_label})\s+", "", matched_text, flags=re.IGNORECASE)
+            for value in re.split(rf"\s*{connector}\s*", matched_text, flags=re.IGNORECASE):
+                cleaned = value.strip("- .,!?:;\"'“”")
+                if not cleaned:
+                    continue
+                key = _fold_text(cleaned)
+                if key in seen:
+                    continue
+                seen.add(key)
+                names.append(cleaned)
+            if names:
+                return names
+    return []
 
 
 def _extract_rune_spelling(user_text: str) -> Optional[str]:
@@ -932,6 +1081,13 @@ def _extract_rune_spelling(user_text: str) -> Optional[str]:
         r"(?:the\s+)?personal\s+name|(?:the\s+)?name(?!\s+element\b)|named)"
     )
     patterns = (
+        rf"\b(?:detta\s+ljud|ljudet|fonemet|this\s+sound|the\s+sound|sound)"
+        rf"(?:[^.;?!]{{0,120}}?)\b(?:rist(?:as|at|ade|ad|ar|s)?|rists?|carved|cut)\s+"
+        rf"(?:med\s+run(?:a|an|orna|or)\s+|(?:in|with)\s+runes?\s+)[\"'“”]?({word})\b",
+        rf"\b(?:detta\s+ljud|ljudet|fonemet|this\s+sound|the\s+sound|sound)"
+        rf"(?:[^.;?!]{{0,120}}?)\b(?:rist(?:as|at|ade|ad|ar|s)?|rists?|carved|cut)\s+"
+        rf"[\"'“”]?({word})\b",
+        rf"\b(?:written|spelled|spelt|carved|cut)\s+(?:in|with)\s+runes?\s+[\"'“”]?({word})\b",
         rf"\b{name_label}\s+[\"'“”]?{word}[\"'“”]?(?:[^.;?!]{{0,160}}?)"
         rf"\b(?:skriv(?:s|et|as|na)?|stava\w*|written|spelled|spelt)\s+"
         rf"(?:in|with|med)\s+(?:run(?:a|an|orna|or)|runes?)\s+[\"'“”]?({word})",
@@ -950,7 +1106,10 @@ def _extract_rune_spelling(user_text: str) -> Optional[str]:
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
-            return match.group(1).strip(" .,!?:;\"'“”")
+            value = match.group(1).strip(" .,!?:;\"'“”")
+            if _is_unquoted_grammar_value(value, text, match):
+                continue
+            return value
     return None
 
 
@@ -1130,25 +1289,34 @@ def _make_normalization_exclusion_rules(term: str, excluded_initial: str) -> lis
     return [positive_rule, negated_transliteration_group]
 
 
-@lru_cache(maxsize=256)
-def _resolve_old_west_name_element(term: str) -> str:
-    target = _fold_text(term.strip("-"))
-    candidates: Counter[str] = Counter()
+NAME_ELEMENT_NORMALIZATION_HINTS: dict[str, str] = {
+    # Common modern/translated Scandinavian forms where the Old West Norse
+    # name element has a predictable normalised spelling.
+    "bjorn": "bjôrn",
+    "björn": "bjôrn",
+    "sten": "stein",
+    "tor": "þor",
+    "thor": "þor",
+    "ulv": "ulf",
+    "sven": "svein",
+    "svein": "svein",
+    "fot": "fót",
+    "fred": "freð",
+}
 
-    def edit_distance(left: str, right: str) -> int:
-        previous = list(range(len(right) + 1))
-        for left_index, left_char in enumerate(left, start=1):
-            current = [left_index]
-            for right_index, right_char in enumerate(right, start=1):
-                current.append(
-                    min(
-                        current[-1] + 1,
-                        previous[right_index] + 1,
-                        previous[right_index - 1] + (left_char != right_char),
-                    )
-                )
-            previous = current
-        return previous[-1]
+
+def _has_diacritic(value: str) -> bool:
+    normalized = unicodedata.normalize("NFD", str(value or ""))
+    return any(unicodedata.category(ch) == "Mn" for ch in normalized)
+
+
+def _name_element_candidate_windows(
+    target: str,
+    *,
+    max_distance: int,
+    allow_first_letter_change: bool,
+) -> Counter[str]:
+    candidates: Counter[str] = Counter()
 
     try:
         values = NameUsage.objects.values("name__value").annotate(usage_count=Count("id"))
@@ -1168,53 +1336,183 @@ def _resolve_old_west_name_element(term: str) -> str:
                 for size in range(max(1, len(target)), len(target) + 2):
                     for start in range(0, len(folded) - size + 1):
                         folded_candidate = folded[start : start + size]
-                        distance = edit_distance(target, folded_candidate)
+                        distance = _edit_distance(target, folded_candidate)
                         if distance > 1:
+                            continue
+                        if distance > max_distance:
+                            continue
+                        if (
+                            distance
+                            and not allow_first_letter_change
+                            and target
+                            and folded_candidate
+                            and target[0] != folded_candidate[0]
+                        ):
                             continue
                         candidate = cleaned[start : start + size].casefold()
                         if candidate in seen_in_alternative:
                             continue
                         seen_in_alternative.add(candidate)
-                        # Exact forms get a modest preference, while frequent
-                        # canonical forms can outrank rare modernized variants.
-                        quality = (20 if distance == 0 else 10) + size
+                        # Exact forms get a strong preference. Diacritic
+                        # spellings usually represent Old West Norse forms
+                        # better than undiacritised duplicates (fót over fot,
+                        # bjôrn over biorn).
+                        quality = (100 if distance == 0 else 10) + size
+                        if distance == 0 and _has_diacritic(candidate):
+                            quality += 50
                         candidates[candidate] += usage_count * quality
     except Exception:
-        logger.warning("Could not resolve Old West Norse name element %r", term, exc_info=True)
+        logger.warning("Could not inspect personal-name data for %r", target, exc_info=True)
 
+    return candidates
+
+
+@lru_cache(maxsize=256)
+def _resolve_old_west_name_element(term: str) -> str:
+    target = _fold_text(term.strip("-"))
+    if not target:
+        return term.strip("-").casefold()
+
+    hinted = NAME_ELEMENT_NORMALIZATION_HINTS.get(target)
+    if hinted:
+        return hinted
+
+    exact_candidates = _name_element_candidate_windows(
+        target,
+        max_distance=0,
+        allow_first_letter_change=False,
+    )
+    if exact_candidates:
+        return exact_candidates.most_common(1)[0][0]
+
+    # Fuzzy fallback: for short elements, do not allow the first letter to
+    # change. This prevents frequent neighbours such as bót from swallowing a
+    # rarer but intended query like fot.
+    candidates = _name_element_candidate_windows(
+        target,
+        max_distance=1,
+        allow_first_letter_change=len(target) > 4,
+    )
     if candidates:
         return candidates.most_common(1)[0][0]
     # Reasonable orthographic fallback for Swedish ö when DB lookup is unavailable.
     return term.strip("-").casefold().replace("ö", "ô")
 
 
+def _edit_distance(left: str, right: str) -> int:
+    previous = list(range(len(right) + 1))
+    for left_index, left_char in enumerate(left, start=1):
+        current = [left_index]
+        for right_index, right_char in enumerate(right, start=1):
+            current.append(
+                min(
+                    current[-1] + 1,
+                    previous[right_index] + 1,
+                    previous[right_index - 1] + (left_char != right_char),
+                )
+            )
+        previous = current
+    return previous[-1]
+
+
+def _full_personal_name_spelling_variants(value: str) -> set[str]:
+    variants = {value}
+    if value == "sten":
+        variants.update({"stein", "steinn", "stæin", "stæinn"})
+
+    # Modern/translated Scandinavian names may use T/Th where the
+    # normalisation has þ, e.g. Torunn/Thorunn -> Þórunnr/Þorunn.
+    for variant in list(variants):
+        if variant.startswith("th") and len(variant) > 2:
+            variants.update({"þ" + variant[2:], "t" + variant[2:]})
+        elif variant.startswith("t") and len(variant) > 1:
+            variants.update({"þ" + variant[1:], "th" + variant[1:]})
+        elif variant.startswith("þ") and len(variant) > 1:
+            variants.update({"t" + variant[1:], "th" + variant[1:]})
+
+    # Some personal names in normalisation preserve nominative -r where the
+    # translated form does not. Keep this narrow for the Torunn/Þórunnr type;
+    # general consonant-final names are better searched with begins_with on the
+    # non-r form, because many examples are accusative and lack -r.
+    for variant in list(variants):
+        if variant.endswith(("unn", "un")) and not variant.endswith("r"):
+            variants.add(variant + "r")
+
+    return variants
+
+
+def _score_personal_name_candidate(
+    cleaned: str,
+    target_variants: set[str],
+    *,
+    max_distance: int = 1,
+) -> Optional[int]:
+    folded = _fold_text(cleaned)
+    if not cleaned or not folded or folded in {"", "..."}:
+        return None
+    if folded in target_variants:
+        return 10000
+    distance = min(_edit_distance(variant, folded) for variant in target_variants)
+    if distance > max_distance:
+        return None
+    return 8000 - distance * 500
+
+
+@lru_cache(maxsize=256)
+def _resolve_full_personal_name_from_translation(term: str) -> Optional[tuple[str, bool]]:
+    """Resolve a translated full name using names from matching translations.
+
+    If a user asks for a modern/translated name such as Torunn, the strongest
+    evidence is the set of personal-name normalisations attached to inscriptions
+    where that translated name actually occurs.
+    """
+
+    target = _fold_text(term.strip("-"))
+    if not target:
+        return None
+    target_variants = _full_personal_name_spelling_variants(target)
+    word_pattern = rf"(?<!\w){re.escape(term)}(?!\w)"
+    candidates: list[tuple[int, int, str, bool]] = []
+
+    try:
+        values = (
+            NameUsage.objects.filter(
+                Q(signature__translation_swedish__search_value__iregex=word_pattern)
+                | Q(signature__translation_english__search_value__iregex=word_pattern)
+            )
+            .values("name__value")
+            .annotate(usage_count=Count("id"))
+        )
+        for item in values:
+            raw_value = str(item["name__value"] or "")
+            usage_count = int(item["usage_count"])
+            for alternative in raw_value.split("/"):
+                cleaned = alternative.strip(" .,!?:;\"'“”[](){}?-")
+                quality = _score_personal_name_candidate(cleaned, target_variants)
+                if quality is None:
+                    continue
+                old_west_norse = _normalization_contains_word(cleaned, old_west_norse=True)
+                candidates.append((quality, usage_count, cleaned, old_west_norse))
+    except Exception:
+        logger.warning("Could not resolve translated personal name %r", term, exc_info=True)
+        return None
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1], int(item[3]), item[2]), reverse=True)
+    _quality, _usage_count, name, old_west_norse = candidates[0]
+    return name, old_west_norse
+
+
 @lru_cache(maxsize=256)
 def _resolve_full_personal_name(term: str) -> tuple[str, bool]:
     target = _fold_text(term.strip("-"))
+    translated_name = _resolve_full_personal_name_from_translation(term)
+    if translated_name:
+        return translated_name
+
     candidates: list[tuple[int, int, str, bool]] = []
-
-    def edit_distance(left: str, right: str) -> int:
-        previous = list(range(len(right) + 1))
-        for left_index, left_char in enumerate(left, start=1):
-            current = [left_index]
-            for right_index, right_char in enumerate(right, start=1):
-                current.append(
-                    min(
-                        current[-1] + 1,
-                        previous[right_index] + 1,
-                        previous[right_index - 1] + (left_char != right_char),
-                    )
-                )
-            previous = current
-        return previous[-1]
-
-    def spelling_variants(value: str) -> set[str]:
-        variants = {value}
-        if value == "sten":
-            variants.update({"stein", "steinn", "stæin", "stæinn"})
-        return variants
-
-    target_variants = spelling_variants(target)
+    target_variants = _full_personal_name_spelling_variants(target)
 
     try:
         values = NameUsage.objects.values("name__value").annotate(usage_count=Count("id"))
@@ -1223,16 +1521,9 @@ def _resolve_full_personal_name(term: str) -> tuple[str, bool]:
             usage_count = int(item["usage_count"])
             for alternative in raw_value.split("/"):
                 cleaned = alternative.strip(" .,!?:;\"'“”[](){}?-")
-                folded = _fold_text(cleaned)
-                if not cleaned or not folded or folded in {"", "..."}:
+                quality = _score_personal_name_candidate(cleaned, target_variants)
+                if quality is None:
                     continue
-                if folded in target_variants:
-                    quality = 10000
-                else:
-                    distance = min(edit_distance(variant, folded) for variant in target_variants)
-                    if distance > 1:
-                        continue
-                    quality = 8000 - distance * 500
                 old_west_norse = _normalization_contains_word(cleaned, old_west_norse=True)
                 candidates.append((quality, usage_count, cleaned, old_west_norse))
     except Exception:
@@ -1343,14 +1634,27 @@ def _make_name_element_rule(element: str, transliteration: str) -> dict[str, Any
     )
 
 
+def _full_personal_name_search_prefix(name: str, normalized_name: str) -> str:
+    folded_normalized = _fold_text(normalized_name)
+    target_variants = _full_personal_name_spelling_variants(_fold_text(name.strip("-")))
+    if (
+        len(normalized_name) > 2
+        and folded_normalized.endswith("r")
+        and folded_normalized[:-1] in target_variants
+    ):
+        return normalized_name[:-1]
+    return normalized_name
+
+
 def _make_full_personal_name_rule(name: str, transliteration: str = "") -> dict[str, Any]:
     normalized_name, old_west_norse = _resolve_full_personal_name(name)
+    normalized_name = _full_personal_name_search_prefix(name, normalized_name)
     return _make_normalization_rule(
         normalized_name,
         old_west_norse=old_west_norse,
         transliteration=transliteration,
         names_mode="namesOnly",
-        operator="equal",
+        operator="begins_with",
     )
 
 
@@ -1446,12 +1750,15 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
     text = _fold_text(user_text or "")
     constraints: list[dict[str, str]] = []
     seen_values: set[str] = set()
+    active_material_values = {item["value"] for item in _extract_material_constraints(user_text)}
     name_element = _extract_name_element(user_text)
     name_element_folded = _fold_text(name_element) if name_element else ""
     full_personal_name = _extract_full_personal_name(user_text)
     full_personal_name_folded = _fold_text(full_personal_name) if full_personal_name else ""
 
     def add_object(value: str) -> None:
+        if _material_values_for_terms({_fold_text(value)}).intersection(active_material_values):
+            return
         if name_element_folded and _fold_text(value) == name_element_folded:
             return
         if full_personal_name_folded and _fold_text(value) == full_personal_name_folded:
@@ -1720,6 +2027,13 @@ def _extract_cross_form_group_requests(user_text: str) -> list[dict[str, Any]]:
     requests: list[dict[str, Any]] = []
     seen: set[tuple[str, str, bool, bool]] = set()
     certainty = _cross_form_global_certainty(user_text) or "2"
+    explicit_cross_context = bool(
+        re.search(
+            r"\b(?:kors(?:en|et|form(?:en|er|erna)?)?|cross(?:es)?|cross[-\s]?forms?|"
+            r"linn\s+lager|lager(?:s)?\s+system|runic\s+band|runslinga|runband)\b",
+            text,
+        )
+    )
 
     def add_group(group: str, label: str, *, include_zero: bool = False, only_zero: bool = False) -> None:
         group = group.upper()
@@ -1766,7 +2080,18 @@ def _extract_cross_form_group_requests(user_text: str) -> list[dict[str, Any]]:
         else:
             add_group("E", "Group E, ornamental decoration")
 
-    if re.search(r"\b(?:attached|fast|fäst|fastsatt|attached\s+to\s+the\s+runic\s+band|runic\s+band|runslinga|runband|base|foot|fot|bas)\b", text):
+    group_c_match = re.search(
+        r"\b(attached\s+to\s+the\s+runic\s+band|runic\s+band|runslinga|runband|attached|fast|fäst|fastsatt|base|foot|fot|bas)\b",
+        text,
+    )
+    group_c_term = _fold_text(group_c_match.group(1)) if group_c_match else ""
+    group_c_requires_cross_context = group_c_term not in {
+        "attached to the runic band",
+        "runic band",
+        "runslinga",
+        "runband",
+    }
+    if group_c_match and not (group_c_requires_cross_context and not explicit_cross_context):
         if re.search(r"\b(?:without|utan|saknar|lacks?|no)\b", text):
             add_group("C", "Group C, no attachment/base/foot", only_zero=True)
         else:
@@ -2253,6 +2578,24 @@ def _enforce_dating_prefix(root: dict[str, Any], prefix: str) -> dict[str, Any]:
     return root
 
 
+def _is_unquoted_grammar_language_rule(rule: dict[str, Any], user_text: str) -> bool:
+    if rule.get("id") not in {
+        "normalization_norse_to_transliteration",
+        "normalization_scandinavian_to_transliteration",
+        "search_runic_texts",
+        "english_translation",
+        "swedish_translation",
+    }:
+        return False
+    value = rule.get("value")
+    if isinstance(value, dict):
+        normalization = str(value.get("normalization") or "")
+        return bool(normalization and _is_unquoted_grammar_value(normalization, user_text))
+    if isinstance(value, str):
+        return _is_unquoted_grammar_value(value, user_text)
+    return False
+
+
 def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
     """
     Deterministic safety net for high-value intent that should never be dropped
@@ -2266,6 +2609,7 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
     root = _normalize_root(parsed)
     text = (user_text or "").lower()
     _split_carver_status_rules(root)
+    _remove_rules(root, lambda rule: _is_unquoted_grammar_language_rule(rule, user_text))
 
     bind_rune_intent = _has_bind_rune_intent(user_text)
     if bind_rune_intent:
@@ -2738,8 +3082,18 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     if re.search(r"\bshm\b|statens historiska museum", text):
         rules.append(_make_current_location_rule("SHM"))
 
+    inscription_id_candidates = _extract_inscription_id_query_candidates(user_text)
+    has_inscription_id_rule = False
+    if (
+        inscription_id_candidates
+        and _has_explicit_inscription_id_list_intent(user_text, inscription_id_candidates)
+        and not _extract_style_query_constraints(user_text)
+    ):
+        rules.append(_make_inscription_id_rule(inscription_id_candidates))
+        has_inscription_id_rule = True
+
     country_codes = _extract_inscription_country_codes(user_text)
-    if country_codes:
+    if country_codes and not has_inscription_id_rule:
         rules.append(_make_inscription_country_rule(country_codes))
 
     english_translation_terms = _extract_english_translation_terms(user_text)
@@ -2822,8 +3176,7 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     if name_element:
         rules.append(_make_name_element_rule(name_element, rune_spelling))
 
-    full_personal_name = _extract_full_personal_name(user_text)
-    if full_personal_name:
+    for full_personal_name in _extract_full_personal_names(user_text):
         rules.append(_make_full_personal_name_rule(full_personal_name, rune_spelling))
 
     for item in _extract_specific_location_constraints(user_text):
@@ -2978,13 +3331,14 @@ def _is_simple_deterministic_query(user_text: str, fallback_rules: Optional[str]
     name_element = _extract_name_element(user_text)
     if name_element:
         text = re.sub(rf"\b{re.escape(name_element.lower())}\b", "", text)
-    full_personal_name = _extract_full_personal_name(user_text)
-    if full_personal_name:
-        text = re.sub(rf"\b{re.escape(full_personal_name.lower())}\b", "", text)
+    full_personal_names = _extract_full_personal_names(user_text)
+    if full_personal_names:
+        for full_personal_name in full_personal_names:
+            text = re.sub(rf"\b{re.escape(full_personal_name.lower())}\b", "", text)
         text = re.sub(
-            r"\b(?:personnamn(?:et)?|mansnamn(?:et)?|kvinnonamn(?:et)?|namnet|"
+            r"\b(?:personnamn(?:et)?|mansnamn(?:et)?|kvinnonamn(?:et)?|namnet|namn|"
             r"personal\s+name|the\s+name|name|named|with|containing|contains?|has|med|inscriptions?|inskrifter|"
-            r"hitta|find|alla|all)\b",
+            r"hitta|find|alla|all|och|and)\b",
             "",
             text,
         )
@@ -3049,6 +3403,136 @@ def _is_simple_deterministic_query(user_text: str, fallback_rules: Optional[str]
     )
     return not any(marker in text for marker in advanced_markers)
 
+
+def _query_builder_guidance_message(
+    user_text: str,
+    fallback_rules: Optional[str] = None,
+    *,
+    early_only: bool = False,
+) -> Optional[str]:
+    """Return a user-facing message when a request should not be forced into rules."""
+
+    text = _fold_text(user_text or "")
+    if not text:
+        return (
+            "I need a question or search description before I can build database search "
+            "parameters. Try specifying a word, name, place, material, carver, style, "
+            "rune type, transliteration, translation, or cross form."
+        )
+
+    explanation_intent = bool(
+        re.search(
+            r"\b(?:varfor|varför|vad\s+betyder|beratta|berätta|forklara|förklara|"
+            r"why|what\s+does|what\s+is|explain|tell\s+me\s+about|meaning\s+of|"
+            r"history\s+of|background\s+of)\b",
+            text,
+        )
+    )
+    search_intent = bool(
+        re.search(
+            r"\b(?:hitta|sok|sök|leta|visa|find|search|show|list|lista|"
+            r"inskrifter|inscription(?:s)?|runinskrifter|runestones?|runstenar)\b",
+            text,
+        )
+    )
+    vague_value_intent = bool(
+        re.search(
+            r"\b(?:intressant(?:a)?|interesting|beautiful|vackra|important|viktiga|"
+            r"famous|kanda|kända|bra|good|some|nagot|något|something|anything)\b",
+            text,
+        )
+    )
+    yes_no_universal_intent = bool(
+        re.search(
+            r"^(?:are|is|were|was|do|does|did|can|could|should|would|"
+            r"ar|är|var|kan|finns)\s+"
+            r"(?:all|every|each|alla|samtliga|varje)\b",
+            text,
+        )
+        or re.search(
+            r"\b(?:all|every|each|alla|samtliga|varje)\s+"
+            r"(?:inscriptions?|runestones?|runes?|inskrifter|runstenar|runor)\s+"
+            r"(?:are|is|were|was|ar|är|var)\b",
+            text,
+        )
+    )
+    explicit_text_search_intent = bool(
+        re.search(
+            r"\b(?:word|words|ord|ordet|orden|phrase|fras|frasen|translation|"
+            r"översättning|oversattning|english\s+translation|swedish\s+translation)\b",
+            text,
+        )
+    )
+    unsupported_concept_intent = bool(
+        re.search(
+            r"\b(?:family|familj|slakt|släkt|belonging\s+to|related\s+to|relatives?|"
+            r"descendants?|ancestors?|genealog(?:y|ical)|water\s+levels?|near\s+water|"
+            r"by\s+water|beside\s+water|close\s+to\s+water|lake|river|stream|sea|"
+            r"shore|coast|vatten(?:niva|nivå)?|nara\s+vatten|nära\s+vatten|sjo|sjö|"
+            r"alv|älv|a|å|hav|strand|kust)\b",
+            text,
+        )
+    )
+
+    if explanation_intent:
+        return (
+            "This looks like an explanation or interpretation question rather than a "
+            "query-builder search. I cannot turn it into reliable search parameters. "
+            "Please reformulate it as a database search, for example by specifying a "
+            "word, name, place, material, carver, style, rune type, transliteration, "
+            "translation, or cross form."
+        )
+
+    if yes_no_universal_intent:
+        return (
+            "This looks like a yes/no or general interpretation question, not a "
+            "query-builder search. I did not create search parameters from one "
+            "recognized field such as Viking Age alone. Please reformulate it as a "
+            "searchable request, for example: 'Find inscriptions dated to the Viking "
+            "Age' or 'How many inscriptions are dated to the Viking Age?'."
+        )
+
+    if unsupported_concept_intent and not explicit_text_search_intent:
+        return (
+            "This question needs information that is not available as reliable "
+            "query-builder fields, such as family relations or landscape/water "
+            "proximity. I did not create search parameters from a generic word like "
+            "runestone alone. Please reformulate the question using searchable fields "
+            "such as word/name, transliteration, translation, place/province, "
+            "material, carver, style, rune type, dating, or cross form."
+        )
+
+    if vague_value_intent:
+        return (
+            "I cannot identify a reliable database field for this search, so I did not "
+            "create query-builder rules. Please make the question more specific: say "
+            "whether you want to search in normalisation, transliteration/runes, "
+            "translation, inscription place, material, carver, style, rune type, "
+            "personal names, cross form, or another database field."
+        )
+
+    if early_only:
+        return None
+
+    if fallback_rules:
+        return None
+
+    if search_intent:
+        return (
+            "I cannot identify a reliable database field for this search, so I did not "
+            "create query-builder rules. Please make the question more specific: say "
+            "whether you want to search in normalisation, transliteration/runes, "
+            "translation, inscription place, material, carver, style, rune type, "
+            "personal names, cross form, or another database field."
+        )
+
+    return (
+        "I cannot turn this into reliable query-builder rules yet. Please formulate it "
+        "as a database search with a clear field, such as word/name, transliteration, "
+        "translation, place, material, carver, style, rune type, or cross form."
+    )
+
+
 api = NinjaAPI(
     title="Rundata API",
     version="1.0.0",
@@ -3074,6 +3558,16 @@ class AiAnswerResponse(Schema):
     matched_inscriptions: int
     metadata: dict[str, Any]
     error: Optional[str] = None
+
+
+def _answer_query_builder_guidance(user_text: str) -> AiAnswerResponse:
+    message = _query_builder_guidance_message(user_text) or ""
+    return AiAnswerResponse(
+        answer=message,
+        matched_inscriptions=0,
+        metadata={"intent": "needs_query_builder_clarification"},
+        error="Question cannot be converted to reliable query-builder rules",
+    )
 
 
 class InscriptionResponse(Schema):
@@ -3426,7 +3920,7 @@ def _looks_like_uninterpreted_question(user_text: str) -> bool:
 def _extract_signature_candidates(user_text: str) -> list[str]:
     text = user_text or ""
     # Broad candidate matcher; real validation happens via SlugIndex.resolve.
-    pattern = r"\b[A-Za-zÅÄÖåäö]{1,4}\s*[A-Za-z0-9;:.\-]+\b"
+    pattern = r"\b[A-Za-zÅÄÖåäö]{1,4}\s*[A-Za-z]*\d[A-Za-z0-9;:.\-]*\b"
     candidates: list[str] = []
     seen: set[str] = set()
     for match in re.finditer(pattern, text):
@@ -3440,6 +3934,119 @@ def _extract_signature_candidates(user_text: str) -> list[str]:
         seen.add(folded)
         candidates.append(candidate)
     return candidates
+
+
+def _signature_candidate_has_known_prefix(candidate: str) -> bool:
+    match = re.match(r"\s*([A-Za-zÅÄÖåäö]{1,4})", candidate or "")
+    if not match:
+        return False
+    prefix = _fold_text(match.group(1))
+    known_prefixes = {
+        _fold_text(code.strip())
+        for code in COUNTRY_PROVINCE_ALIASES.values()
+        if isinstance(code, str) and code.strip() and code != "all_sweden"
+    }
+    # A few corpus signature prefixes are not provinces/countries but still
+    # occur as inscription IDs.
+    known_prefixes.update({"b", "fv", "kj"})
+    return prefix in known_prefixes
+
+
+def _signature_prefix_for_shorthand_continuation(candidate: str) -> str:
+    candidate = (candidate or "").strip()
+    match = re.match(r"^([A-Za-zÅÄÖåäö]{1,4})\s+\d", candidate)
+    if match:
+        return match.group(1)
+    match = re.match(r"^([A-Za-zÅÄÖåäö]{1,4})(?=\d)", candidate)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def _dedupe_signature_candidates(candidates: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        normalized = re.sub(r"\s+", " ", (candidate or "").strip())
+        if not normalized:
+            continue
+        folded = _fold_text(normalized)
+        if folded in seen:
+            continue
+        seen.add(folded)
+        deduped.append(normalized)
+    return deduped
+
+
+def _expand_shorthand_inscription_id_list(user_text: str) -> list[str]:
+    text = user_text or ""
+    if not text:
+        return []
+    list_text = text
+    if ":" in text and _extract_signature_candidates(text.split(":", 1)[1]):
+        list_text = text.split(":", 1)[1]
+    list_text = re.sub(r"\s+(?:och|and)\s+", ",", list_text, flags=re.IGNORECASE)
+    pieces = re.split(r"[,|\n]+", list_text)
+
+    expanded: list[str] = []
+    last_prefix = ""
+    bare_number_pattern = re.compile(r"^\s*([0-9][A-Za-z0-9:.\-]*(?:;[A-Za-z0-9:.\-]+)?)\s*[).!?\s]*$")
+    for piece in pieces:
+        piece = piece.strip()
+        if not piece:
+            continue
+        full_candidates = _extract_signature_candidates(piece)
+        if full_candidates:
+            for candidate in full_candidates:
+                expanded.append(candidate)
+                prefix = _signature_prefix_for_shorthand_continuation(candidate)
+                if prefix and _signature_candidate_has_known_prefix(prefix):
+                    last_prefix = prefix
+            continue
+        if not last_prefix:
+            continue
+        match = bare_number_pattern.match(piece)
+        if match:
+            expanded.append(f"{last_prefix} {match.group(1)}")
+    return _dedupe_signature_candidates(expanded)
+
+
+def _extract_inscription_id_query_candidates(user_text: str) -> list[str]:
+    candidates = _expand_shorthand_inscription_id_list(user_text) or _extract_signature_candidates(user_text)
+    if not candidates:
+        return []
+    known_candidates = [candidate for candidate in candidates if _signature_candidate_has_known_prefix(candidate)]
+    if known_candidates:
+        return known_candidates
+    folded = _fold_text(user_text or "")
+    if re.search(r"\b(?:följande|foljande|dessa|these|following|id(?:-|\s*)nummer|ids?)\b", folded):
+        return candidates
+    return []
+
+
+def _has_explicit_inscription_id_list_intent(user_text: str, candidates: Optional[list[str]] = None) -> bool:
+    candidates = candidates if candidates is not None else _extract_inscription_id_query_candidates(user_text)
+    if not candidates:
+        return False
+    text = user_text or ""
+    folded = _fold_text(text)
+    if re.search(
+        r"\b(?:följande|foljande|dessa|these|following|list(?:a)?|visa|show|hitta|find|sök|sok)\b"
+        r".{0,80}\b(?:inskrifter|inscription(?:s)?|runinskrifter|id(?:-|\s*)nummer|ids?)\b",
+        folded,
+    ):
+        return True
+    if re.search(
+        r"\b(?:inskrifter|inscription(?:s)?|runinskrifter|id(?:-|\s*)nummer|ids?)\b"
+        r".{0,80}\b(?:följande|foljande|dessa|these|following|list(?:a)?|visa|show|hitta|find|sök|sok)\b",
+        folded,
+    ):
+        return True
+    if len(candidates) >= 2 and re.search(r"[,|\n]", text):
+        return True
+    if len(candidates) == 1 and re.search(r"\b(?:hitta|find|visa|show|sök|sok)\b", folded):
+        return True
+    return False
 
 
 def _looks_like_similarity_question(user_text: str) -> bool:
@@ -4158,7 +4765,17 @@ def txt2rules(request, data: TextRequest):
     inference step fails.
     """
     try:
+        early_guidance_message = _query_builder_guidance_message(data.text, early_only=True)
+        if early_guidance_message:
+            logger.info("Skipping query builder conversion for clearly unsupported or vague request.")
+            return TextResponse(rules="", error=early_guidance_message)
+
         fallback_rules = _build_rules_fallback_from_text(data.text)
+        guidance_message = _query_builder_guidance_message(data.text, fallback_rules)
+        if guidance_message:
+            logger.info("Skipping query builder conversion for unsupported or vague request.")
+            return TextResponse(rules="", error=guidance_message)
+
         if _is_simple_deterministic_query(data.text, fallback_rules):
             logger.info("Using deterministic preflight rules for simple query.")
             return TextResponse(rules=fallback_rules or "")
@@ -4215,6 +4832,10 @@ def ai_answer(request, data: TextRequest):
     if _looks_like_similarity_over_filters_question(data.text):
         return _answer_similarity_from_filters(data.text)
 
+    early_guidance_message = _query_builder_guidance_message(data.text, early_only=True)
+    if early_guidance_message:
+        return _answer_query_builder_guidance(data.text)
+
     if _looks_like_period_frequency_question(data.text):
         return _answer_period_frequency_from_filters(data.text)
 
@@ -4235,6 +4856,11 @@ def ai_answer(request, data: TextRequest):
 
     if _looks_like_list_question(data.text):
         return _answer_list_from_filters(data.text)
+
+    fallback_rules = _build_rules_fallback_from_text(data.text)
+    guidance_message = _query_builder_guidance_message(data.text, fallback_rules)
+    if guidance_message:
+        return _answer_query_builder_guidance(data.text)
 
     return AiAnswerResponse(
         answer=(
