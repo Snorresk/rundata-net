@@ -48,6 +48,30 @@ export const operators = {
   is_not_null: (a) => a !== null && a !== undefined,
 };
 
+const NEGATED_STRING_OPERATORS = new Set([
+  'not_equal',
+  'not_in',
+  'not_begins_with',
+  'not_contains',
+  'not_ends_with',
+]);
+
+function getSearchValues(record, field) {
+  const values = [record[field]];
+  const fieldAliases = record.__searchAliases && record.__searchAliases[field];
+  if (Array.isArray(fieldAliases)) {
+    fieldAliases.forEach(value => values.push(value));
+  }
+
+  const seen = new Set();
+  return values.filter(value => {
+    const key = `${typeof value}:${String(value)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /**
  * JavaScript processor for jQuery QueryBuilder rules.
  * This module allows searching through data using rules
@@ -284,9 +308,11 @@ export class QueryBuilderParser {
       return { match: false };
     }
 
-    // Apply the operator and normalize the result, passing ignoreCase for string operators
-    const result = this.operators[operatorName](fieldValue, ruleValue, ignoreCase);
-    const isMatch = Boolean(result);
+    const searchValues = getSearchValues(record, field);
+    const isNegatedOperator = NEGATED_STRING_OPERATORS.has(operatorName);
+    const isMatch = isNegatedOperator
+      ? searchValues.every(value => Boolean(this.operators[operatorName](value, ruleValue, ignoreCase)))
+      : searchValues.some(value => Boolean(this.operators[operatorName](value, ruleValue, ignoreCase)));
 
     return {
       match: isMatch,

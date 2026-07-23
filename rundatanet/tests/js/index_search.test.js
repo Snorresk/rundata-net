@@ -470,14 +470,15 @@ testSingleRuleSearch({
   operator: 'is_not_empty',
   value: null,
   expectedCount: 1080,
-  firstResultCheck: 'Nilsson attribuerar stenen till Korp.',
+  firstResultCheck: 'Nilsson attributes the stone to Korp.',
 });
 testSingleRuleSearch({
   field: 'carver',
   operator: 'equal',
   value: 'Nilsson attribuerar stenen till Korp.',
   expectedCount: 3,
-  firstResultCheck: 'Nilsson attribuerar stenen till Korp.',
+  firstResultCheck: 'Nilsson attributes the stone to Korp.',
+  testName: 'search inscription via Swedish original carver value returns English display value',
 });
 
 
