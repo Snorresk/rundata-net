@@ -658,6 +658,7 @@ export function fetchSearchAliases(db) {
     ['style', 'original_style'],
     ['carver', 'original_carver'],
     ['current_location', 'original_current_location'],
+    ['original_site', 'original_original_site'],
   ];
 
   try {

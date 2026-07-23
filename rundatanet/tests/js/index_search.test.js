@@ -481,6 +481,15 @@ testSingleRuleSearch({
   testName: 'search inscription via Swedish original carver value returns English display value',
 });
 
+testSingleRuleSearch({
+  field: 'original_site',
+  operator: 'equal',
+  value: 'I Rydaholms gamla kyrka.',
+  expectedCount: 3,
+  firstResultCheck: 'In the old church at Rydaholm.',
+  testName: 'search inscription via Swedish original site value returns English display value',
+});
+
 
 testSingleRuleSearch({
   id: 'cross_form',
