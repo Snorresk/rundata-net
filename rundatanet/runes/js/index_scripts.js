@@ -447,6 +447,7 @@ export function convertDbToKeyMap(db) {
   const metaColumn = columns.indexOf('id');
   const wordColumns = ['transliteration', 'normalisation_norse', 'normalisation_scandinavian'];
   const crossFormByMetaId = {};
+  const searchAliasesByMetaId = fetchSearchAliases(db);
 
   // Textual cross-form data (used by "Cross form" display field).
   // This view is expected to exist in normal DB builds; if not, we keep it empty.
@@ -486,6 +487,7 @@ export function convertDbToKeyMap(db) {
 
     // Populate the textual cross form field so "Cross form" can render content.
     objSignature['cross_form'] = crossFormByMetaId[metaId] || "";
+    objSignature['__searchAliases'] = searchAliasesByMetaId[metaId] || {};
 
     // Build coordination text for main display.
     const hasOriginalCoordinates = objSignature.latitude && objSignature.longitude
@@ -645,6 +647,57 @@ export function fetchAllImages(db) {
     allImages[metaId].links.push({indirect, direct, info});
   }
   return allImages;
+}
+
+export function fetchSearchAliases(db) {
+  const aliasColumns = [
+    ['material', 'original_material'],
+    ['objectInfo', 'original_objectInfo'],
+    ['rune_type', 'original_rune_type'],
+    ['dating', 'original_dating'],
+    ['style', 'original_style'],
+    ['carver', 'original_carver'],
+    ['current_location', 'original_current_location'],
+    ['original_site', 'original_original_site'],
+  ];
+
+  try {
+    const tableInfo = db.exec("PRAGMA table_info(meta_information)");
+    if (!tableInfo || tableInfo.length === 0) {
+      return {};
+    }
+
+    const nameIndex = tableInfo[0].columns.indexOf('name');
+    const existingColumns = new Set(tableInfo[0].values.map(row => row[nameIndex]));
+    const availableAliases = aliasColumns.filter(([, originalColumn]) => existingColumns.has(originalColumn));
+    if (availableAliases.length === 0) {
+      return {};
+    }
+
+    const selectedColumns = availableAliases.map(([, originalColumn]) => originalColumn).join(", ");
+    const content = db.exec(`SELECT id, ${selectedColumns} FROM meta_information`);
+    if (!content || content.length === 0) {
+      return {};
+    }
+
+    const columns = content[0].columns;
+    const aliasesByMetaId = {};
+    content[0].values.forEach(row => {
+      const metaId = row[columns.indexOf('id')];
+      const aliases = {};
+      availableAliases.forEach(([fieldName, originalColumn]) => {
+        const value = row[columns.indexOf(originalColumn)];
+        if (typeof value === 'string' && value.trim().length > 0) {
+          aliases[fieldName] = [value];
+        }
+      });
+      aliasesByMetaId[metaId] = aliases;
+    });
+
+    return aliasesByMetaId;
+  } catch (e) {
+    return {};
+  }
 }
 
 export function makeImagesMarkup(signatureImageLinks) {
