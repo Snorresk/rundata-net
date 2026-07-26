@@ -1367,7 +1367,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260628-mobile-map-links"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260723-country-province-autocomplete-3"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -2051,22 +2051,13 @@ function buildRulesFromMiniBuilder() {
 
   if (idValue) {
     const idTokens = parseIdQueryTokens(idValue);
-    const idRule = idTokens.length > 1
-      ? {
-        operator: 'in_separated_list',
-        value: idTokens.join('|'),
-      }
-      : {
-        operator: 'in',
-        value: [idValue],
-      };
     rules.push({
       id: 'inscription_id',
       field: 'signature_text',
       type: 'string',
       input: 'text',
-      operator: idRule.operator,
-      value: idRule.value,
+      operator: 'equal',
+      value: idTokens.join('|'),
       ignoreCase: true,
     });
   }
@@ -2617,19 +2608,20 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(data.rules);
         const parsedRules = JSON.parse(data.rules);
         applyAiRuleDefaults(parsedRules);
-        $(`#${inpQueryBuilder}`).queryBuilder('setRules', parsedRules);
+        const uiRules = normalizeQueryBuilderRulesForUi(parsedRules);
+        $(`#${inpQueryBuilder}`).queryBuilder('setRules', uiRules);
 
-        const searchOutcome = performSearchWithRules(parsedRules);
+        const searchOutcome = performSearchWithRules(uiRules);
         const responseLines = [
           'I converted your question into search parameters, placed them in the QueryBuilder, and searched the database with those rules.',
           '',
           'Search parameters used:',
-          describeAiRules(parsedRules),
+          describeAiRules(uiRules),
           '',
-          summarizeAiSearchResults(searchOutcome.results, parsedRules),
+          summarizeAiSearchResults(searchOutcome.results, uiRules),
           '',
           'Statistics directly from the database:',
-          summarizeDirectDbInformation(searchOutcome.results, parsedRules),
+          summarizeDirectDbInformation(searchOutcome.results, uiRules),
         ];
         if (searchOutcome.blockedBySymbolHint) {
           responseLines.push('');
@@ -2655,7 +2647,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   document.getElementById('btnSearch').addEventListener('click', function() {
-    const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
+    const rules = getQueryBuilderRulesWithLiveValues(inpQueryBuilder);
     performSearchWithRules(rules);
   });
 
@@ -2740,13 +2732,13 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   document.getElementById('btnRulesExport').addEventListener('click', function() {
-    const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
+    const rules = getQueryBuilderRulesWithLiveValues(inpQueryBuilder);
     if (!$.isEmptyObject(rules)) {
       $('#ruleIo').val(JSON.stringify(rules, null, 2));
     }
   });
   document.getElementById('btnRulesImport').addEventListener('click', function() {
-    const rules = JSON.parse($('#ruleIo').val());
+    const rules = normalizeQueryBuilderRulesForUi(JSON.parse($('#ruleIo').val()));
     $(`#${inpQueryBuilder}`).queryBuilder('setRules', rules, true);
     syncMiniBuilderFromRules(rules);
   });
@@ -2775,7 +2767,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Get the current search rules to include in the export
-    const searchRules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
+    const searchRules = getQueryBuilderRulesWithLiveValues(inpQueryBuilder);
     // Strip functions from rules — QueryBuilder includes filter.input as a function
     // for custom filters, and postMessage can't clone functions.
     const cloneableRules = JSON.parse(JSON.stringify(searchRules));

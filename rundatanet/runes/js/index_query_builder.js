@@ -1,4 +1,8 @@
 import { isCompactDbLayout } from './index_layout.js';
+import {
+  formatCountryProvinceRuleValue,
+  getCountryProvinceSuggestions,
+} from './index_country_province.js';
 
 /*
 This file contains code to work with jquery query builder. The query builder must be
@@ -268,6 +272,84 @@ export function sortGroupsByOrder(items, groupOrder) {
   return result;
 }
 
+export function normalizeQueryBuilderRulesForUi(rules) {
+  if (!rules || typeof rules !== 'object') {
+    return rules;
+  }
+
+  const normalized = Array.isArray(rules) ? rules.slice() : { ...rules };
+  if (Array.isArray(normalized.rules)) {
+    normalized.rules = normalized.rules.map(rule => normalizeQueryBuilderRulesForUi(rule));
+  }
+
+  if (
+    normalized.id === 'inscription_id'
+    && (normalized.operator === 'in' || normalized.operator === 'in_separated_list')
+  ) {
+    normalized.operator = 'equal';
+    if (Array.isArray(normalized.value)) {
+      normalized.value = normalized.value.join('|');
+    }
+  }
+
+  return normalized;
+}
+
+export function applyLiveQueryBuilderValuesToRules(rules, containerId = 'builder') {
+  if (!rules || typeof rules !== 'object') {
+    return rules;
+  }
+
+  const normalized = normalizeQueryBuilderRulesForUi(rules);
+  const liveValuesByRuleId = {
+    inscription_id: [],
+    inscription_country: [],
+  };
+
+  $(`#${containerId} .rule-container`).each(function() {
+    const $rule = $(this);
+    const ruleId = $rule.find('.rule-filter-container select').val();
+    if (!Object.prototype.hasOwnProperty.call(liveValuesByRuleId, ruleId)) {
+      return;
+    }
+
+    liveValuesByRuleId[ruleId].push($rule.find('.rule-value-container input.form-control').val() || '');
+  });
+
+  const nextValueIndexes = {};
+  function visit(rule) {
+    if (!rule || typeof rule !== 'object') {
+      return;
+    }
+
+    if (Array.isArray(rule.rules)) {
+      rule.rules.forEach(visit);
+      return;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(liveValuesByRuleId, rule.id)) {
+      return;
+    }
+
+    const nextValueIndex = nextValueIndexes[rule.id] || 0;
+    if (nextValueIndex < liveValuesByRuleId[rule.id].length) {
+      if (rule.id === 'inscription_id') {
+        rule.operator = 'equal';
+      }
+      rule.value = liveValuesByRuleId[rule.id][nextValueIndex];
+      nextValueIndexes[rule.id] = nextValueIndex + 1;
+    }
+  }
+
+  visit(normalized);
+  return normalized;
+}
+
+export function getQueryBuilderRulesWithLiveValues(containerId = 'builder') {
+  const rules = $(`#${containerId}`).queryBuilder('getRules');
+  return applyLiveQueryBuilderValuesToRules(rules, containerId);
+}
+
 /**
  * Gets the minimum and maximum values of a numerical field from a data source
  *
@@ -517,39 +599,6 @@ function prepareIntegerRule(ruleId, dbMap, humanNameGetter, opt) {
 
 
 /**
- * Adjusts the input element in a query rule by applying either TomSelect or AutoComplete plugin
- * based on the rule's operator type.
- *
- * @param {Object} rule - The query rule object containing the element and operator information
- * @param {Object} [tomSelectConfig={}] - Configuration options for TomSelect plugin
- * @param {Object} [autoCompleteConfig={}] - Configuration options for AutoComplete plugin
- *
- * @description This function first cleans up any existing TomSelect or AutoComplete plugins
- * attached to the input element, then initializes the appropriate plugin based on the
- * operator type. If the operator is 'in' or 'not_in', TomSelect is applied; otherwise,
- * AutoComplete is used.
- */
-function adjustTomSelectAndAutoComplete(rule, tomSelectConfig = {}, autoCompleteConfig = {}) {
-  var $input = rule.$el.find('.rule-value-container input');
-  const operator = rule.operator.type;
-
-  // Clean up existing plugins
-  if ($input.data('tomSelect') !== undefined) {
-    $input.tomSelect('destroy');
-  }
-  if ($input.hasClass('autocomplete')) {
-    $input.autoComplete('destroy');
-  }
-
-  // Initialize the appropriate plugin based on operator
-  if (operator === 'in' || operator === 'not_in') {
-    $input.tomSelect(tomSelectConfig);
-  } else {
-    $input.autoComplete(autoCompleteConfig);
-  }
-}
-
-/**
  * Creates a rule for word search in runic texts
  *
  * @param {Object} config Configuration object
@@ -637,39 +686,13 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
   ]);
   const qbLang = {
     operators: {
-      'in_separated_list': "is in |-separated list",
+      'in_separated_list': "is in list",
       'cross_form': " ",
     }
   };
   const qbSqlOperators = {
     'in_separated_list': { 'op': 'IN', mod: '{0}' },
     'cross_form': { 'op': 'IN' },
-  };
-
-  const signature_text_autocomplete_cfg = {
-    minChars: 0,
-    delay: 100,
-    source: function(term, suggest) {
-      getValuesFromAllData(term, suggest, 'signature_text', dbMap);
-    },
-    menuClass: 'clusterize-content',
-    attachToParent: true,
-  };
-
-  const signature_text_tomselect_cfg = {
-    plugins: ['remove_button'],
-    // options: getValuesFromAllData('', undefined, 'signature_text', dbMap),
-    load: function(query, callback) {
-      let self = this;
-      getValuesFromAllData(query, callback, 'signature_text', dbMap, true);
-      // prevent further loading
-      self.settings.load = null;
-    },
-    // invoke data loading at once
-    preload: true,
-    valueField: 'id',
-    hideSelected: true,
-    delimiter: '|',
   };
 
   let queryBuilderFilters = [
@@ -680,21 +703,24 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
       field: 'signature_text',
       label: getHumanName('signature_text'),
       type: 'string',
-      multiple: true,
-      data: {
-        multiField: true,
+      input: function(rule, name) {
+        return `<input type="text" name="${name}" class="form-control" autocomplete="off">`;
       },
       operators: [
-        'in', 'in_separated_list', 'begins_with', 'not_begins_with',
+        'equal', 'begins_with', 'not_begins_with',
         'ends_with', 'not_ends_with', 'contains', 'not_contains',
       ],
-      valueSetter: function (rule, value) {
-        const $input = rule.$el.find('.rule-value-container input');
-        $input.val(value);
-        adjustTomSelectAndAutoComplete(rule, signature_text_tomselect_cfg, signature_text_autocomplete_cfg);
+      validation: {
+        callback: function(value) {
+          return true;
+        },
       },
-      plugin: 'tomSelect',
-      plugin_config: signature_text_tomselect_cfg,
+      valueGetter: function (rule) {
+        return rule.$el.find('.rule-value-container input.form-control').val() || '';
+      },
+      valueSetter: function (rule, value) {
+        rule.$el.find('.rule-value-container input.form-control').val(value || '');
+      },
     },
     {
       id: 'lost',
@@ -758,40 +784,36 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
       field: 'signature_text',
       label: 'Country or Swedish Province',
       type: 'string',
-      input: 'select',
-      multiple: true,
+      input: function(rule, name) {
+        return `<input type="text" name="${name}" class="form-control" autocomplete="off">`;
+      },
       data: {
         multiField: true,
       },
       operators: isCompactDbLayout()
         ? ['in', 'contains']
         : ['in'],
-      plugin: 'tomSelect',
+      plugin: 'autoComplete',
       plugin_config: {
-        plugins: ['remove_button'],
-        options: [
-          {text: 'Sweden, whole', value: 'all_sweden'},
-          {text: 'Öland (Öl)', value: 'Öl '}, {text: 'Östergötland (Ög)', value: 'Ög '}, {text: 'Södermanland (Sö)', value: 'Sö '},
-          {text: 'Småland (Sm)', value: 'Sm '}, {text: 'Västergötland (Vg)', value: 'Vg '}, {text: 'Uppland (U)', value: 'U '},
-          {text: 'Västmanland (Vs)', value: 'Vs '}, {text: 'Närke (Nä)', value: 'Nä '}, {text: 'Värmland (Vr)', value: 'Vr '},
-          {text: 'Gästrikland (Gs)', value: 'Gs '}, {text: 'Hälsingland (Hs)', value: 'Hs '}, {text: 'Medelpad (M)', value: 'M '},
-          {text: 'Ångermanland (Ån)', value: 'Ån '}, {text: 'Dalarna (D)', value: 'D '}, {text: 'Härjedalen (Hr)', value: 'Hr '},
-          {text: 'Jämtland (J)', value: 'J '}, {text: 'Lappland (Lp)', value: 'Lp '}, {text: 'Dalsland (Ds)', value: 'Ds '},
-          {text: 'Bohuslän (Bo)', value: 'Bo '}, {text: 'Gotland (G)', value: 'G '}, {text: 'Sweden, other (SE)', value: 'SE '},
-          {text: 'Denmark (DR)', value: 'DR '}, {text: 'Norway (N)', value: 'N '}, {text: 'Faroe Islands (FR)', value: 'FR '},
-          {text: 'Greenland (GR)', value: 'GR '}, {text: 'Iceland (IS)', value: 'IS '}, {text: 'Finland (FI)', value: 'FI '},
-          {text: 'Shetland (Sh)', value: 'Sh '}, {text: 'Orkney (Or)', value: 'Or '}, {text: 'Scotland (Sc)', value: 'Sc '},
-          {text: 'England (E)', value: 'E '}, {text: 'Isle of Man (IM)', value: 'IM '}, {text: 'Ireland (IR)', value: 'IR '},
-          {text: 'France (F)', value: 'F '}, {text: 'Netherlands (NL)', value: 'NL '}, {text: 'Germany (DE)', value: 'DE '},
-          {text: 'Poland (PL)', value: 'PL '}, {text: 'Latvia (LV)', value: 'LV '}, {text: 'Russia (RU)', value: 'RU '},
-          {text: 'Ukraine (UA)', value: 'UA '}, {text: 'Byzantium (By)', value: 'By '}, {text: 'Italy (IT)', value: 'IT '},
-          {text: 'Other areas (X)', value: 'X '}
-        ],
-        hideSelected: true,
+        minChars: 1,
+        delay: 100,
+        cache: 0,
+        source: function(term, suggest) {
+          suggest(getCountryProvinceSuggestions(term));
+        },
+        menuClass: 'clusterize-content',
+        attachToParent: true,
+      },
+      validation: {
+        callback: function(value) {
+          return true;
+        },
+      },
+      valueGetter: function (rule) {
+        return rule.$el.find('.rule-value-container input.form-control').val() || '';
       },
       valueSetter: function (rule, value) {
-        const $input = rule.$el.find('.rule-value-container select');
-        $input.tomSelect('setValue', value);
+        rule.$el.find('.rule-value-container input.form-control').val(formatCountryProvinceRuleValue(value));
       }
     },
     prepareAutoComplete('full_address', dbMap, getHumanName, { optgroup: 'gr_location', operators: ['contains'] }),
@@ -911,12 +933,30 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
     },
   });
 
+  function updateSignatureIdOperatorLabel(rule) {
+    if (!rule || !rule.filter || rule.filter.id !== 'inscription_id') {
+      return;
+    }
+    rule.$el.find('.rule-operator-container option[value="equal"]').text('is in list');
+  }
+
+  function updateSignatureIdOperatorLabelsInDom() {
+    queryBuilder.find('.rule-container').each(function() {
+      const $rule = $(this);
+      if ($rule.find('.rule-filter-container select').val() === 'inscription_id') {
+        $rule.find('.rule-operator-container option[value="equal"]').text('is in list');
+      }
+    });
+  }
+
   // Event handler when rule is created and rule operator is changed
-  $('#builder').on('afterCreateRuleInput.queryBuilder afterUpdateRuleOperator.queryBuilder', function(e, rule) {
+  $('#builder').on('afterCreateRuleInput.queryBuilder afterUpdateRuleFilter.queryBuilder afterUpdateRuleOperator.queryBuilder', function(e, rule) {
     if (rule.filter.id !== 'inscription_id') {
       return;
     }
-    adjustTomSelectAndAutoComplete(rule, signature_text_tomselect_cfg, signature_text_autocomplete_cfg);
+    updateSignatureIdOperatorLabel(rule);
+    updateSignatureIdOperatorLabelsInDom();
   });
 
+  updateSignatureIdOperatorLabelsInDom();
 }

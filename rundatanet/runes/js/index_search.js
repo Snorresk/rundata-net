@@ -7,6 +7,11 @@ import {
   splitPhraseTokens,
   stripSpecialSymbols,
 } from './search_core.js';
+import {
+  COUNTRY_OR_PROVINCE_OPTIONS,
+  resolveCountryProvinceValues,
+  SWEDISH_AREA_CODES,
+} from './index_country_province.js';
 
 export {
   getSearchDirectionConfig,
@@ -268,7 +273,9 @@ export class QueryBuilderParser {
         typeof this.customSearchFunctions[rule.id][operatorName] === "function") {
 
       // For custom functions, provide field value or entire record as needed
-      const valueToCheck = isMultiFieldRule ? record : record[field];
+      const valueToCheck = isMultiFieldRule || rule.id === 'inscription_id'
+        ? record
+        : record[field];
       const result = this.customSearchFunctions[rule.id][operatorName](valueToCheck, rule.value, rule);
 
       // Normalize the result to always have match and details properties
@@ -823,29 +830,6 @@ function searchRunicTextsCombined(entry, ruleValue, operatorName, rule) {
   };
 }
 
-const SWEDISH_AREA_CODES = new Set([
-  'Öl', 'Ög', 'Sö', 'Sm', 'Vg', 'U', 'Vs', 'Nä', 'Vr', 'Gs',
-  'Hs', 'M', 'Ån', 'D', 'Hr', 'J', 'Lp', 'Ds', 'Bo', 'G', 'SE'
-]);
-const COUNTRY_OR_PROVINCE_OPTIONS = [
-  { text: 'Sweden, whole', value: 'all_sweden' },
-  { text: 'Öland (Öl)', value: 'Öl ' }, { text: 'Östergötland (Ög)', value: 'Ög ' }, { text: 'Södermanland (Sö)', value: 'Sö ' },
-  { text: 'Småland (Sm)', value: 'Sm ' }, { text: 'Västergötland (Vg)', value: 'Vg ' }, { text: 'Uppland (U)', value: 'U ' },
-  { text: 'Västmanland (Vs)', value: 'Vs ' }, { text: 'Närke (Nä)', value: 'Nä ' }, { text: 'Värmland (Vr)', value: 'Vr ' },
-  { text: 'Gästrikland (Gs)', value: 'Gs ' }, { text: 'Hälsingland (Hs)', value: 'Hs ' }, { text: 'Medelpad (M)', value: 'M ' },
-  { text: 'Ångermanland (Ån)', value: 'Ån ' }, { text: 'Dalarna (D)', value: 'D ' }, { text: 'Härjedalen (Hr)', value: 'Hr ' },
-  { text: 'Jämtland (J)', value: 'J ' }, { text: 'Lappland (Lp)', value: 'Lp ' }, { text: 'Dalsland (Ds)', value: 'Ds ' },
-  { text: 'Bohuslän (Bo)', value: 'Bo ' }, { text: 'Gotland (G)', value: 'G ' }, { text: 'Sweden, other (SE)', value: 'SE ' },
-  { text: 'Denmark (DR)', value: 'DR ' }, { text: 'Norway (N)', value: 'N ' }, { text: 'Faroe Islands (FR)', value: 'FR ' },
-  { text: 'Greenland (GR)', value: 'GR ' }, { text: 'Iceland (IS)', value: 'IS ' }, { text: 'Finland (FI)', value: 'FI ' },
-  { text: 'Shetland (Sh)', value: 'Sh ' }, { text: 'Orkney (Or)', value: 'Or ' }, { text: 'Scotland (Sc)', value: 'Sc ' },
-  { text: 'England (E)', value: 'E ' }, { text: 'Isle of Man (IM)', value: 'IM ' }, { text: 'Ireland (IR)', value: 'IR ' },
-  { text: 'France (F)', value: 'F ' }, { text: 'Netherlands (NL)', value: 'NL ' }, { text: 'Germany (DE)', value: 'DE ' },
-  { text: 'Poland (PL)', value: 'PL ' }, { text: 'Latvia (LV)', value: 'LV ' }, { text: 'Russia (RU)', value: 'RU ' },
-  { text: 'Ukraine (UA)', value: 'UA ' }, { text: 'Byzantium (By)', value: 'By ' }, { text: 'Italy (IT)', value: 'IT ' },
-  { text: 'Other areas (X)', value: 'X ' },
-];
-
 function getSignatureAreaCode(signatureText) {
   const signature = String(signatureText || '').trim();
   if (!signature) return '';
@@ -855,7 +839,7 @@ function getSignatureAreaCode(signatureText) {
 
 const searchCountryOrProvince = (entry, ruleValues) => {
   const signatureAreaCode = getSignatureAreaCode(entry['signature_text']);
-  const normalizedRuleValues = Array.isArray(ruleValues) ? ruleValues : [ruleValues];
+  const normalizedRuleValues = resolveCountryProvinceValues(ruleValues);
   for (let i = 0; i < normalizedRuleValues.length; i++) {
     const ruleCode = String(normalizedRuleValues[i] || '').trim();
     if (!ruleCode) continue;

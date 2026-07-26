@@ -186,7 +186,7 @@ function applyImportedSignatures(values) {
     field: "signature_text",
     type: "string",
     input: "text",
-    operator: "in_separated_list",
+    operator: "equal",
     value: joinedValues,
     ignoreCase: false,
   }];
