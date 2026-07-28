@@ -6,7 +6,16 @@ import { convertDbToKeyMap } from '../../runes/js/index_scripts.js';
 import { mockDb } from './mockDb.js';
 
 // Now import the module
-import { sortGroupsByOrder, getValuesFromAllData } from '../../runes/js/index_query_builder.js';
+import {
+  applyLiveQueryBuilderValuesToRules,
+  getValuesFromAllData,
+  normalizeQueryBuilderRulesForUi,
+  sortGroupsByOrder,
+} from '../../runes/js/index_query_builder.js';
+import {
+  formatCountryProvinceRuleValue,
+  getCountryProvinceSuggestions,
+} from '../../runes/js/index_country_province.js';
 
 test('sortGroupsByOrder() with specified order', () => {
   const items = [
@@ -51,6 +60,155 @@ test('sortGroupsByOrder() with unspecified groups', () => {
     (result[2].optgroup === 'unspecified2' && result[3].optgroup === 'unspecified1'),
     'Unspecified groups should be included at the end'
   );
+});
+
+test('normalizeQueryBuilderRulesForUi() converts legacy inscription ID list rules', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'inscription_id',
+        field: 'signature_text',
+        operator: 'in',
+        value: ['Öl 1', 'Sö Fv1986;218'],
+      },
+      {
+        id: 'inscription_country',
+        field: 'signature_text',
+        operator: 'in',
+        value: ['Öl '],
+      },
+      {
+        id: 'inscription_id',
+        field: 'signature_text',
+        operator: 'in_separated_list',
+        value: 'Öl 2, Öl 3',
+      },
+    ],
+    not: false,
+  };
+
+  const result = normalizeQueryBuilderRulesForUi(rules);
+
+  assert.is(result.rules[0].operator, 'equal');
+  assert.is(result.rules[0].value, 'Öl 1|Sö Fv1986;218');
+  assert.is(result.rules[1].operator, 'in');
+  assert.is(result.rules[2].operator, 'equal');
+  assert.is(result.rules[2].value, 'Öl 2, Öl 3');
+  assert.ok(result !== rules, 'Should return a copy of the root object');
+});
+
+test('normalizeQueryBuilderRulesForUi() expands legacy broad runic text rules', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'search_runic_texts',
+        field: 'normalisation_norse',
+        type: 'string',
+        operator: 'contains',
+        value: 'stein',
+        data: { multiField: true },
+        ignoreCase: true,
+        includeSpecialSymbols: false,
+      },
+    ],
+    not: false,
+  };
+
+  const result = normalizeQueryBuilderRulesForUi(rules);
+  const expanded = result.rules[0];
+
+  assert.is(expanded.condition, 'OR');
+  assert.is(expanded.rules.length, 5);
+  assert.equal(
+    expanded.rules.map(rule => rule.id),
+    [
+      'normalization_norse_to_transliteration',
+      'normalization_scandinavian_to_transliteration',
+      'normalization_norse_to_transliteration',
+      'english_translation',
+      'swedish_translation',
+    ]
+  );
+  assert.is(expanded.rules[0].value.normalization, 'stein');
+  assert.is(expanded.rules[1].value.normalization, 'stein');
+  assert.is(expanded.rules[2].value.transliteration, 'stein');
+  assert.is(expanded.rules[3].value, 'stein');
+  assert.is(expanded.rules[4].value, 'stein');
+  assert.is(expanded.rules[0].ignoreCase, true);
+  assert.is(expanded.rules[0].includeSpecialSymbols, false);
+});
+
+test('applyLiveQueryBuilderValuesToRules() copies visible ID and country text into rules', () => {
+  const originalDollar = global.$;
+  const liveRules = [
+    { filter: 'inscription_id', value: 'Öl 1, Sö Fv1986;218' },
+    { filter: 'inscription_country', value: 'Öland, Denmark' },
+  ];
+
+  global.$ = function(selectorOrElement) {
+    if (selectorOrElement === '#builder .rule-container') {
+      return {
+        each(callback) {
+          liveRules.forEach((rule, index) => callback.call(rule, index, rule));
+        },
+      };
+    }
+
+    if (selectorOrElement && typeof selectorOrElement === 'object') {
+      return {
+        find(selector) {
+          if (selector.includes('.rule-filter-container')) {
+            return { val: () => selectorOrElement.filter };
+          }
+          if (selector.includes('.rule-value-container')) {
+            return { val: () => selectorOrElement.value };
+          }
+          return { val: () => '' };
+        },
+      };
+    }
+
+    return originalDollar(selectorOrElement);
+  };
+
+  try {
+    const rules = {
+      condition: 'AND',
+      rules: [
+        {
+          id: 'inscription_id',
+          field: 'signature_text',
+          operator: 'equal',
+          value: '',
+        },
+        {
+          id: 'inscription_country',
+          field: 'signature_text',
+          operator: 'in',
+          value: '',
+        },
+      ],
+    };
+
+    const result = applyLiveQueryBuilderValuesToRules(rules, 'builder');
+    assert.is(result.rules[0].value, 'Öl 1, Sö Fv1986;218');
+    assert.is(result.rules[1].value, 'Öland, Denmark');
+  } finally {
+    global.$ = originalDollar;
+  }
+});
+
+test('country/province helpers format saved values and suggest typed options', () => {
+  assert.is(formatCountryProvinceRuleValue(['Öl ', 'DR ']), 'Öland (Öl), Denmark (DR)');
+
+  const denmarkSuggestions = getCountryProvinceSuggestions('Öland, Den');
+  assert.is(denmarkSuggestions[0], 'Öland, Denmark (DR)');
+  assert.ok(denmarkSuggestions.includes('Öland, Denmark (DR)'));
+
+  const diacriticFreeSuggestions = getCountryProvinceSuggestions('Oland');
+  assert.ok(diacriticFreeSuggestions.includes('Öland (Öl)'));
 });
 
 test('sortGroupsByOrder() with items without optgroup', () => {

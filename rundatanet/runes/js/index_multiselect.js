@@ -6,7 +6,7 @@ const gUserSelectedDisplayKey = "userSelectedDisplay";
 const gShowHeadersKey = "showHeaders";
 const gMobileDisplayDefaultsVersionKey = "mobileDisplayDefaultsVersion";
 const MOBILE_DISPLAY_DEFAULTS_VERSION = "20260603-mobile-property-order";
-const REQUIRED_DISPLAY_VALUES = ['coordination'];
+const REQUIRED_DISPLAY_VALUES = [];
 const DEFAULT_SELECTED_DISPLAY_VALUES = [
   'signature_text', 'transliteration', 'normalisation_scandinavian', 'normalisation_norse',
   'english_translation', 'swedish_translation', 'found_location', 'parish', 'municipality', 'district', 'current_location',

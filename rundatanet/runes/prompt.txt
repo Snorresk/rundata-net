@@ -276,8 +276,8 @@ For broader object intent:
 - NEVER INCLUDE UNNECESSARY OR REDUNDANT INFORMATION in the JSON output.
 - NEVER OUTPUT ANYTHING BUT JSON.
 
-**Search in runic texts:**
-Special runic text search is used when user searched in Normalized or Transliterated texts. These attributes carry unique properties specifically sentences are aligned to have one-to-one word correspondence. This means that word at position 2 in transliterated text is the same as word at position 2 in normalized text. Moreover, some words are personal names. Users could filter by personal names.
+**Aligned normalisation and transliteration searches:**
+Use the specific normalisation/transliteration filters when a user searches in normalised or transliterated runic text. These attributes carry unique properties: sentences are aligned to have one-to-one word correspondence. This means that word at position 2 in transliterated text is the same as word at position 2 in normalised text. Moreover, some words are personal names. Users can filter by personal names.
 
 **Broad personal-name presence searches (IMPORTANT):**
 - If the user asks for inscriptions with personal names (`personnamn`, `personal names`, `personliga namn`), use the `has_personal_name` filter: `id: "has_personal_name"`, `field: "num_names"`, `operator: "equal"`, `value: 1`.

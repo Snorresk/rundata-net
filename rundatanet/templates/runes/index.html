@@ -790,9 +790,70 @@
       .py-6 {
         padding-bottom: 9rem !important;
       }
-      .query-builder [data-delete="rule"],
-      .query-builder [data-delete="group"] {
+      .query-builder > .rules-group-container > .rules-group-header [data-delete="group"] {
         display: none !important;
+      }
+      .query-builder .rule-clear-value-btn,
+      .query-builder .rule-remove-btn,
+      .query-builder .group-remove-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        line-height: 1;
+      }
+      .query-builder .rule-clear-value-btn {
+        color: #6c757d;
+        border-color: #ced4da;
+        background-color: #fff;
+      }
+      .query-builder .rule-clear-value-btn:hover,
+      .query-builder .rule-clear-value-btn:focus {
+        color: #343a40;
+        border-color: #adb5bd;
+        background-color: #f8f9fa;
+      }
+      .query-builder .rule-remove-btn,
+      .query-builder .group-remove-btn {
+        color: #dc3545;
+        border-color: #f1aeb5;
+        background-color: #fff;
+      }
+      .query-builder .rule-remove-btn:hover,
+      .query-builder .rule-remove-btn:focus,
+      .query-builder .group-remove-btn:hover,
+      .query-builder .group-remove-btn:focus {
+        color: #fff;
+        border-color: #dc3545;
+        background-color: #dc3545;
+      }
+      .query-builder .rule-word-search > .rule-clear-value-btn {
+        display: none;
+      }
+      .query-builder .word-search-rule-value {
+        min-width: 0;
+      }
+      .query-builder .word-search-field-group .form-control {
+        min-width: 0;
+      }
+      .query-builder .word-search-clear-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 2rem;
+        width: 2rem;
+        padding: 0;
+        color: #6c757d;
+        border-color: #ced4da;
+        background-color: #fff;
+      }
+      .query-builder .word-search-clear-btn:hover,
+      .query-builder .word-search-clear-btn:focus {
+        color: #343a40;
+        border-color: #adb5bd;
+        background-color: #f8f9fa;
       }
       .query-builder .group-actions [data-add="rule"],
       .query-builder .group-actions [data-add="group"] {
@@ -909,6 +970,10 @@
 
         .query-builder .rule-footer {
           margin-left: 0 !important;
+          margin-top: 6px;
+        }
+
+        .query-builder .rule-clear-value-btn {
           margin-top: 6px;
         }
 
@@ -1115,7 +1180,7 @@
           <button type="button" class="btn btn-default clip" id="btnOhakeCapital">Ô</button>
         </div>
         <button type="button" class="btn btn-success px-4" id="btnSearch">Search</button>
-        <button type="button" class="btn btn-danger" id="btnResetSearch">Delete search</button>
+        <button type="button" class="btn btn-danger" id="btnResetSearch">Reset search</button>
         <button type="button" class="btn btn-default" id="btnOpenSearchParameters" data-bs-toggle="modal" data-bs-target="#containerRuleIo">Search parameters</button>
         <button type="button" class="btn btn-default" id="btnOpenImportId" data-bs-toggle="modal" data-bs-target="#modalResultsIo" data-results-mode="import">Import ID</button>
         <button type="button" class="btn btn-default" id="btnOpenExportResults" data-bs-toggle="modal" data-bs-target="#modalResultsIo" data-results-mode="export">Export</button>
@@ -1265,10 +1330,6 @@
 
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Close</button>
-        </div>
-
       </div>
     </div>
   </div>
@@ -1284,8 +1345,7 @@
         <div class="modal-body">
           <div class="row" id="resultsExportSection">
             <div class="col-xs-offset-1 col-xs-10">
-              <p>Export search results in Excel format by clicking <em>Export</em> button bellow.<br>Read more about exporting <a href="https://rundata-net.readthedocs.io/en/latest/getting-started/user_guide.html#importing-and-exporting-results">in the documentation</a>.</p>
-              <button type="button" class="col-xs-3 btn btn-default" id="btnExportResults"><b>Export search results</b></button>
+              <p>Export the current visible search results. Use Excel for structured data, or highlighted text for a readable HTML file with search matches in red.<br>Read more about exporting <a href="https://rundata-net.readthedocs.io/en/latest/getting-started/user_guide.html#importing-and-exporting-results">in the documentation</a>.</p>
             </div>
           </div>
           <div class="row" id="resultsIoDivider">
@@ -1305,8 +1365,9 @@
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Close</button>
+        <div class="modal-footer" id="resultsIoFooter">
+          <button type="button" class="btn btn-success" id="btnExportResults"><b>Export Excel</b></button>
+          <button type="button" class="btn btn-primary" id="btnExportHighlightedResults"><b>Export highlighted text</b></button>
         </div>
 
   </section>
@@ -1367,7 +1428,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260628-mobile-map-links"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260728-display-coordinates-1"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -1381,6 +1442,7 @@ let gViewModel = null; // Global view model for the runic inscriptions
 let gExportInProgress = false;
 let gTranslationOccurrenceCount = null;
 let gSearchHintMessage = null;
+let gActiveResultRules = null;
 const INCLUDE_SYMBOLS_HINT = 'Your query includes symbols. To search symbols, enable the "Include symbols" filter.';
 
 function hideAiAssistantAlert() {
@@ -1831,11 +1893,264 @@ function summarizeAiSearchResults(results, rules) {
   return lines.join('\n');
 }
 
+function cloneSearchRulesForExport(rules) {
+  if (rules === null || rules === undefined) {
+    return null;
+  }
+  return JSON.parse(JSON.stringify(rules));
+}
+
+function getVisibleResultInscriptionsForExport() {
+  if (!gViewModel) {
+    return [];
+  }
+
+  try {
+    const tree = $('#jstree').jstree(true);
+    const root = tree ? tree.get_node('#') : null;
+    const visibleIds = root && Array.isArray(root.children) ? root.children : [];
+
+    if (visibleIds.length > 0) {
+      return visibleIds
+        .map(id => gViewModel.getInscriptionData(parseInt(id, 10)))
+        .filter(Boolean);
+    }
+  } catch (error) {
+    console.warn('Could not read visible tree results for export; falling back to active results.', error);
+  }
+
+  return Array.from(gViewModel.getActiveInscriptions());
+}
+
+function escapeHtmlForExportDocument(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function absolutizeHighlightedExportUrls(container) {
+  container.querySelectorAll('a[href]').forEach(link => {
+    const href = link.getAttribute('href');
+    if (!href || href.startsWith('blob:') || href.startsWith('data:') || href.startsWith('mailto:')) {
+      return;
+    }
+    try {
+      link.setAttribute('href', new URL(href, window.location.href).href);
+    } catch (error) {
+      // Keep the original URL if the browser cannot resolve it.
+    }
+  });
+
+  container.querySelectorAll('img[src]').forEach(image => {
+    const src = image.getAttribute('src');
+    if (!src || src.startsWith('data:')) {
+      return;
+    }
+    try {
+      image.setAttribute('src', new URL(src, window.location.href).href);
+    } catch (error) {
+      // Keep the original source if the browser cannot resolve it.
+    }
+  });
+}
+
+function downloadExportBlob(blob, filename) {
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function getHighlightedExportSignature(inscription) {
+  return String(
+    inscription?.signature_header
+    || inscription?.signature_display
+    || inscription?.signature_text
+    || inscription?.signature
+    || ''
+  ).trim();
+}
+
+function removeInlineSignatureFromHighlightedArticle(article, signature) {
+  const firstElement = article.firstElementChild;
+  if (!firstElement) {
+    return;
+  }
+
+  if (firstElement.matches('h4') && firstElement.textContent.trim() === 'Inscription ID') {
+    const signatureValue = firstElement.nextElementSibling;
+    firstElement.remove();
+    if (signatureValue && signatureValue.matches('span')) {
+      signatureValue.remove();
+    }
+    while (article.firstChild && article.firstChild.nodeType === Node.TEXT_NODE && !article.firstChild.textContent.trim()) {
+      article.firstChild.remove();
+    }
+    if (article.firstElementChild && article.firstElementChild.matches('br')) {
+      article.firstElementChild.remove();
+    }
+    return;
+  }
+
+  if (firstElement.matches('span') && firstElement.textContent.trim() === signature) {
+    const nextSibling = firstElement.nextSibling;
+    firstElement.remove();
+    if (nextSibling && nextSibling.nodeName === 'BR') {
+      nextSibling.remove();
+    }
+  }
+}
+
+function normalizeHighlightedExportArticles(container, inscriptions) {
+  Array.from(container.querySelectorAll('article.inscription-section')).forEach((article, index) => {
+    const signature = getHighlightedExportSignature(inscriptions[index]) || `Result ${index + 1}`;
+    removeInlineSignatureFromHighlightedArticle(article, signature);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'inscription-section';
+
+    const signatureTitle = document.createElement('h2');
+    signatureTitle.className = 'export-signature-title';
+    signatureTitle.textContent = signature;
+    wrapper.appendChild(signatureTitle);
+
+    while (article.firstChild) {
+      wrapper.appendChild(article.firstChild);
+    }
+
+    article.replaceWith(wrapper);
+  });
+}
+
+function buildHighlightedResultsHtmlDocument(inscriptions) {
+  const exportContainer = document.createElement('div');
+  const markup = inscriptions.length > 0
+    ? inscriptions2markup(inscriptions).join('\n')
+    : '<p>No visible results to export.</p>';
+  exportContainer.innerHTML = markup;
+  normalizeHighlightedExportArticles(exportContainer, inscriptions);
+  absolutizeHighlightedExportUrls(exportContainer);
+
+  const generatedAt = new Date().toLocaleString();
+  const resultCount = inscriptions.length;
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Rundata-net highlighted search results</title>
+  <style>
+    body {
+      margin: 24px;
+      color: #222;
+      font-family: "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", "DejaVu Sans", Verdana, Helvetica, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.45rem;
+    }
+    .export-meta {
+      margin: 0 0 1.25rem;
+      color: #555;
+      font-size: 0.9rem;
+    }
+    .inscription-section {
+      border-bottom: 1px solid #999;
+      padding: 0.65rem 0;
+      page-break-inside: avoid;
+    }
+    .inscription-section:first-of-type {
+      border-top: 1px solid #999;
+    }
+    .export-signature-title {
+      margin: 0 0 0.35rem;
+      font-size: 1.1rem;
+      font-weight: bold;
+    }
+    h4 {
+      margin: 0.5rem 0 0.15rem;
+      font-size: 0.95rem;
+    }
+    .transliteration {
+      font-weight: bold;
+    }
+    .normalization {
+      font-style: italic;
+      font-weight: normal;
+    }
+    .highlight {
+      color: #d00000;
+      font-weight: bold;
+    }
+    table.crosses {
+      border-collapse: collapse;
+      margin: 0.4rem 0 0.6rem 1.5em;
+      text-align: center;
+    }
+    table.crosses td,
+    table.crosses th {
+      border: 1px solid #999;
+      padding: 0.25em;
+    }
+    span.null {
+      color: #999;
+      font-weight: bold;
+    }
+    img {
+      max-width: 180px;
+      height: auto;
+    }
+    a {
+      color: #0645ad;
+    }
+  </style>
+</head>
+<body>
+  <h1>Rundata-net highlighted search results</h1>
+  <p class="export-meta">Generated on ${escapeHtmlForExportDocument(generatedAt)}. Results: ${resultCount}.</p>
+  <main>
+${exportContainer.innerHTML}
+  </main>
+</body>
+</html>`;
+}
+
+function exportHighlightedResultsHtml() {
+  if (gExportInProgress) {
+    return;
+  }
+  gExportInProgress = true;
+
+  try {
+    showLoading('Preparing highlighted text export.');
+    const inscriptionsForExport = getVisibleResultInscriptionsForExport();
+    const html = buildHighlightedResultsHtmlDocument(inscriptionsForExport);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    downloadExportBlob(blob, 'rundata-net_highlighted_results.html');
+    closeResultsIoModal();
+  } catch (error) {
+    onExportError(error);
+  } finally {
+    gExportInProgress = false;
+    hideLoading();
+  }
+}
+
 function performSearchWithRules(rules) {
   syncMiniBuilderFromRules(rules);
   if (shouldSuggestIncludeSymbols(rules)) {
     gSearchHintMessage = INCLUDE_SYMBOLS_HINT;
     gTranslationOccurrenceCount = null;
+    gActiveResultRules = cloneSearchRulesForExport(rules);
     gViewModel.setSearchResults([]);
     return { results: [], blockedBySymbolHint: true };
   }
@@ -1844,6 +2159,7 @@ function performSearchWithRules(rules) {
   const hasTranslationWordSearch = getTranslationSearchTokenCount(rules) > 0;
   const results = doSearch(rules, gViewModel.getAllInscriptions().values());
   gTranslationOccurrenceCount = hasTranslationWordSearch ? getTranslationOccurrenceCount(results) : null;
+  gActiveResultRules = cloneSearchRulesForExport(rules);
   gViewModel.setSearchResults(results);
   return { results, blockedBySymbolHint: false };
 }
@@ -2051,22 +2367,13 @@ function buildRulesFromMiniBuilder() {
 
   if (idValue) {
     const idTokens = parseIdQueryTokens(idValue);
-    const idRule = idTokens.length > 1
-      ? {
-        operator: 'in_separated_list',
-        value: idTokens.join('|'),
-      }
-      : {
-        operator: 'in',
-        value: [idValue],
-      };
     rules.push({
       id: 'inscription_id',
       field: 'signature_text',
       type: 'string',
       input: 'text',
-      operator: idRule.operator,
-      value: idRule.value,
+      operator: 'equal',
+      value: idTokens.join('|'),
       ignoreCase: true,
     });
   }
@@ -2617,19 +2924,20 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(data.rules);
         const parsedRules = JSON.parse(data.rules);
         applyAiRuleDefaults(parsedRules);
-        $(`#${inpQueryBuilder}`).queryBuilder('setRules', parsedRules);
+        const uiRules = normalizeQueryBuilderRulesForUi(parsedRules);
+        $(`#${inpQueryBuilder}`).queryBuilder('setRules', uiRules);
 
-        const searchOutcome = performSearchWithRules(parsedRules);
+        const searchOutcome = performSearchWithRules(uiRules);
         const responseLines = [
           'I converted your question into search parameters, placed them in the QueryBuilder, and searched the database with those rules.',
           '',
           'Search parameters used:',
-          describeAiRules(parsedRules),
+          describeAiRules(uiRules),
           '',
-          summarizeAiSearchResults(searchOutcome.results, parsedRules),
+          summarizeAiSearchResults(searchOutcome.results, uiRules),
           '',
           'Statistics directly from the database:',
-          summarizeDirectDbInformation(searchOutcome.results, parsedRules),
+          summarizeDirectDbInformation(searchOutcome.results, uiRules),
         ];
         if (searchOutcome.blockedBySymbolHint) {
           responseLines.push('');
@@ -2655,13 +2963,14 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   document.getElementById('btnSearch').addEventListener('click', function() {
-    const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
+    const rules = getQueryBuilderRulesWithLiveValues(inpQueryBuilder);
     performSearchWithRules(rules);
   });
 
   document.getElementById('btnResetSearch').addEventListener('click', function() {
     gSearchHintMessage = null;
     gTranslationOccurrenceCount = null;
+    gActiveResultRules = null;
     gViewModel.clearSearchResults();
     $(`#${inpQueryBuilder}`).queryBuilder('reset');
     const miniSearchInput = document.getElementById('miniSearchInput');
@@ -2700,6 +3009,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const resultsImportSection = document.getElementById('resultsImportSection');
   const resultsIoDivider = document.getElementById('resultsIoDivider');
   const resultsIoModal = document.getElementById('modalResultsIo');
+  const resultsIoFooter = document.getElementById('resultsIoFooter');
 
   function setResultsIoMode(mode) {
     const selectedMode = mode || 'both';
@@ -2708,6 +3018,7 @@ document.addEventListener('DOMContentLoaded', function() {
       resultsExportSection.style.display = 'none';
       resultsImportSection.style.display = '';
       resultsIoDivider.style.display = 'none';
+      resultsIoFooter.style.display = 'none';
       return;
     }
     if (selectedMode === 'export') {
@@ -2715,12 +3026,14 @@ document.addEventListener('DOMContentLoaded', function() {
       resultsExportSection.style.display = '';
       resultsImportSection.style.display = 'none';
       resultsIoDivider.style.display = 'none';
+      resultsIoFooter.style.display = '';
       return;
     }
     resultsIoTitle.textContent = 'Export search results, import signatures';
     resultsExportSection.style.display = '';
     resultsImportSection.style.display = '';
     resultsIoDivider.style.display = '';
+    resultsIoFooter.style.display = '';
   }
 
   resultsIoModal.addEventListener('show.bs.modal', function(event) {
@@ -2740,59 +3053,70 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   document.getElementById('btnRulesExport').addEventListener('click', function() {
-    const rules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
+    const rules = getQueryBuilderRulesWithLiveValues(inpQueryBuilder);
     if (!$.isEmptyObject(rules)) {
       $('#ruleIo').val(JSON.stringify(rules, null, 2));
     }
   });
   document.getElementById('btnRulesImport').addEventListener('click', function() {
-    const rules = JSON.parse($('#ruleIo').val());
+    const rules = normalizeQueryBuilderRulesForUi(JSON.parse($('#ruleIo').val()));
     $(`#${inpQueryBuilder}`).queryBuilder('setRules', rules, true);
     syncMiniBuilderFromRules(rules);
   });
+  document.getElementById('btnExportHighlightedResults').addEventListener('click', exportHighlightedResultsHtml);
   // Export Excel button handler
   document.getElementById('btnExportResults').addEventListener('click', function() {
     if (gExportInProgress) {
       return;
     }
     gExportInProgress = true;
-    showLoading();
-
-    // Create a mapping of column names to human-readable names.
-    // Export coordinates as two dedicated columns, not the combined display field.
-    const userSelectedFields = getUserSelectedDisplay().filter(field => field !== 'coordination');
-    const columns = userSelectedFields.concat(['latitude', 'present_latitude']);
-    const columnMap = {};
-
-    columns.forEach(column => {
-      if (column === 'latitude') {
-        columnMap[column] = 'Oldest known coordinates';
-      } else if (column === 'present_latitude') {
-        columnMap[column] = 'Current coordinates';
-      } else {
-        columnMap[column] = getHumanName(column);
-      }
-    });
-
-    // Get the current search rules to include in the export
-    const searchRules = $(`#${inpQueryBuilder}`).queryBuilder('getRules');
-    // Strip functions from rules — QueryBuilder includes filter.input as a function
-    // for custom filters, and postMessage can't clone functions.
-    const cloneableRules = JSON.parse(JSON.stringify(searchRules));
-
-    // Create worker and send data
-    const exportWorker = new Worker("{% static 'runes/export.worker.min.js' %}");
-    exportWorker.onmessage = onExportWorkerMessage;
-    exportWorker.onerror = onExportError;
-
+    let exportWorker = null;
     try {
+      showLoading();
+
+      // Create a mapping of column names to human-readable names.
+      // When selected, export coordinates as two dedicated columns in the
+      // same position as the combined display field.
+      const columns = getUserSelectedDisplay().flatMap(field =>
+        field === 'coordination' ? ['latitude', 'present_latitude'] : [field]
+      );
+      const columnMap = {};
+
+      columns.forEach(column => {
+        if (column === 'latitude') {
+          columnMap[column] = 'Oldest known coordinates';
+        } else if (column === 'present_latitude') {
+          columnMap[column] = 'Current coordinates';
+        } else {
+          columnMap[column] = getHumanName(column);
+        }
+      });
+
+      // Export follows the current visible result set, not unsaved edits in
+      // the QueryBuilder.  Keep the parameter sheet tied to the last executed
+      // search that produced those visible results.
+      const inscriptionsForExport = getVisibleResultInscriptionsForExport();
+      const searchRules = gActiveResultRules;
+      // Strip functions from rules — QueryBuilder includes filter.input as a function
+      // for custom filters, and postMessage can't clone functions.
+      const cloneableRules = searchRules == null
+        ? searchRules
+        : JSON.parse(JSON.stringify(searchRules));
+
+      // Create worker and send data
+      exportWorker = new Worker("{% static 'runes/export.worker.min.js' %}?v=20260728-export-format-2");
+      exportWorker.onmessage = onExportWorkerMessage;
+      exportWorker.onerror = onExportError;
+
       exportWorker.postMessage({
-        inscriptions: Array.from(gViewModel.getActiveInscriptions().values()),
+        inscriptions: inscriptionsForExport,
         columnMap: columnMap,
         rules: cloneableRules
       });
     } catch (error) {
-      exportWorker.terminate();
+      if (exportWorker) {
+        exportWorker.terminate();
+      }
       bootstrap.Modal.getInstance(document.getElementById('modalResultsIo'))?.hide();
       onExportError(error);
     }

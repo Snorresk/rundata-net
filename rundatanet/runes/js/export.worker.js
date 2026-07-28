@@ -12,6 +12,11 @@
 // Import the XLSX library
 importScripts('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js');
 
+const NORMALISATION_EXPORT_COLUMNS = new Set(['normalisation_norse', 'normalisation_scandinavian']);
+const TRANSLITERATION_EXPORT_COLUMNS = new Set(['transliteration']);
+const RESULTS_SHEET_PATH = 'Root Entry/xl/worksheets/sheet1.xml';
+const STYLES_PATH = 'Root Entry/xl/styles.xml';
+
 onmessage = function(e) {
   try {
     const inscriptions = e.data.inscriptions;
@@ -43,10 +48,11 @@ onmessage = function(e) {
 
     // Generate the XLSX file as an ArrayBuffer
     const excelBuffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+    const formattedExcelBuffer = applyExportWorkbookStyles(excelBuffer, columns, processedData.length);
 
     // Send the processed data back to the main thread
     postMessage({
-      buffer: excelBuffer,
+      buffer: formattedExcelBuffer,
       success: true
     });
   } catch (error) {
@@ -117,6 +123,10 @@ function processDataForExcel(inscriptions, columns) {
         colData = colData.join(';');
       }
 
+      if (NORMALISATION_EXPORT_COLUMNS.has(columnName) && typeof colData === 'string') {
+        colData = stripNormalisationQuotes(colData);
+      }
+
       rowData.push(colData);
     }
 
@@ -124,6 +134,146 @@ function processDataForExcel(inscriptions, columns) {
   }
 
   return result;
+}
+
+function stripNormalisationQuotes(value) {
+  return value
+    .replace(/&quot;|&#34;|&#x22;|&#x201c;|&#x201d;/gi, '')
+    .replace(/["“”„‟]/g, '');
+}
+
+function applyExportWorkbookStyles(excelBuffer, columns, rowCount) {
+  const styleRequests = [
+    { columns: TRANSLITERATION_EXPORT_COLUMNS, fontTag: 'b' },
+    { columns: NORMALISATION_EXPORT_COLUMNS, fontTag: 'i' }
+  ].map(request => ({
+    ...request,
+    columnIndexes: getColumnIndexes(columns, request.columns)
+  })).filter(request => request.columnIndexes.length > 0);
+
+  if (styleRequests.length === 0 || rowCount === 0) {
+    return excelBuffer;
+  }
+
+  try {
+    const cfb = XLSX.CFB.read(new Uint8Array(excelBuffer), { type: 'array' });
+    const stylesFile = XLSX.CFB.find(cfb, STYLES_PATH);
+    const sheetFile = XLSX.CFB.find(cfb, RESULTS_SHEET_PATH);
+
+    if (!stylesFile || !sheetFile) {
+      return excelBuffer;
+    }
+
+    let stylesXml = decodeXml(stylesFile.content);
+    const appliedStyleRequests = [];
+
+    for (const request of styleRequests) {
+      const styleResult = addFontStyle(stylesXml, request.fontTag);
+      if (!styleResult) {
+        continue;
+      }
+      stylesXml = styleResult.xml;
+      appliedStyleRequests.push({
+        columnIndexes: request.columnIndexes,
+        styleIndex: styleResult.styleIndex
+      });
+    }
+
+    if (appliedStyleRequests.length === 0) {
+      return excelBuffer;
+    }
+
+    let sheetXml = decodeXml(sheetFile.content);
+    appliedStyleRequests.forEach(request => {
+      sheetXml = applyCellStyle(
+        sheetXml,
+        getStyledCellReferences(request.columnIndexes, rowCount),
+        request.styleIndex
+      );
+    });
+
+    stylesFile.content = encodeXml(stylesXml);
+    sheetFile.content = encodeXml(sheetXml);
+
+    return XLSX.CFB.write(cfb, { type: 'array', fileType: 'zip' });
+  } catch (error) {
+    console.warn('Unable to apply Excel export styles:', error);
+    return excelBuffer;
+  }
+}
+
+function getColumnIndexes(columns, exportColumns) {
+  return columns
+    .map((column, index) => exportColumns.has(column) ? index : -1)
+    .filter(index => index !== -1);
+}
+
+function addFontStyle(stylesXml, fontTag) {
+  const fontsMatch = stylesXml.match(/<fonts\b[^>]*count="(\d+)"[^>]*>([\s\S]*?)<\/fonts>/);
+  const cellXfsMatch = stylesXml.match(/<cellXfs\b[^>]*count="(\d+)"[^>]*>([\s\S]*?)<\/cellXfs>/);
+
+  if (!fontsMatch || !cellXfsMatch) {
+    return null;
+  }
+
+  const firstFontMatch = fontsMatch[2].match(/<font>[\s\S]*?<\/font>/);
+  const firstFontXml = firstFontMatch
+    ? firstFontMatch[0]
+    : '<font><sz val="12"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>';
+  const fontTagPattern = new RegExp(`<${fontTag}\\b`);
+  const styledFontXml = fontTagPattern.test(firstFontXml)
+    ? firstFontXml
+    : firstFontXml.replace('<font>', `<font><${fontTag}/>`);
+  const fontId = Number(fontsMatch[1]);
+  const styleIndex = Number(cellXfsMatch[1]);
+  let xml = stylesXml.replace(
+    /<fonts\b([^>]*)count="(\d+)"([^>]*)>([\s\S]*?)<\/fonts>/,
+    (match, beforeCount, count, afterCount, content) => (
+      `<fonts${beforeCount}count="${Number(count) + 1}"${afterCount}>${content}${styledFontXml}</fonts>`
+    )
+  );
+
+  xml = xml.replace(
+    /<cellXfs\b([^>]*)count="(\d+)"([^>]*)>([\s\S]*?)<\/cellXfs>/,
+    (match, beforeCount, count, afterCount, content) => (
+      `<cellXfs${beforeCount}count="${Number(count) + 1}"${afterCount}>${content}` +
+      `<xf numFmtId="0" fontId="${fontId}" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>`
+    )
+  );
+
+  return { xml, styleIndex };
+}
+
+function applyCellStyle(sheetXml, cellReferences, styleIndex) {
+  const styleAttribute = `s="${styleIndex}"`;
+  return sheetXml.replace(/<c\b([^>]*\br="([^"]+)"[^>]*)>/g, (match, attributes, reference) => {
+    if (!cellReferences.has(reference)) {
+      return match;
+    }
+    if (/\bs="\d+"/.test(match)) {
+      return match.replace(/\bs="\d+"/, styleAttribute);
+    }
+    return match.replace(/<c\b/, `<c ${styleAttribute}`);
+  });
+}
+
+function getStyledCellReferences(columnIndexes, rowCount) {
+  const references = new Set();
+  columnIndexes.forEach(columnIndex => {
+    const columnName = XLSX.utils.encode_col(columnIndex);
+    for (let rowIndex = 2; rowIndex <= rowCount + 1; rowIndex++) {
+      references.add(`${columnName}${rowIndex}`);
+    }
+  });
+  return references;
+}
+
+function decodeXml(content) {
+  return new TextDecoder().decode(content);
+}
+
+function encodeXml(xml) {
+  return new TextEncoder().encode(xml);
 }
 
 function formatCoordinates(latitude, longitude) {

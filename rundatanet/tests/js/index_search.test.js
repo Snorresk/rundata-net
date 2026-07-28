@@ -284,6 +284,23 @@ testSingleRuleSearch({
 });
 testSingleRuleSearch({
   id: 'inscription_id',
+  operator: 'equal',
+  value: 'Öl 1, Sö Fv1986;218',
+  expectedCount: 2,
+  testName: 'equal operator accepts comma-separated inscription id list',
+  multiField: true,
+});
+testSingleRuleSearch({
+  id: 'inscription_id',
+  operator: 'in_separated_list',
+  value: 'Öl 1',
+  expectedCount: 1,
+  testName: 'search one inscription with list operator',
+  firstResultCheck: 'Öl 1',
+  multiField: true,
+});
+testSingleRuleSearch({
+  id: 'inscription_id',
   operator: 'in_separated_list',
   value: 'Öl 1|Öl 2|Öl 12',
   expectedCount: 3,
@@ -364,6 +381,26 @@ testSingleRuleSearch({
   expectedCount: 385,
   firstResultCheck: 'Öl 1',
   multiField: true,
+});
+testSingleRuleSearch({
+  id: 'inscription_country',
+  field: 'signature_text',
+  operator: 'in',
+  value: 'Öland, Småland',
+  expectedCount: 385,
+  firstResultCheck: 'Öl 1',
+  multiField: true,
+  testName: 'country/province in accepts comma-separated typed labels',
+});
+testSingleRuleSearch({
+  id: 'inscription_country',
+  field: 'signature_text',
+  operator: 'in',
+  value: 'Oland | Sodermanland',
+  expectedCount: 650,
+  firstResultCheck: 'Öl 1',
+  multiField: true,
+  testName: 'country/province in accepts diacritic-free typed labels',
 });
 testSingleRuleSearch({
   id: 'inscription_country',
