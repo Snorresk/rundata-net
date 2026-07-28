@@ -34,7 +34,19 @@ function createMultiselectMock(rightOptions, leftOptions) {
 }
 
 // Override global $ for the module under test
-import { resortDisplayOptions } from '../../runes/js/index_multiselect.js';
+import { getUserSelectedDisplay, resortDisplayOptions } from '../../runes/js/index_multiselect.js';
+
+function createLocalStorageMock(initialValues = {}) {
+  const values = new Map(Object.entries(initialValues));
+  return {
+    get length() {
+      return values.size;
+    },
+    getItem: key => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: key => values.delete(key),
+  };
+}
 
 test('resortDisplayOptions() assigns sequential sortValues, right list first', () => {
   const rightOptions = [
@@ -124,6 +136,21 @@ test('resortDisplayOptions() preserves order after simulated reorder', () => {
   assert.is(sorted[0].value, 'images', 'After sort, images should remain first');
   assert.is(sorted[1].value, 'signature_text', 'After sort, signature_text should remain second');
   assert.is(sorted[2].value, 'transliteration', 'After sort, transliteration should remain third');
+});
+
+test('getUserSelectedDisplay() respects saved display choices without coordinates', () => {
+  global.window = {
+    localStorage: createLocalStorageMock({
+      userSelectedDisplay: JSON.stringify(['signature_text', 'transliteration']),
+    }),
+    matchMedia: () => ({ matches: false }),
+    innerWidth: 1440,
+    document: { documentElement: { clientWidth: 1440 } },
+  };
+
+  const selected = getUserSelectedDisplay();
+
+  assert.equal(selected, ['signature_text', 'transliteration']);
 });
 
 test.run();

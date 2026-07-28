@@ -98,6 +98,48 @@ test('normalizeQueryBuilderRulesForUi() converts legacy inscription ID list rule
   assert.ok(result !== rules, 'Should return a copy of the root object');
 });
 
+test('normalizeQueryBuilderRulesForUi() expands legacy broad runic text rules', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'search_runic_texts',
+        field: 'normalisation_norse',
+        type: 'string',
+        operator: 'contains',
+        value: 'stein',
+        data: { multiField: true },
+        ignoreCase: true,
+        includeSpecialSymbols: false,
+      },
+    ],
+    not: false,
+  };
+
+  const result = normalizeQueryBuilderRulesForUi(rules);
+  const expanded = result.rules[0];
+
+  assert.is(expanded.condition, 'OR');
+  assert.is(expanded.rules.length, 5);
+  assert.equal(
+    expanded.rules.map(rule => rule.id),
+    [
+      'normalization_norse_to_transliteration',
+      'normalization_scandinavian_to_transliteration',
+      'normalization_norse_to_transliteration',
+      'english_translation',
+      'swedish_translation',
+    ]
+  );
+  assert.is(expanded.rules[0].value.normalization, 'stein');
+  assert.is(expanded.rules[1].value.normalization, 'stein');
+  assert.is(expanded.rules[2].value.transliteration, 'stein');
+  assert.is(expanded.rules[3].value, 'stein');
+  assert.is(expanded.rules[4].value, 'stein');
+  assert.is(expanded.rules[0].ignoreCase, true);
+  assert.is(expanded.rules[0].includeSpecialSymbols, false);
+});
+
 test('applyLiveQueryBuilderValuesToRules() copies visible ID and country text into rules', () => {
   const originalDollar = global.$;
   const liveRules = [

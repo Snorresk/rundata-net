@@ -277,6 +277,10 @@ export function normalizeQueryBuilderRulesForUi(rules) {
     return rules;
   }
 
+  if (rules.id === 'search_runic_texts') {
+    return expandLegacyRunicTextsRule(rules);
+  }
+
   const normalized = Array.isArray(rules) ? rules.slice() : { ...rules };
   if (Array.isArray(normalized.rules)) {
     normalized.rules = normalized.rules.map(rule => normalizeQueryBuilderRulesForUi(rule));
@@ -293,6 +297,87 @@ export function normalizeQueryBuilderRulesForUi(rules) {
   }
 
   return normalized;
+}
+
+function copyTextRuleOptions(rule) {
+  const options = {};
+  if (Object.prototype.hasOwnProperty.call(rule, 'ignoreCase')) {
+    options.ignoreCase = !!rule.ignoreCase;
+  }
+  if (Object.prototype.hasOwnProperty.call(rule, 'includeSpecialSymbols')) {
+    options.includeSpecialSymbols = !!rule.includeSpecialSymbols;
+  }
+  return options;
+}
+
+function makeExpandedWordRule(id, field, operator, value, textField, rule) {
+  return {
+    id,
+    field,
+    type: 'string',
+    input: 'text',
+    operator,
+    value: {
+      normalization: textField === 'normalization' ? value : '',
+      transliteration: textField === 'transliteration' ? value : '',
+      names_mode: 'includeAll',
+    },
+    data: { multiField: true },
+    ...copyTextRuleOptions(rule),
+  };
+}
+
+function makeExpandedTranslationRule(id, operator, value, rule) {
+  const options = {};
+  if (Object.prototype.hasOwnProperty.call(rule, 'ignoreCase')) {
+    options.ignoreCase = !!rule.ignoreCase;
+  }
+  return {
+    id,
+    field: id,
+    type: 'string',
+    input: 'text',
+    operator,
+    value,
+    ...options,
+  };
+}
+
+function expandLegacyRunicTextsRule(rule) {
+  const operator = rule.operator || 'contains';
+  const value = Array.isArray(rule.value) ? rule.value.join('|') : (rule.value || '');
+  return {
+    condition: 'OR',
+    rules: [
+      makeExpandedWordRule(
+        'normalization_norse_to_transliteration',
+        'normalization_norse',
+        operator,
+        value,
+        'normalization',
+        rule
+      ),
+      makeExpandedWordRule(
+        'normalization_scandinavian_to_transliteration',
+        'normalisation_scandinavian',
+        operator,
+        value,
+        'normalization',
+        rule
+      ),
+      makeExpandedWordRule(
+        'normalization_norse_to_transliteration',
+        'normalization_norse',
+        operator,
+        value,
+        'transliteration',
+        rule
+      ),
+      makeExpandedTranslationRule('english_translation', operator, value, rule),
+      makeExpandedTranslationRule('swedish_translation', operator, value, rule),
+    ],
+    not: false,
+  };
 }
 
 export function applyLiveQueryBuilderValuesToRules(rules, containerId = 'builder') {
@@ -792,18 +877,6 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
     }),
     prepareAutoComplete('english_translation', dbMap, getHumanName, { optgroup: 'gr_texts', operators: ["contains", "not_contains", "is_empty", 'is_not_empty'] }),
     prepareAutoComplete('swedish_translation', dbMap, getHumanName, { optgroup: 'gr_texts', operators: ["contains", "not_contains", "is_empty", 'is_not_empty'] }),
-    {
-      id: 'search_runic_texts',
-      field: 'normalisation_norse',
-      label: 'Search in runic texts',
-      type: 'string',
-      input: 'text',
-      optgroup: 'gr_texts',
-      data: {
-        multiField: true,
-      },
-      operators: ['contains', 'equal', 'begins_with', 'ends_with'],
-    },
     {
       id: 'has_personal_name',
       label: "Contains names",
