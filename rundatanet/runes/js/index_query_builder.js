@@ -350,6 +350,41 @@ export function getQueryBuilderRulesWithLiveValues(containerId = 'builder') {
   return applyLiveQueryBuilderValuesToRules(rules, containerId);
 }
 
+export function clearRuleValue($rule) {
+  const $container = $rule.find('.rule-value-container');
+
+  $container.find('input:not([type=radio]):not([type=checkbox]), textarea').each(function() {
+    $(this).val('').trigger('input').trigger('change').trigger('keyup');
+  });
+
+  $container.find('select').each(function() {
+    const $select = $(this);
+    if ($select.data('tomSelect') !== undefined) {
+      $select.tomSelect('clear');
+    }
+    $select.val('').trigger('change');
+  });
+
+  const radioGroups = new Set();
+  $container.find('input[type=radio]').each(function() {
+    const name = $(this).attr('name');
+    if (!name || radioGroups.has(name)) {
+      return;
+    }
+
+    radioGroups.add(name);
+    const $group = $container.find(`input[type=radio][name="${name}"]`);
+    const $default = $group.filter(function() {
+      return this.defaultChecked;
+    }).first();
+    const $target = $default.length > 0 ? $default : $group.first();
+    $group.prop('checked', false);
+    $target.prop('checked', true).trigger('change');
+  });
+
+  $container.find('input[type=checkbox]').prop('checked', false).trigger('change');
+}
+
 /**
  * Gets the minimum and maximum values of a numerical field from a data source
  *
@@ -623,14 +658,20 @@ function createWordSearchRule(config) {
     },
     input: function(rule, name) {
       return `
-        <div class="form-group">
-          <div class="input-group mb-3 pt-2">
+        <div class="form-group word-search-rule-value">
+          <div class="input-group mb-3 pt-2 word-search-field-group">
             <span class="input-group-text" id="${name}_normalization_input_span">${input1Label}</span>
             <input type="text" id="${name}_normalizationInput" class="form-control" placeholder="" aria-label="${input1Label}" aria-describedby="${name}_normalization_input_span">
+            <button type="button" class="btn btn-outline-secondary word-search-clear-btn" data-clear-word-input aria-label="Clear normalization" title="Clear normalization">
+              <i class="bi-x-lg"></i>
+            </button>
           </div>
-          <div class="input-group">
+          <div class="input-group word-search-field-group">
             <span class="input-group-text" id="${name}_transliteration_input_span">${input2Label}</span>
             <input type="text" id="${name}_transliterationInput" class="form-control" placeholder="" aria-label="${input2Label}" aria-describedby="${name}_transliteration_input_span">
+            <button type="button" class="btn btn-outline-secondary word-search-clear-btn" data-clear-word-input aria-label="Clear transliteration" title="Clear transliteration">
+              <i class="bi-x-lg"></i>
+            </button>
           </div>
           <div class="mt-2">
             <div class="form-check form-check-inline">
@@ -899,10 +940,13 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
     <div class="rule-filter-container flex-shrink-0"></div>
     <div class="rule-operator-container flex-shrink-0"></div>
     <div class="rule-value-container flex-grow-1 me-2"></div>
+    <button type="button" class="btn btn-sm btn-outline-secondary rule-clear-value-btn flex-shrink-0" data-clear="rule-value" aria-label="Clear rule value" title="Clear value">
+      <i class="bi-x-lg"></i>
+    </button>
     <div class="rule-footer d-flex flex-wrap align-items-center gap-1 ms-auto">
       <div class="d-flex flex-wrap gap-1 rule-actions">
-        <button type="button" class="btn btn-sm btn-danger" data-delete="rule">
-          <i class="${icons.remove_rule}"></i> ${translate("delete_rule")}
+        <button type="button" class="btn btn-sm btn-outline-danger rule-remove-btn" data-delete="rule" aria-label="Remove rule" title="Remove rule">
+          <i class="bi-trash"></i><span class="visually-hidden">${translate("delete_rule")}</span>
         </button>
       </div>
     </div>
@@ -933,6 +977,62 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
     },
   });
 
+  queryBuilder.on('click', '[data-clear="rule-value"]', function(e) {
+    e.preventDefault();
+    const $rule = $(this).closest($.fn.queryBuilder.constructor.selectors.rule_container);
+    clearRuleValue($rule);
+  });
+
+  queryBuilder.on('click', '[data-clear-word-input]', function(e) {
+    e.preventDefault();
+    $(this)
+      .closest('.word-search-field-group')
+      .find('input.form-control')
+      .val('')
+      .trigger('input')
+      .trigger('change')
+      .trigger('keyup');
+  });
+
+  function updateRuleActionLayout(rule) {
+    const isWordSearchRule = rule && rule.filter && [
+      'normalization_norse_to_transliteration',
+      'normalization_scandinavian_to_transliteration',
+    ].includes(rule.filter.id);
+    rule.$el.toggleClass('rule-word-search', !!isWordSearchRule);
+  }
+
+  function updateGroupDeleteButtons() {
+    queryBuilder.find('[data-delete="group"]').each(function() {
+      const $button = $(this);
+      const $group = $button.closest('.rules-group-container');
+      const isRootGroup = $group.attr('id') === `${containerId}_group_0`;
+
+      $button.toggleClass('group-remove-btn', !isRootGroup);
+      if (isRootGroup || $button.data('groupDeleteDecorated')) {
+        return;
+      }
+
+      $button
+        .data('groupDeleteDecorated', true)
+        .removeClass('btn-danger')
+        .addClass('btn-outline-danger')
+        .attr({
+          'aria-label': 'Remove group',
+          title: 'Remove group',
+        })
+        .html('<i class="bi-trash"></i><span class="visually-hidden">Delete group</span>');
+    });
+  }
+
+  updateGroupDeleteButtons();
+
+  const queryBuilderElement = queryBuilder.get(0);
+  if (queryBuilderElement && typeof MutationObserver !== 'undefined') {
+    const groupDeleteObserver = new MutationObserver(updateGroupDeleteButtons);
+    groupDeleteObserver.observe(queryBuilderElement, { childList: true, subtree: true });
+  }
+
   function updateSignatureIdOperatorLabel(rule) {
     if (!rule || !rule.filter || rule.filter.id !== 'inscription_id') {
       return;
@@ -950,12 +1050,12 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
   }
 
   // Event handler when rule is created and rule operator is changed
-  $('#builder').on('afterCreateRuleInput.queryBuilder afterUpdateRuleFilter.queryBuilder afterUpdateRuleOperator.queryBuilder', function(e, rule) {
-    if (rule.filter.id !== 'inscription_id') {
-      return;
+  queryBuilder.on('afterCreateRuleInput.queryBuilder afterUpdateRuleFilter.queryBuilder afterUpdateRuleOperator.queryBuilder', function(e, rule) {
+    updateRuleActionLayout(rule);
+    if (rule && rule.filter && rule.filter.id === 'inscription_id') {
+      updateSignatureIdOperatorLabel(rule);
+      updateSignatureIdOperatorLabelsInDom();
     }
-    updateSignatureIdOperatorLabel(rule);
-    updateSignatureIdOperatorLabelsInDom();
   });
 
   updateSignatureIdOperatorLabelsInDom();

@@ -790,9 +790,70 @@
       .py-6 {
         padding-bottom: 9rem !important;
       }
-      .query-builder [data-delete="rule"],
-      .query-builder [data-delete="group"] {
+      .query-builder > .rules-group-container > .rules-group-header [data-delete="group"] {
         display: none !important;
+      }
+      .query-builder .rule-clear-value-btn,
+      .query-builder .rule-remove-btn,
+      .query-builder .group-remove-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        line-height: 1;
+      }
+      .query-builder .rule-clear-value-btn {
+        color: #6c757d;
+        border-color: #ced4da;
+        background-color: #fff;
+      }
+      .query-builder .rule-clear-value-btn:hover,
+      .query-builder .rule-clear-value-btn:focus {
+        color: #343a40;
+        border-color: #adb5bd;
+        background-color: #f8f9fa;
+      }
+      .query-builder .rule-remove-btn,
+      .query-builder .group-remove-btn {
+        color: #dc3545;
+        border-color: #f1aeb5;
+        background-color: #fff;
+      }
+      .query-builder .rule-remove-btn:hover,
+      .query-builder .rule-remove-btn:focus,
+      .query-builder .group-remove-btn:hover,
+      .query-builder .group-remove-btn:focus {
+        color: #fff;
+        border-color: #dc3545;
+        background-color: #dc3545;
+      }
+      .query-builder .rule-word-search > .rule-clear-value-btn {
+        display: none;
+      }
+      .query-builder .word-search-rule-value {
+        min-width: 0;
+      }
+      .query-builder .word-search-field-group .form-control {
+        min-width: 0;
+      }
+      .query-builder .word-search-clear-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 2rem;
+        width: 2rem;
+        padding: 0;
+        color: #6c757d;
+        border-color: #ced4da;
+        background-color: #fff;
+      }
+      .query-builder .word-search-clear-btn:hover,
+      .query-builder .word-search-clear-btn:focus {
+        color: #343a40;
+        border-color: #adb5bd;
+        background-color: #f8f9fa;
       }
       .query-builder .group-actions [data-add="rule"],
       .query-builder .group-actions [data-add="group"] {
@@ -909,6 +970,10 @@
 
         .query-builder .rule-footer {
           margin-left: 0 !important;
+          margin-top: 6px;
+        }
+
+        .query-builder .rule-clear-value-btn {
           margin-top: 6px;
         }
 
@@ -1115,7 +1180,7 @@
           <button type="button" class="btn btn-default clip" id="btnOhakeCapital">Ô</button>
         </div>
         <button type="button" class="btn btn-success px-4" id="btnSearch">Search</button>
-        <button type="button" class="btn btn-danger" id="btnResetSearch">Delete search</button>
+        <button type="button" class="btn btn-danger" id="btnResetSearch">Reset search</button>
         <button type="button" class="btn btn-default" id="btnOpenSearchParameters" data-bs-toggle="modal" data-bs-target="#containerRuleIo">Search parameters</button>
         <button type="button" class="btn btn-default" id="btnOpenImportId" data-bs-toggle="modal" data-bs-target="#modalResultsIo" data-results-mode="import">Import ID</button>
         <button type="button" class="btn btn-default" id="btnOpenExportResults" data-bs-toggle="modal" data-bs-target="#modalResultsIo" data-results-mode="export">Export</button>
@@ -1367,7 +1432,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260723-country-province-autocomplete-3"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260728-visible-export-1"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -1381,6 +1446,7 @@ let gViewModel = null; // Global view model for the runic inscriptions
 let gExportInProgress = false;
 let gTranslationOccurrenceCount = null;
 let gSearchHintMessage = null;
+let gActiveResultRules = null;
 const INCLUDE_SYMBOLS_HINT = 'Your query includes symbols. To search symbols, enable the "Include symbols" filter.';
 
 function hideAiAssistantAlert() {
@@ -1831,11 +1897,41 @@ function summarizeAiSearchResults(results, rules) {
   return lines.join('\n');
 }
 
+function cloneSearchRulesForExport(rules) {
+  if (rules === null || rules === undefined) {
+    return null;
+  }
+  return JSON.parse(JSON.stringify(rules));
+}
+
+function getVisibleResultInscriptionsForExport() {
+  if (!gViewModel) {
+    return [];
+  }
+
+  try {
+    const tree = $('#jstree').jstree(true);
+    const root = tree ? tree.get_node('#') : null;
+    const visibleIds = root && Array.isArray(root.children) ? root.children : [];
+
+    if (visibleIds.length > 0) {
+      return visibleIds
+        .map(id => gViewModel.getInscriptionData(parseInt(id, 10)))
+        .filter(Boolean);
+    }
+  } catch (error) {
+    console.warn('Could not read visible tree results for export; falling back to active results.', error);
+  }
+
+  return Array.from(gViewModel.getActiveInscriptions());
+}
+
 function performSearchWithRules(rules) {
   syncMiniBuilderFromRules(rules);
   if (shouldSuggestIncludeSymbols(rules)) {
     gSearchHintMessage = INCLUDE_SYMBOLS_HINT;
     gTranslationOccurrenceCount = null;
+    gActiveResultRules = cloneSearchRulesForExport(rules);
     gViewModel.setSearchResults([]);
     return { results: [], blockedBySymbolHint: true };
   }
@@ -1844,6 +1940,7 @@ function performSearchWithRules(rules) {
   const hasTranslationWordSearch = getTranslationSearchTokenCount(rules) > 0;
   const results = doSearch(rules, gViewModel.getAllInscriptions().values());
   gTranslationOccurrenceCount = hasTranslationWordSearch ? getTranslationOccurrenceCount(results) : null;
+  gActiveResultRules = cloneSearchRulesForExport(rules);
   gViewModel.setSearchResults(results);
   return { results, blockedBySymbolHint: false };
 }
@@ -2654,6 +2751,7 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('btnResetSearch').addEventListener('click', function() {
     gSearchHintMessage = null;
     gTranslationOccurrenceCount = null;
+    gActiveResultRules = null;
     gViewModel.clearSearchResults();
     $(`#${inpQueryBuilder}`).queryBuilder('reset');
     const miniSearchInput = document.getElementById('miniSearchInput');
@@ -2748,43 +2846,51 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
     gExportInProgress = true;
-    showLoading();
-
-    // Create a mapping of column names to human-readable names.
-    // Export coordinates as two dedicated columns, not the combined display field.
-    const userSelectedFields = getUserSelectedDisplay().filter(field => field !== 'coordination');
-    const columns = userSelectedFields.concat(['latitude', 'present_latitude']);
-    const columnMap = {};
-
-    columns.forEach(column => {
-      if (column === 'latitude') {
-        columnMap[column] = 'Oldest known coordinates';
-      } else if (column === 'present_latitude') {
-        columnMap[column] = 'Current coordinates';
-      } else {
-        columnMap[column] = getHumanName(column);
-      }
-    });
-
-    // Get the current search rules to include in the export
-    const searchRules = getQueryBuilderRulesWithLiveValues(inpQueryBuilder);
-    // Strip functions from rules — QueryBuilder includes filter.input as a function
-    // for custom filters, and postMessage can't clone functions.
-    const cloneableRules = JSON.parse(JSON.stringify(searchRules));
-
-    // Create worker and send data
-    const exportWorker = new Worker("{% static 'runes/export.worker.min.js' %}");
-    exportWorker.onmessage = onExportWorkerMessage;
-    exportWorker.onerror = onExportError;
-
+    let exportWorker = null;
     try {
+      showLoading();
+
+      // Create a mapping of column names to human-readable names.
+      // Export coordinates as two dedicated columns, not the combined display field.
+      const userSelectedFields = getUserSelectedDisplay().filter(field => field !== 'coordination');
+      const columns = userSelectedFields.concat(['latitude', 'present_latitude']);
+      const columnMap = {};
+
+      columns.forEach(column => {
+        if (column === 'latitude') {
+          columnMap[column] = 'Oldest known coordinates';
+        } else if (column === 'present_latitude') {
+          columnMap[column] = 'Current coordinates';
+        } else {
+          columnMap[column] = getHumanName(column);
+        }
+      });
+
+      // Export follows the current visible result set, not unsaved edits in
+      // the QueryBuilder.  Keep the parameter sheet tied to the last executed
+      // search that produced those visible results.
+      const inscriptionsForExport = getVisibleResultInscriptionsForExport();
+      const searchRules = gActiveResultRules;
+      // Strip functions from rules — QueryBuilder includes filter.input as a function
+      // for custom filters, and postMessage can't clone functions.
+      const cloneableRules = searchRules == null
+        ? searchRules
+        : JSON.parse(JSON.stringify(searchRules));
+
+      // Create worker and send data
+      exportWorker = new Worker("{% static 'runes/export.worker.min.js' %}");
+      exportWorker.onmessage = onExportWorkerMessage;
+      exportWorker.onerror = onExportError;
+
       exportWorker.postMessage({
-        inscriptions: Array.from(gViewModel.getActiveInscriptions().values()),
+        inscriptions: inscriptionsForExport,
         columnMap: columnMap,
         rules: cloneableRules
       });
     } catch (error) {
-      exportWorker.terminate();
+      if (exportWorker) {
+        exportWorker.terminate();
+      }
       bootstrap.Modal.getInstance(document.getElementById('modalResultsIo'))?.hide();
       onExportError(error);
     }
