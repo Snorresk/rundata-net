@@ -1330,10 +1330,6 @@
 
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Close</button>
-        </div>
-
       </div>
     </div>
   </div>
@@ -1349,8 +1345,7 @@
         <div class="modal-body">
           <div class="row" id="resultsExportSection">
             <div class="col-xs-offset-1 col-xs-10">
-              <p>Export search results in Excel format by clicking <em>Export</em> button bellow.<br>Read more about exporting <a href="https://rundata-net.readthedocs.io/en/latest/getting-started/user_guide.html#importing-and-exporting-results">in the documentation</a>.</p>
-              <button type="button" class="col-xs-3 btn btn-default" id="btnExportResults"><b>Export search results</b></button>
+              <p>Export the current visible search results. Use Excel for structured data, or highlighted text for a readable HTML file with search matches in red.<br>Read more about exporting <a href="https://rundata-net.readthedocs.io/en/latest/getting-started/user_guide.html#importing-and-exporting-results">in the documentation</a>.</p>
             </div>
           </div>
           <div class="row" id="resultsIoDivider">
@@ -1370,8 +1365,9 @@
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Close</button>
+        <div class="modal-footer" id="resultsIoFooter">
+          <button type="button" class="btn btn-success" id="btnExportResults"><b>Export Excel</b></button>
+          <button type="button" class="btn btn-primary" id="btnExportHighlightedResults"><b>Export highlighted text</b></button>
         </div>
 
   </section>
@@ -1924,6 +1920,229 @@ function getVisibleResultInscriptionsForExport() {
   }
 
   return Array.from(gViewModel.getActiveInscriptions());
+}
+
+function escapeHtmlForExportDocument(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function absolutizeHighlightedExportUrls(container) {
+  container.querySelectorAll('a[href]').forEach(link => {
+    const href = link.getAttribute('href');
+    if (!href || href.startsWith('blob:') || href.startsWith('data:') || href.startsWith('mailto:')) {
+      return;
+    }
+    try {
+      link.setAttribute('href', new URL(href, window.location.href).href);
+    } catch (error) {
+      // Keep the original URL if the browser cannot resolve it.
+    }
+  });
+
+  container.querySelectorAll('img[src]').forEach(image => {
+    const src = image.getAttribute('src');
+    if (!src || src.startsWith('data:')) {
+      return;
+    }
+    try {
+      image.setAttribute('src', new URL(src, window.location.href).href);
+    } catch (error) {
+      // Keep the original source if the browser cannot resolve it.
+    }
+  });
+}
+
+function downloadExportBlob(blob, filename) {
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function getHighlightedExportSignature(inscription) {
+  return String(
+    inscription?.signature_header
+    || inscription?.signature_display
+    || inscription?.signature_text
+    || inscription?.signature
+    || ''
+  ).trim();
+}
+
+function removeInlineSignatureFromHighlightedArticle(article, signature) {
+  const firstElement = article.firstElementChild;
+  if (!firstElement) {
+    return;
+  }
+
+  if (firstElement.matches('h4') && firstElement.textContent.trim() === 'Inscription ID') {
+    const signatureValue = firstElement.nextElementSibling;
+    firstElement.remove();
+    if (signatureValue && signatureValue.matches('span')) {
+      signatureValue.remove();
+    }
+    while (article.firstChild && article.firstChild.nodeType === Node.TEXT_NODE && !article.firstChild.textContent.trim()) {
+      article.firstChild.remove();
+    }
+    if (article.firstElementChild && article.firstElementChild.matches('br')) {
+      article.firstElementChild.remove();
+    }
+    return;
+  }
+
+  if (firstElement.matches('span') && firstElement.textContent.trim() === signature) {
+    const nextSibling = firstElement.nextSibling;
+    firstElement.remove();
+    if (nextSibling && nextSibling.nodeName === 'BR') {
+      nextSibling.remove();
+    }
+  }
+}
+
+function normalizeHighlightedExportArticles(container, inscriptions) {
+  Array.from(container.querySelectorAll('article.inscription-section')).forEach((article, index) => {
+    const signature = getHighlightedExportSignature(inscriptions[index]) || `Result ${index + 1}`;
+    removeInlineSignatureFromHighlightedArticle(article, signature);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'inscription-section';
+
+    const signatureTitle = document.createElement('h2');
+    signatureTitle.className = 'export-signature-title';
+    signatureTitle.textContent = signature;
+    wrapper.appendChild(signatureTitle);
+
+    while (article.firstChild) {
+      wrapper.appendChild(article.firstChild);
+    }
+
+    article.replaceWith(wrapper);
+  });
+}
+
+function buildHighlightedResultsHtmlDocument(inscriptions) {
+  const exportContainer = document.createElement('div');
+  const markup = inscriptions.length > 0
+    ? inscriptions2markup(inscriptions).join('\n')
+    : '<p>No visible results to export.</p>';
+  exportContainer.innerHTML = markup;
+  normalizeHighlightedExportArticles(exportContainer, inscriptions);
+  absolutizeHighlightedExportUrls(exportContainer);
+
+  const generatedAt = new Date().toLocaleString();
+  const resultCount = inscriptions.length;
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Rundata-net highlighted search results</title>
+  <style>
+    body {
+      margin: 24px;
+      color: #222;
+      font-family: "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", "DejaVu Sans", Verdana, Helvetica, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.45rem;
+    }
+    .export-meta {
+      margin: 0 0 1.25rem;
+      color: #555;
+      font-size: 0.9rem;
+    }
+    .inscription-section {
+      border-bottom: 1px solid #999;
+      padding: 0.65rem 0;
+      page-break-inside: avoid;
+    }
+    .inscription-section:first-of-type {
+      border-top: 1px solid #999;
+    }
+    .export-signature-title {
+      margin: 0 0 0.35rem;
+      font-size: 1.1rem;
+      font-weight: bold;
+    }
+    h4 {
+      margin: 0.5rem 0 0.15rem;
+      font-size: 0.95rem;
+    }
+    .transliteration {
+      font-weight: bold;
+    }
+    .normalization {
+      font-style: italic;
+      font-weight: normal;
+    }
+    .highlight {
+      color: #d00000;
+      font-weight: bold;
+    }
+    table.crosses {
+      border-collapse: collapse;
+      margin: 0.4rem 0 0.6rem 1.5em;
+      text-align: center;
+    }
+    table.crosses td,
+    table.crosses th {
+      border: 1px solid #999;
+      padding: 0.25em;
+    }
+    span.null {
+      color: #999;
+      font-weight: bold;
+    }
+    img {
+      max-width: 180px;
+      height: auto;
+    }
+    a {
+      color: #0645ad;
+    }
+  </style>
+</head>
+<body>
+  <h1>Rundata-net highlighted search results</h1>
+  <p class="export-meta">Generated on ${escapeHtmlForExportDocument(generatedAt)}. Results: ${resultCount}.</p>
+  <main>
+${exportContainer.innerHTML}
+  </main>
+</body>
+</html>`;
+}
+
+function exportHighlightedResultsHtml() {
+  if (gExportInProgress) {
+    return;
+  }
+  gExportInProgress = true;
+
+  try {
+    showLoading('Preparing highlighted text export.');
+    const inscriptionsForExport = getVisibleResultInscriptionsForExport();
+    const html = buildHighlightedResultsHtmlDocument(inscriptionsForExport);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    downloadExportBlob(blob, 'rundata-net_highlighted_results.html');
+    closeResultsIoModal();
+  } catch (error) {
+    onExportError(error);
+  } finally {
+    gExportInProgress = false;
+    hideLoading();
+  }
 }
 
 function performSearchWithRules(rules) {
@@ -2790,6 +3009,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const resultsImportSection = document.getElementById('resultsImportSection');
   const resultsIoDivider = document.getElementById('resultsIoDivider');
   const resultsIoModal = document.getElementById('modalResultsIo');
+  const resultsIoFooter = document.getElementById('resultsIoFooter');
 
   function setResultsIoMode(mode) {
     const selectedMode = mode || 'both';
@@ -2798,6 +3018,7 @@ document.addEventListener('DOMContentLoaded', function() {
       resultsExportSection.style.display = 'none';
       resultsImportSection.style.display = '';
       resultsIoDivider.style.display = 'none';
+      resultsIoFooter.style.display = 'none';
       return;
     }
     if (selectedMode === 'export') {
@@ -2805,12 +3026,14 @@ document.addEventListener('DOMContentLoaded', function() {
       resultsExportSection.style.display = '';
       resultsImportSection.style.display = 'none';
       resultsIoDivider.style.display = 'none';
+      resultsIoFooter.style.display = '';
       return;
     }
     resultsIoTitle.textContent = 'Export search results, import signatures';
     resultsExportSection.style.display = '';
     resultsImportSection.style.display = '';
     resultsIoDivider.style.display = '';
+    resultsIoFooter.style.display = '';
   }
 
   resultsIoModal.addEventListener('show.bs.modal', function(event) {
@@ -2840,6 +3063,7 @@ document.addEventListener('DOMContentLoaded', function() {
     $(`#${inpQueryBuilder}`).queryBuilder('setRules', rules, true);
     syncMiniBuilderFromRules(rules);
   });
+  document.getElementById('btnExportHighlightedResults').addEventListener('click', exportHighlightedResultsHtml);
   // Export Excel button handler
   document.getElementById('btnExportResults').addEventListener('click', function() {
     if (gExportInProgress) {
@@ -2878,7 +3102,7 @@ document.addEventListener('DOMContentLoaded', function() {
         : JSON.parse(JSON.stringify(searchRules));
 
       // Create worker and send data
-      exportWorker = new Worker("{% static 'runes/export.worker.min.js' %}");
+      exportWorker = new Worker("{% static 'runes/export.worker.min.js' %}?v=20260728-export-format-2");
       exportWorker.onmessage = onExportWorkerMessage;
       exportWorker.onerror = onExportError;
 
