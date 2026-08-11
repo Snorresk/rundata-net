@@ -194,7 +194,61 @@ test('applyLiveQueryBuilderValuesToRules() copies visible ID and country text in
 
     const result = applyLiveQueryBuilderValuesToRules(rules, 'builder');
     assert.is(result.rules[0].value, 'Öl 1, Sö Fv1986;218');
+    assert.is(result.rules[0].operator, 'equal');
     assert.is(result.rules[1].value, 'Öland, Denmark');
+  } finally {
+    global.$ = originalDollar;
+  }
+});
+
+test('applyLiveQueryBuilderValuesToRules() preserves inscription ID contains operator', () => {
+  const originalDollar = global.$;
+  const liveRules = [
+    { filter: 'inscription_id', value: 'Sl' },
+  ];
+
+  global.$ = function(selectorOrElement) {
+    if (selectorOrElement === '#builder .rule-container') {
+      return {
+        each(callback) {
+          liveRules.forEach((rule, index) => callback.call(rule, index, rule));
+        },
+      };
+    }
+
+    if (selectorOrElement && typeof selectorOrElement === 'object') {
+      return {
+        find(selector) {
+          if (selector.includes('.rule-filter-container')) {
+            return { val: () => selectorOrElement.filter };
+          }
+          if (selector.includes('.rule-value-container')) {
+            return { val: () => selectorOrElement.value };
+          }
+          return { val: () => '' };
+        },
+      };
+    }
+
+    return originalDollar(selectorOrElement);
+  };
+
+  try {
+    const rules = {
+      condition: 'AND',
+      rules: [
+        {
+          id: 'inscription_id',
+          field: 'signature_text',
+          operator: 'contains',
+          value: '',
+        },
+      ],
+    };
+
+    const result = applyLiveQueryBuilderValuesToRules(rules, 'builder');
+    assert.is(result.rules[0].operator, 'contains');
+    assert.is(result.rules[0].value, 'Sl');
   } finally {
     global.$ = originalDollar;
   }

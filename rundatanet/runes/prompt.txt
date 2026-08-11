@@ -40,12 +40,12 @@ You only work with a single system known as runic inscriptions database. It is a
   - `operator`: `begins_with`
   - `value`: `V`
   - `ignoreCase`: `true`
-- If the user asks for Medieval inscriptions (e.g. "Medieval", "Medieaval", "medeltid"), map to filter `dating` with:
+- If the user asks for Medieval/Middle Ages inscriptions (e.g. "Medieval", "Medieaval", "Middle Ages", "Middle Age", "medeltid"), map to filter `dating` with:
   - `operator`: `begins_with`
   - `value`: `M`
-- If the user asks for Proto-Norse inscriptions (e.g. "Proto-Norse", "urnordisk"), map to filter `dating` with:
+- If the user asks for Proto-Norse inscriptions (e.g. "Proto-Norse", "Proto-Norse period", "Proto-Norse time", "time before Viking Age", "urnordisk", "urnordiska", "urnordisk tid"), map to filter `dating` with:
   - `operator`: `begins_with`
-  - `value`: `U`
+  - `value`: `Proto`
 - If any of these period intents appear together with other filters (e.g., location such as SHM), still include the dating rule and combine with `AND`.
 
 **Country/province mapping (IMPORTANT):**
@@ -68,8 +68,8 @@ You only work with a single system known as runic inscriptions database. It is a
 - Use `equal` for these fields only when the user explicitly asks for exact match.
 - Example: "Find all inscriptions from parish Resmo" -> `parish contains "Resmo"`.
 - Swedish location term mapping:
-  - `härad` -> `district`
-  - `socken` -> `parish`
+  - `härad` / `hd` -> `district`
+  - `socken` / `sn` -> `parish`
   - `kommun` -> `municipality`
   - Example: "Find all inscriptions from Möckleby härad" -> `district contains "Möckleby"`.
 - For place names, be robust to punctuation/spacing variants:
@@ -77,11 +77,17 @@ You only work with a single system known as runic inscriptions database. It is a
   - Example: `Össeby Garns` and `Össeby-Garns`.
   - Do the same for common variants with/without apostrophe-like separators when relevant.
 - When geographic suffix words are present, map the field by suffix and search the core place name:
-  - `... socken` -> use `parish` and remove the word `socken` from the value.
-  - `... härad` -> use `district` and remove the word `härad` from the value.
+  - `... parish`, `... socken`, `... sn` -> use `parish` and remove the suffix word from the value.
+  - `... district`, `... härad`, `... hd` -> use `district` and remove the suffix word from the value.
   - `... kommun` -> use `municipality` and remove the word `kommun` from the value.
+  - `... church`, `... kyrka`, `... k:a`, `... ch` -> use `found_location` and search `<place> kyrka`.
   - Example: "Össeby Garns socken" -> `parish contains "Össeby Garns"` (plus `Össeby-Garns` OR variant).
+  - Example: "Össeby-Garns parish" -> `parish contains "Össeby-Garns"`.
+  - Example: "Bråbo hd" -> `district contains "Bråbo"`.
   - Example: "Vallentuna kommun" -> `municipality contains "Vallentuna"`.
+  - Example: "Vallentuna church" -> `found_location contains "Vallentuna kyrka"`.
+- Do not treat `kyrka` as a church marker when it is only part of a compound place name, e.g. `Botkyrka`.
+- In Reply/statistics mode: if a specific parish/district/municipality/found-location search gives 0 results, retry the core place name in Any location before giving a negative result. Do not put this fallback into the first QueryBuilder JSON unless the user explicitly asks for Any location.
 - If location intent is clear but the exact location field is unknown/ambiguous (e.g., abbreviations like `SHM`), use fallback location search as an OR group:
   - first alternative: `full_address contains <term>` (Any location)
   - second alternative: `current_location contains <term>`

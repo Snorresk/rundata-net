@@ -115,6 +115,20 @@ def _make_dating_rule(prefix: str) -> dict[str, Any]:
     }
 
 
+def _extract_dating_prefix_from_text(user_text: str) -> Optional[str]:
+    text = (user_text or "").lower()
+    proto_norse_pattern = r"proto[\s\-\u2010-\u2015]*norse"
+    if re.search(r"\b(?:time\s+)?before\s+(?:the\s+)?viking\s+age\b|\bpre[\s-]?viking\b|\bföre\s+vikingatid\w*\b|\bfore\s+vikingatid\w*\b", text):
+        return "Proto"
+    if re.search(rf"\b({proto_norse_pattern}|urnordisk\w*|early\s+norse)\b", text):
+        return "Proto"
+    if re.search(r"\b(viking|vikingatid)\w*\b", text):
+        return "V"
+    if re.search(r"\b(medieval|medieaval|medievel|medeltid|middle[-\s]+ages?)\w*\b", text):
+        return "M"
+    return None
+
+
 def _make_current_location_rule(value: str) -> dict[str, Any]:
     return {
         "id": "current_location",
@@ -150,6 +164,22 @@ def _make_inscription_id_rule(signatures: list[str]) -> dict[str, Any]:
         "input": "text",
         "operator": "in",
         "value": "|".join(signatures),
+        "data": {
+            "multiField": True,
+        },
+        "ignoreCase": True,
+        "includeSpecialSymbols": False,
+    }
+
+
+def _make_partial_inscription_id_rule(signature_parts: list[str]) -> dict[str, Any]:
+    return {
+        "id": "inscription_id",
+        "field": "signature_text",
+        "type": "string",
+        "input": "text",
+        "operator": "contains",
+        "value": "|".join(signature_parts),
         "data": {
             "multiField": True,
         },
@@ -384,7 +414,7 @@ def _clean_location_value(value: str) -> str:
     cleaned = (value or "").strip(" .,!?:;\"'()[]{}")
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     cleaned = re.sub(
-        r"\b(kommun|socken|härad|harad|kyrka|church|county|municipality|parish|district)\b",
+        r"\b(kommun|socken|sn|härad|harad|hd|kyrka|k:a|ch|church|county|municipality|parish|district)\b",
         "",
         cleaned,
         flags=re.IGNORECASE,
@@ -616,6 +646,10 @@ def _looks_like_style_location_value(value: Any) -> bool:
     )
 
 
+def _looks_like_dating_period_location_value(value: Any) -> bool:
+    return _extract_dating_prefix_from_text(str(value or "")) is not None
+
+
 def _extract_location_terms(user_text: str) -> list[str]:
     text = _strip_aligned_word_spelling_clauses(user_text or "")
     terms: list[str] = []
@@ -680,6 +714,8 @@ def _extract_location_terms(user_text: str) -> list[str]:
             raw = match.group(1).strip()
             # If a generic capture includes an inner "from/från", keep the trailing place.
             raw = re.split(r"\b(?:från|from)\b", raw, flags=re.IGNORECASE)[-1].strip()
+            if _looks_like_dating_period_location_value(raw):
+                continue
             token_list = raw.split()
             cut_idx = None
             for idx, token in enumerate(token_list):
@@ -699,6 +735,8 @@ def _extract_location_terms(user_text: str) -> list[str]:
                 continue
             if _looks_like_style_location_value(cleaned):
                 continue
+            if _looks_like_dating_period_location_value(cleaned):
+                continue
             if _term_maps_to_country_or_province(cleaned):
                 continue
             if any(cleaned.lower().startswith(prefix) for prefix in blocked_location_starts):
@@ -717,10 +755,16 @@ def _extract_specific_location_constraints(user_text: str) -> list[dict[str, str
     text = user_text or ""
     constraints: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
+    place_chars = r"A-Za-zÅÄÖåäöÉéÜüÆæØøÞþÐð\-\u2010-\u2015 "
     patterns = [
-        ("parish", "parish", r"\b(?:parish|socken)\s+([A-Za-zÅÄÖåäöÉéÜü\- ]{2,})"),
-        ("district", "district", r"\b(?:district|härad|harad)\s+([A-Za-zÅÄÖåäöÉéÜü\- ]{2,})"),
-        ("municipality", "municipality", r"\b(?:municipality|kommun)\s+([A-Za-zÅÄÖåäöÉéÜü\- ]{2,})"),
+        ("found_location", "found_location", rf"\b(?:church|kyrka|k:a|ch\.?)\s+([{place_chars}]{{2,}})", "church_prefix"),
+        ("found_location", "found_location", rf"\b([{place_chars}]{{2,}}?)\s+(?:church|kyrka|k:a|ch\.?)\b", "church_suffix"),
+        ("parish", "parish", rf"\b(?:parish|socken|sn\.?)\s+([{place_chars}]{{2,}})"),
+        ("parish", "parish", rf"\b([{place_chars}]{{2,}}?)\s+(?:parish|socken|sn\.?)\b"),
+        ("district", "district", rf"\b(?:district|härad|harad|hd\.?)\s+([{place_chars}]{{2,}})"),
+        ("district", "district", rf"\b([{place_chars}]{{2,}}?)\s+(?:district|härad|harad|hd\.?)\b"),
+        ("municipality", "municipality", rf"\b(?:municipality|kommun)\s+([{place_chars}]{{2,}})"),
+        ("municipality", "municipality", rf"\b([{place_chars}]{{2,}}?)\s+(?:municipality|kommun)\b"),
     ]
     stop_words = {
         "which",
@@ -746,9 +790,17 @@ def _extract_specific_location_constraints(user_text: str) -> list[dict[str, str
         "norse",
         "urnordisk",
     }
-    for rule_id, field, pattern in patterns:
+    for pattern_def in patterns:
+        rule_id, field, pattern = pattern_def[:3]
+        pattern_kind = pattern_def[3] if len(pattern_def) > 3 else ""
         for match in re.finditer(pattern, text, flags=re.IGNORECASE):
             raw = match.group(1).strip()
+            # Suffix forms such as "Find inscriptions from Motala municipality"
+            # naturally capture the whole preceding phrase. Keep only the
+            # explicit place name after the last location preposition.
+            raw = re.split(r"\b(?:från|from|i|in)\b", raw, flags=re.IGNORECASE)[-1].strip()
+            if _looks_like_dating_period_location_value(raw):
+                continue
             token_list = raw.split()
             cut_idx = None
             for idx, token in enumerate(token_list):
@@ -760,12 +812,49 @@ def _extract_specific_location_constraints(user_text: str) -> list[dict[str, str
             cleaned = _clean_location_value(raw)
             if len(cleaned) < 2:
                 continue
+            if _looks_like_dating_period_location_value(cleaned):
+                continue
+            if pattern_kind.startswith("church"):
+                cleaned = f"{cleaned} kyrka"
             key = (rule_id, cleaned.lower())
             if key in seen:
                 continue
             seen.add(key)
             constraints.append({"id": rule_id, "field": field, "value": cleaned})
     return constraints
+
+
+def _specific_location_value_keys(items: list[dict[str, str]]) -> set[str]:
+    keys: set[str] = set()
+    for item in items:
+        value = str(item.get("value") or "").strip()
+        if not value:
+            continue
+        keys.add(_fold_text(value))
+        cleaned = _clean_location_value(value)
+        if cleaned:
+            keys.add(_fold_text(cleaned))
+    return keys
+
+
+def _matches_specific_location_value(value: str, items: list[dict[str, str]]) -> bool:
+    folded_value = _fold_text(value)
+    if not folded_value:
+        return False
+    for key in _specific_location_value_keys(items):
+        if folded_value == key or folded_value.startswith(f"{key} "):
+            return True
+    return False
+
+
+def _make_any_location_q(value: str) -> Q:
+    return (
+        Q(found_location__icontains=value)
+        | Q(parish__icontains=value)
+        | Q(district__icontains=value)
+        | Q(municipality__icontains=value)
+        | Q(current_location__icontains=value)
+    )
 
 
 def _extract_lost_constraint(user_text: str) -> Optional[int]:
@@ -2897,13 +2986,7 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
         )
         root = _append_and_constraint(root, name_rule)
 
-    dating_prefix = None
-    if re.search(r"\b(viking|vikingatid)\w*\b", text):
-        dating_prefix = "V"
-    elif re.search(r"\b(proto[-\s]?norse|urnordisk)\w*\b", text):
-        dating_prefix = "U"
-    elif re.search(r"\b(medieval|medieaval|medievel|medeltid)\w*\b", text):
-        dating_prefix = "M"
+    dating_prefix = _extract_dating_prefix_from_text(user_text)
 
     if dating_prefix and not _has_dating_prefix(root, dating_prefix):
         root = _enforce_dating_prefix(root, dating_prefix)
@@ -2917,7 +3000,16 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
     if country_codes:
         root = _enforce_inscription_country_codes(root, country_codes)
 
-    for item in _extract_specific_location_constraints(user_text):
+    specific_location_constraints = _extract_specific_location_constraints(user_text)
+    if specific_location_constraints:
+        specific_location_values = _specific_location_value_keys(specific_location_constraints)
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") in {"full_address", "found_location", "current_location"}
+            and _fold_text(_clean_location_value(str(rule.get("value") or ""))) in specific_location_values,
+        )
+
+    for item in specific_location_constraints:
         if not _has_location_value(root, (item["id"],), item["value"]):
             root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
 
@@ -3068,13 +3160,7 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     for item in _extract_rune_type_constraints(user_text):
         rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
 
-    dating_prefix = None
-    if re.search(r"\b(viking|vikingatid)\w*\b", text):
-        dating_prefix = "V"
-    elif re.search(r"\b(proto[-\s]?norse|urnordisk)\w*\b", text):
-        dating_prefix = "U"
-    elif re.search(r"\b(medieval|medieaval|medievel|medeltid)\w*\b", text):
-        dating_prefix = "M"
+    dating_prefix = _extract_dating_prefix_from_text(user_text)
 
     if dating_prefix:
         rules.append(_make_dating_rule(dating_prefix))
@@ -3089,7 +3175,10 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
         and _has_explicit_inscription_id_list_intent(user_text, inscription_id_candidates)
         and not _extract_style_query_constraints(user_text)
     ):
-        rules.append(_make_inscription_id_rule(inscription_id_candidates))
+        if all(_signature_candidate_has_known_prefix(candidate) for candidate in inscription_id_candidates):
+            rules.append(_make_inscription_id_rule(inscription_id_candidates))
+        else:
+            rules.append(_make_partial_inscription_id_rule(inscription_id_candidates))
         has_inscription_id_rule = True
 
     country_codes = _extract_inscription_country_codes(user_text)
@@ -3179,7 +3268,8 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     for full_personal_name in _extract_full_personal_names(user_text):
         rules.append(_make_full_personal_name_rule(full_personal_name, rune_spelling))
 
-    for item in _extract_specific_location_constraints(user_text):
+    specific_location_constraints = _extract_specific_location_constraints(user_text)
+    for item in specific_location_constraints:
         rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
 
     for item in _extract_material_constraints(user_text):
@@ -3212,6 +3302,8 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
 
     for location_term in _extract_location_terms(user_text):
         if location_term.lower() == "shm":
+            continue
+        if _matches_specific_location_value(location_term, specific_location_constraints):
             continue
         rules.append(_make_full_address_rule(location_term))
 
@@ -3363,6 +3455,23 @@ def _is_simple_deterministic_query(user_text: str, fallback_rules: Optional[str]
             "",
             text,
         )
+    specific_location_constraints = _extract_specific_location_constraints(user_text)
+    if specific_location_constraints:
+        for item in specific_location_constraints:
+            value = str(item.get("value") or "").lower()
+            if value:
+                text = re.sub(re.escape(value), "", text)
+                text = re.sub(re.escape(value.replace("-", " ")), "", text)
+                text = re.sub(re.escape(value.replace(" ", "-")), "", text)
+            cleaned_value = _clean_location_value(value)
+            if cleaned_value:
+                text = re.sub(re.escape(cleaned_value.lower()), "", text)
+        text = re.sub(
+            r"\b(?:parish|socken|sn|district|härad|harad|hd|municipality|kommun|"
+            r"church|kyrka|k:a|ch|from|från|fran|in|i|inscriptions?|inskrifter|find|hitta|all|alla|show|visa)\b",
+            "",
+            text,
+        )
     if _extract_cross_form_constraints(user_text):
         for request in _extract_cross_form_requests(user_text):
             form = str(request.get("form") or "").lower()
@@ -3469,7 +3578,7 @@ def _query_builder_guidance_message(
             r"descendants?|ancestors?|genealog(?:y|ical)|water\s+levels?|near\s+water|"
             r"by\s+water|beside\s+water|close\s+to\s+water|lake|river|stream|sea|"
             r"shore|coast|vatten(?:niva|nivå)?|nara\s+vatten|nära\s+vatten|sjo|sjö|"
-            r"alv|älv|a|å|hav|strand|kust)\b",
+            r"alv|älv|å|hav|strand|kust)\b",
             text,
         )
     )
@@ -3648,32 +3757,37 @@ def _extract_unique_carvers(carver_value: str) -> list[str]:
     return result
 
 
-def _build_location_q(user_text: str) -> Optional[Q]:
+def _build_location_q(user_text: str, *, specific_as_any_location: bool = False) -> Optional[Q]:
     query = Q()
     has_any = False
+    specific_constraints = _extract_specific_location_constraints(user_text)
 
-    for item in _extract_specific_location_constraints(user_text):
+    for item in specific_constraints:
         has_any = True
-        query &= Q(**{f"{item['field']}__icontains": item["value"]})
+        if specific_as_any_location:
+            query &= _make_any_location_q(item["value"])
+        else:
+            query &= Q(**{f"{item['field']}__icontains": item["value"]})
 
     for term in _extract_location_terms(user_text):
         if term.lower() == "shm":
             has_any = True
             query &= Q(current_location__icontains="SHM")
             continue
+        if _matches_specific_location_value(term, specific_constraints):
+            continue
         has_any = True
-        query &= (
-            Q(found_location__icontains=term)
-            | Q(parish__icontains=term)
-            | Q(district__icontains=term)
-            | Q(municipality__icontains=term)
-            | Q(current_location__icontains=term)
-        )
+        query &= _make_any_location_q(term)
 
     return query if has_any else None
 
 
-def _build_meta_queryset_from_text(user_text: str, *, ignore_dating_constraint: bool = False):
+def _build_meta_queryset_from_text(
+    user_text: str,
+    *,
+    ignore_dating_constraint: bool = False,
+    specific_location_as_any_location: bool = False,
+):
     qs = MetaInformation.objects.select_related(
         "signature",
         "materialType",
@@ -3683,13 +3797,7 @@ def _build_meta_queryset_from_text(user_text: str, *, ignore_dating_constraint: 
     )
 
     text = (user_text or "").lower()
-    dating_prefix = None
-    if re.search(r"\b(viking|vikingatid)\w*\b", text):
-        dating_prefix = "V"
-    elif re.search(r"\b(proto[-\s]?norse|urnordisk)\w*\b", text):
-        dating_prefix = "U"
-    elif re.search(r"\b(medieval|medieaval|medievel|medeltid)\w*\b", text):
-        dating_prefix = "M"
+    dating_prefix = _extract_dating_prefix_from_text(user_text)
     if dating_prefix and not ignore_dating_constraint:
         qs = qs.filter(dating__istartswith=dating_prefix)
 
@@ -3702,7 +3810,10 @@ def _build_meta_queryset_from_text(user_text: str, *, ignore_dating_constraint: 
     if country_q is not None:
         qs = qs.filter(country_q)
 
-    location_q = _build_location_q(user_text)
+    location_q = _build_location_q(
+        user_text,
+        specific_as_any_location=specific_location_as_any_location,
+    )
     if location_q is not None:
         qs = qs.filter(location_q)
 
@@ -3732,6 +3843,28 @@ def _build_meta_queryset_from_text(user_text: str, *, ignore_dating_constraint: 
     return qs, dating_prefix, country_codes
 
 
+def _build_meta_queryset_from_text_with_location_fallback(
+    user_text: str,
+    *,
+    ignore_dating_constraint: bool = False,
+):
+    qs, dating_prefix, country_codes = _build_meta_queryset_from_text(
+        user_text,
+        ignore_dating_constraint=ignore_dating_constraint,
+    )
+    if not _extract_specific_location_constraints(user_text) or qs.exists():
+        return qs, dating_prefix, country_codes, False
+
+    fallback_qs, fallback_dating_prefix, fallback_country_codes = _build_meta_queryset_from_text(
+        user_text,
+        ignore_dating_constraint=ignore_dating_constraint,
+        specific_location_as_any_location=True,
+    )
+    if fallback_qs.exists():
+        return fallback_qs, fallback_dating_prefix, fallback_country_codes, True
+    return qs, dating_prefix, country_codes, False
+
+
 def _extract_requested_period_codes(user_text: str) -> list[str]:
     text = _fold_text(user_text or "")
     requested: list[str] = []
@@ -3742,11 +3875,13 @@ def _extract_requested_period_codes(user_text: str) -> list[str]:
             seen.add(code)
             requested.append(code)
 
-    if re.search(r"\bproto[-\s]?norse\b|\burnordisk\b", text):
-        add("U")
+    if re.search(r"\bproto[\s\-\u2010-\u2015]*norse\b|\burnordisk\w*\b|\bearly\s+norse\b", text):
+        add("Proto")
+    if re.search(r"\b(?:time\s+)?before\s+(?:the\s+)?viking\s+age\b|\bpre[\s-]?viking\b|\bföre\s+vikingatid\w*\b|\bfore\s+vikingatid\w*\b", text):
+        add("Proto")
     if re.search(r"\bviking\b|\bvikingatid\b", text):
         add("V")
-    if re.search(r"\bmedieval\b|\bmedieaval\b|\bmedievel\b|\bmedeltid\b", text):
+    if re.search(r"\bmedieval\b|\bmedieaval\b|\bmedievel\b|\bmedeltid\b|\bmiddle[-\s]+ages?\b", text):
         add("M")
     if re.search(r"\bu\b", text):
         add("U")
@@ -4254,12 +4389,14 @@ def _looks_like_count_question(user_text: str) -> bool:
 
 
 def _answer_count_from_filters(user_text: str) -> AiAnswerResponse:
-    qs, dating_prefix, country_codes = _build_meta_queryset_from_text(user_text)
+    qs, dating_prefix, country_codes, used_location_fallback = _build_meta_queryset_from_text_with_location_fallback(user_text)
     count = qs.count()
     answer = _with_cross_form_context(
         _with_style_context(f"I found {count} inscriptions matching your query.", user_text),
         user_text,
     )
+    if used_location_fallback:
+        answer += " The specific location field gave 0 results, so I retried the place name in Any location."
     return AiAnswerResponse(
         answer=answer,
         matched_inscriptions=count,
@@ -4267,6 +4404,7 @@ def _answer_count_from_filters(user_text: str) -> AiAnswerResponse:
             "count": count,
             "country_codes": country_codes,
             "dating_prefix": dating_prefix,
+            "used_location_fallback": used_location_fallback,
             "style_requests": _extract_style_requests(user_text),
             "cross_form_requests": _extract_cross_form_requests(user_text),
         },
@@ -4279,7 +4417,7 @@ def _looks_like_list_question(user_text: str) -> bool:
 
 
 def _answer_list_from_filters(user_text: str) -> AiAnswerResponse:
-    qs, dating_prefix, country_codes = _build_meta_queryset_from_text(user_text)
+    qs, dating_prefix, country_codes, used_location_fallback = _build_meta_queryset_from_text_with_location_fallback(user_text)
     total = qs.count()
     limit = _extract_requested_limit(user_text, default_value=60, max_value=300)
     metas = list(qs.select_related("signature").order_by("signature__signature_text")[:limit])
@@ -4290,6 +4428,8 @@ def _answer_list_from_filters(user_text: str) -> AiAnswerResponse:
         answer = f"I found {total} inscriptions: {', '.join(signatures)}"
     else:
         answer = f"I found {total} inscriptions. Showing first {limit}: {', '.join(signatures)}"
+    if used_location_fallback:
+        answer += " The specific location field gave 0 results, so I retried the place name in Any location."
     answer = _with_cross_form_context(_with_style_context(answer, user_text), user_text)
 
     return AiAnswerResponse(
@@ -4301,6 +4441,7 @@ def _answer_list_from_filters(user_text: str) -> AiAnswerResponse:
             "total_count": total,
             "country_codes": country_codes,
             "dating_prefix": dating_prefix,
+            "used_location_fallback": used_location_fallback,
             "style_requests": _extract_style_requests(user_text),
             "cross_form_requests": _extract_cross_form_requests(user_text),
         },
@@ -4729,9 +4870,10 @@ def _answer_period_frequency_from_filters(user_text: str) -> AiAnswerResponse:
         dating = str(meta.dating or "").strip().upper()
         if not dating:
             continue
-        first = dating[0]
-        if first in counts:
-            counts[first] += 1
+        for code in counts:
+            if dating.lower().startswith(str(code).lower()):
+                counts[code] += 1
+                break
 
     winner_code = max(counts, key=lambda key: counts[key])
     winner_count = counts[winner_code]

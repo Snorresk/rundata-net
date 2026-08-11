@@ -23,6 +23,7 @@ from rundatanet.runes.api import (
     _extract_required_initial_runes,
     _extract_rune_type_constraints,
     _extract_sound_term,
+    _extract_specific_location_constraints,
     _extract_standalone_transliteration_rune,
     _has_coordinate_rune_intent,
     _excludes_palatal_r,
@@ -249,6 +250,135 @@ class EnglishTranslationIntentTests(SimpleTestCase):
             with self.subTest(prompt=prompt):
                 self.assertEqual(_extract_location_terms(prompt), [])
 
+    def test_specific_location_suffixes_choose_precise_geo_fields(self):
+        prompts = {
+            "Find inscriptions from Össeby-Garns parish": ("parish", "parish", "Össeby-Garns"),
+            "Find inscription from Motala municipality": ("municipality", "municipality", "Motala"),
+            "Find inscriptions from Bråbo hd": ("district", "district", "Bråbo"),
+            "Hitta inskrifter från Össeby-Garns sn": ("parish", "parish", "Össeby-Garns"),
+            "Hitta inskrifter från Bråbo härad": ("district", "district", "Bråbo"),
+            "Hitta inskrifter från Motala kommun": ("municipality", "municipality", "Motala"),
+        }
+
+        for prompt, expected in prompts.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_specific_location_constraints(prompt), [
+                    {"id": expected[0], "field": expected[1], "value": expected[2]}
+                ])
+
+    def test_church_location_terms_choose_found_location(self):
+        prompts = {
+            "Find inscriptions from Vallentuna church": "Vallentuna kyrka",
+            "Find inscriptions from Vallentuna kyrka": "Vallentuna kyrka",
+            "Find inscriptions from Vallentuna k:a": "Vallentuna kyrka",
+            "Find inscriptions from Vallentuna ch": "Vallentuna kyrka",
+        }
+
+        for prompt, value in prompts.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_specific_location_constraints(prompt), [
+                    {"id": "found_location", "field": "found_location", "value": value}
+                ])
+
+    def test_kyrka_inside_compound_name_does_not_choose_found_location(self):
+        constraints = _extract_specific_location_constraints("Find inscriptions from Botkyrka")
+
+        self.assertEqual(constraints, [])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_specific_location_field_without_any_location_duplicate(self, _styles, _objects):
+        prompts = {
+            "Find inscriptions from Össeby-Garns parish": ("parish", "Össeby-Garns"),
+            "Find inscription from Motala municipality": ("municipality", "Motala"),
+            "Find inscriptions from Bråbo hd": ("district", "Bråbo"),
+        }
+
+        for prompt, expected in prompts.items():
+            with self.subTest(prompt=prompt):
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(result["rules"][0]["id"], expected[0])
+                self.assertEqual(result["rules"][0]["field"], expected[0])
+                self.assertEqual(result["rules"][0]["operator"], "contains")
+                self.assertEqual(result["rules"][0]["value"], expected[1])
+                self.assertTrue(_is_simple_deterministic_query(prompt, json.dumps(result)))
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_found_location_for_church_without_any_location_duplicate(self, _styles, _objects):
+        prompts = (
+            "Find inscriptions from Vallentuna church",
+            "Find inscriptions from Vallentuna kyrka",
+            "Find inscriptions from Vallentuna k:a",
+            "Find inscriptions from Vallentuna ch",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(result["rules"][0]["id"], "found_location")
+                self.assertEqual(result["rules"][0]["field"], "found_location")
+                self.assertEqual(result["rules"][0]["operator"], "contains")
+                self.assertEqual(result["rules"][0]["value"], "Vallentuna kyrka")
+                self.assertTrue(_is_simple_deterministic_query(prompt, json.dumps(result)))
+                self.assertIsNone(_query_builder_guidance_message(prompt, result))
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_replaces_any_location_with_specific_location_field(self, _styles, _objects):
+        prompt = "Find inscriptions from Bråbo hd"
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "full_address",
+                        "field": "full_address",
+                        "operator": "contains",
+                        "value": "Bråbo hd",
+                    }
+                ],
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(prompt, model_output))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "district")
+        self.assertEqual(result["rules"][0]["field"], "district")
+        self.assertEqual(result["rules"][0]["operator"], "contains")
+        self.assertEqual(result["rules"][0]["value"], "Bråbo")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_replaces_church_any_location_with_found_location(self, _styles, _objects):
+        prompt = "Find inscriptions from Vallentuna church"
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "full_address",
+                        "field": "full_address",
+                        "operator": "contains",
+                        "value": "Vallentuna church",
+                    }
+                ],
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(prompt, model_output))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "found_location")
+        self.assertEqual(result["rules"][0]["field"], "found_location")
+        self.assertEqual(result["rules"][0]["operator"], "contains")
+        self.assertEqual(result["rules"][0]["value"], "Vallentuna kyrka")
+
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
     def test_fallback_keeps_wood_material_without_any_location(self, _styles, _objects):
@@ -351,6 +481,52 @@ class EnglishTranslationIntentTests(SimpleTestCase):
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_middle_ages_queries_use_medieval_dating_prefix(self, _styles, _objects):
+        prompts = (
+            "Find all inscriptions from the Middle Ages",
+            "Find all inscriptions from the Middle ages",
+            "Find all inscriptions from the Middle Age",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                rule = result["rules"][0]
+                self.assertEqual(rule["id"], "dating")
+                self.assertEqual(rule["field"], "dating")
+                self.assertEqual(rule["operator"], "begins_with")
+                self.assertEqual(rule["value"], "M")
+                self.assertTrue(rule["ignoreCase"])
+                self.assertFalse(rule["includeSpecialSymbols"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_proto_norse_queries_use_proto_dating_prefix(self, _styles, _objects):
+        prompts = (
+            "Find all inscriptions from Proto–Norse period",
+            "Find all inscriptions from Proto-Norse time",
+            "Find all inscriptions from time before Viking age",
+            "Hitta alla urnordiska inskrifter",
+            "hitta inskrifter from Urnordisk tid",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                rule = result["rules"][0]
+                self.assertEqual(rule["id"], "dating")
+                self.assertEqual(rule["field"], "dating")
+                self.assertEqual(rule["operator"], "begins_with")
+                self.assertEqual(rule["value"], "Proto")
+                self.assertTrue(rule["ignoreCase"])
+                self.assertFalse(rule["includeSpecialSymbols"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
     def test_word_runes_with_denmark_uses_fast_deterministic_path(self, _styles, _objects):
         prompt = "Find all inscription from Denmark with the word runes"
 
@@ -395,6 +571,37 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(len(result["rules"]), 1)
         self.assertEqual(result["rules"][0]["id"], "inscription_id")
         self.assertEqual(result["rules"][0]["value"], "U 212|Sö 46|DR 42")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_partial_signature_id_query_uses_contains_rule(self, _styles, _objects):
+        prompt = "Find id number Sl9"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertEqual(len(result["rules"]), 1)
+        rule = result["rules"][0]
+        self.assertEqual(rule["id"], "inscription_id")
+        self.assertEqual(rule["field"], "signature_text")
+        self.assertEqual(rule["operator"], "contains")
+        self.assertEqual(rule["value"], "Sl9")
+        self.assertTrue(rule["ignoreCase"])
+        self.assertTrue(rule["data"]["multiField"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_full_signature_id_query_keeps_exact_list_rule(self, _styles, _objects):
+        prompt = "Find id number U Sl9"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertEqual(len(result["rules"]), 1)
+        rule = result["rules"][0]
+        self.assertEqual(rule["id"], "inscription_id")
+        self.assertEqual(rule["operator"], "in")
+        self.assertEqual(rule["value"], "U Sl9")
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
