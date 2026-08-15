@@ -81,11 +81,15 @@ You only work with a single system known as runic inscriptions database. It is a
   - `... district`, `... härad`, `... hd` -> use `district` and remove the suffix word from the value.
   - `... kommun` -> use `municipality` and remove the word `kommun` from the value.
   - `... church`, `... kyrka`, `... k:a`, `... ch` -> use `found_location` and search `<place> kyrka`.
+  - explicit `found location in ...` or `found location ...` -> use `found_location` and search only the place name.
   - Example: "Össeby Garns socken" -> `parish contains "Össeby Garns"` (plus `Össeby-Garns` OR variant).
   - Example: "Össeby-Garns parish" -> `parish contains "Össeby-Garns"`.
   - Example: "Bråbo hd" -> `district contains "Bråbo"`.
   - Example: "Vallentuna kommun" -> `municipality contains "Vallentuna"`.
   - Example: "Vallentuna church" -> `found_location contains "Vallentuna kyrka"`.
+  - Example: "found location in Karlevi" -> `found_location contains "Karlevi"`.
+  - Example: "found location in churches" -> `found_location contains "kyrka"` because found-location values use Swedish wording.
+  - Example: "found location in graveyards/cemeteries/churchyards/kyrkogårdar" -> `found_location contains "kyrkogård"` because found-location values use Swedish wording.
 - Do not treat `kyrka` as a church marker when it is only part of a compound place name, e.g. `Botkyrka`.
 - In Reply/statistics mode: if a specific parish/district/municipality/found-location search gives 0 results, retry the core place name in Any location before giving a negative result. Do not put this fallback into the first QueryBuilder JSON unless the user explicitly asks for Any location.
 - If location intent is clear but the exact location field is unknown/ambiguous (e.g., abbreviations like `SHM`), use fallback location search as an OR group:
@@ -126,8 +130,10 @@ You only work with a single system known as runic inscriptions database. It is a
 
 **English word and translation mapping (IMPORTANT):**
 - When the user explicitly asks about an English word or English translation, search `english_translation` with operator `contains` and value `X`.
-- When an English-language query asks generically for inscriptions "with the word X" or "containing the word X", first check whether `X` is a runological/normalised form in the searchable language fields. If `X` occurs as a whole word in Old West Norse normalisation, use `normalization_norse_to_transliteration`; if it occurs in Old Scandinavian normalisation, use `normalization_scandinavian_to_transliteration`; otherwise treat it as an English translation word.
-- A word mentioned as textual content is not a material or object filter. For example, "Find all inscriptions with the word stone" means `english_translation contains "stone"`, not `material_type contains "stone"`.
+- When an English-language query asks generically for inscriptions "with the word X" or "containing the word X", check English translation first. If `X` occurs as a whole word in English translation, use `english_translation contains X`. Only if `X` is not an English translation word should you check whether it is a runological/normalised form in Old West Norse or Old Scandinavian.
+- A word mentioned as textual content is not a material or object filter. For example, "Find all inscriptions with the word stone" means only `english_translation contains "stone"`, not `material_type contains "stone"` and not `objectInfo contains "stone"`.
+- For very short English words, preserve the intended word boundary when possible. Example: "Find all inscriptions with the word my" should search `english_translation contains "my "`.
+- For the English word/pronoun `I`, also turn on Match case: use `english_translation contains "I "` with `ignoreCase: false`, so the search does not match every lowercase letter `i`.
 - Use `material_type` only when material intent is explicit, such as "made of stone", "carved on stone", or "stone material".
 - If the user independently requests both textual content and material, preserve both rules and combine them with `AND`.
 - Example: "Find all inscriptions on stone with the word stone" must produce both `material_type contains "stone"` and `english_translation contains "stone"` in an `AND` group.

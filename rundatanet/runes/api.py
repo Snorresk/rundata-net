@@ -757,6 +757,7 @@ def _extract_specific_location_constraints(user_text: str) -> list[dict[str, str
     seen: set[tuple[str, str]] = set()
     place_chars = r"A-Za-zÅÄÖåäöÉéÜüÆæØøÞþÐð\-\u2010-\u2015 "
     patterns = [
+        ("found_location", "found_location", rf"\bfound\s+location\s+(?:in\s+)?([{place_chars}]{{2,}})", "found_location_value"),
         ("found_location", "found_location", rf"\b(?:church|kyrka|k:a|ch\.?)\s+([{place_chars}]{{2,}})", "church_prefix"),
         ("found_location", "found_location", rf"\b([{place_chars}]{{2,}}?)\s+(?:church|kyrka|k:a|ch\.?)\b", "church_suffix"),
         ("parish", "parish", rf"\b(?:parish|socken|sn\.?)\s+([{place_chars}]{{2,}})"),
@@ -810,6 +811,21 @@ def _extract_specific_location_constraints(user_text: str) -> list[dict[str, str
             if cut_idx is not None:
                 raw = " ".join(token_list[:cut_idx])
             cleaned = _clean_location_value(raw)
+            if pattern_kind == "found_location_value":
+                compact_raw = _compact_code(raw)
+                if compact_raw in {"church", "churches", "ch", "ka", "kyrka", "kyrkor"}:
+                    cleaned = "kyrka"
+                elif compact_raw in {
+                    "graveyard",
+                    "graveyards",
+                    "cemetery",
+                    "cemeteries",
+                    "churchyard",
+                    "churchyards",
+                    "kyrkogard",
+                    "kyrkogardar",
+                }:
+                    cleaned = "kyrkogård"
             if len(cleaned) < 2:
                 continue
             if _looks_like_dating_period_location_value(cleaned):
@@ -841,7 +857,21 @@ def _matches_specific_location_value(value: str, items: list[dict[str, str]]) ->
     folded_value = _fold_text(value)
     if not folded_value:
         return False
-    for key in _specific_location_value_keys(items):
+    keys = _specific_location_value_keys(items)
+    if _compact_code(value) in {"church", "churches", "ch", "ka", "kyrka", "kyrkor"} and "kyrka" in keys:
+        return True
+    if _compact_code(value) in {
+        "graveyard",
+        "graveyards",
+        "cemetery",
+        "cemeteries",
+        "churchyard",
+        "churchyards",
+        "kyrkogard",
+        "kyrkogardar",
+    } and "kyrkogard" in keys:
+        return True
+    for key in keys:
         if folded_value == key or folded_value.startswith(f"{key} "):
             return True
     return False
@@ -928,6 +958,7 @@ def _extract_english_translation_terms(user_text: str) -> list[str]:
             if (
                 term
                 and not force_english
+                and not _english_translation_contains_word(term)
                 and _language_containing_word(term) in {"old_west_norse", "old_scandinavian"}
             ):
                 continue
@@ -966,6 +997,45 @@ def _extract_swedish_word_terms(user_text: str) -> list[str]:
         if _language_containing_word(term) in {"old_west_norse", "old_scandinavian"}:
             add_term(term)
     return terms
+
+
+@lru_cache(maxsize=512)
+def _english_translation_contains_word(term: str) -> bool:
+    word_pattern = rf"(?<!\w){re.escape(term)}(?!\w)"
+    try:
+        return TranslationEnglish.objects.filter(search_value__iregex=word_pattern).exists()
+    except Exception:
+        logger.warning("Could not inspect English translation corpus for %r", term, exc_info=True)
+        return False
+
+
+def _english_translation_search_value(term: str) -> str:
+    """Return a QueryBuilder contains-value for an explicit English word search.
+
+    Very short English words such as "my" are safer with a following space in
+    the current contains-only text filter; otherwise they can match the start
+    of longer words. Longer words keep their natural value.
+    """
+    value = (term or "").strip(" .,!?:;\"'“”")
+    folded = _fold_text(value)
+    if len(folded) <= 2 and re.fullmatch(r"[a-z]+", folded):
+        return f"{value} "
+    return value
+
+
+def _english_translation_word_ignore_case(term: str) -> bool:
+    value = (term or "").strip(" .,!?:;\"'“”")
+    return value != "I"
+
+
+def _make_english_translation_word_rule(term: str) -> dict[str, Any]:
+    rule = _make_contains_rule(
+        "english_translation",
+        "english_translation",
+        _english_translation_search_value(term),
+    )
+    rule["ignoreCase"] = _english_translation_word_ignore_case(term)
+    return rule
 
 
 def _extract_aligned_word_spelling(user_text: str) -> Optional[tuple[str, str]]:
@@ -1839,6 +1909,7 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
     text = _fold_text(user_text or "")
     constraints: list[dict[str, str]] = []
     seen_values: set[str] = set()
+    translation_terms = {_fold_text(term) for term in _extract_english_translation_terms(user_text)}
     active_material_values = {item["value"] for item in _extract_material_constraints(user_text)}
     name_element = _extract_name_element(user_text)
     name_element_folded = _fold_text(name_element) if name_element else ""
@@ -1846,6 +1917,8 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
     full_personal_name_folded = _fold_text(full_personal_name) if full_personal_name else ""
 
     def add_object(value: str) -> None:
+        if _fold_text(value) in translation_terms:
+            return
         if _material_values_for_terms({_fold_text(value)}).intersection(active_material_values):
             return
         if name_element_folded and _fold_text(value) == name_element_folded:
@@ -1880,8 +1953,11 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
         (r"\b(tag|label|marklapp|märklapp)\b", "märklapp"),
     ]
     for pattern, canonical in pattern_map:
-        if re.search(pattern, text):
+        for match in re.finditer(pattern, text):
+            if _fold_text(match.group(1)) in translation_terms:
+                continue
             add_object(canonical)
+            break
 
     # Exact phrase match against all objectInfo values present in DB.
     # This makes all existing objectInfo denominations searchable/combinable
@@ -2773,12 +2849,31 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
             lambda rule: rule.get("id") == "material_type"
             and _fold_text(rule.get("value")) in ambiguous_material_values,
         )
+        _remove_rules(
+            root,
+            lambda rule: (
+                rule.get("id")
+                in {
+                    "normalization_norse_to_transliteration",
+                    "normalization_scandinavian_to_transliteration",
+                    "objectInfo",
+                }
+                and any(_rule_has_word_term(rule, term) for term in english_translation_terms)
+            ),
+        )
 
     for term in english_translation_terms:
-        if not _has_location_value(root, ("english_translation",), term):
+        search_value = _english_translation_search_value(term)
+        for rule in _iter_rules(root):
+            if rule.get("id") == "english_translation" and _rule_has_word_term(rule, term):
+                rule["value"] = search_value
+                rule["ignoreCase"] = _english_translation_word_ignore_case(term)
+        if not _has_location_value(root, ("english_translation",), term) and not _has_location_value(
+            root, ("english_translation",), search_value
+        ):
             root = _append_and_constraint(
                 root,
-                _make_contains_rule("english_translation", "english_translation", term),
+                _make_english_translation_word_rule(term),
             )
 
     phrase_query = _extract_phrase_query(user_text)
@@ -3018,6 +3113,8 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
             root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
 
     for item in _extract_object_info_constraints(user_text):
+        if _fold_text(item["value"]) in english_translation_term_keys:
+            continue
         if not _has_location_value(root, (item["id"],), item["value"]):
             root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
 
@@ -3188,7 +3285,7 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     english_translation_terms = _extract_english_translation_terms(user_text)
     english_translation_term_keys = {_fold_text(term) for term in english_translation_terms}
     for term in english_translation_terms:
-        rules.append(_make_contains_rule("english_translation", "english_translation", term))
+        rules.append(_make_english_translation_word_rule(term))
 
     phrase_query = _extract_phrase_query(user_text)
     if phrase_query:
@@ -3277,6 +3374,8 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
 
     cross_count_constraints = _extract_cross_count_constraints(user_text)
     for item in _extract_object_info_constraints(user_text):
+        if _fold_text(item["value"]) in english_translation_term_keys:
+            continue
         if not (
             cross_count_constraints
             and item["id"] == "objectInfo"
