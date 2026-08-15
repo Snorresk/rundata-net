@@ -720,6 +720,105 @@ class EnglishTranslationIntentTests(SimpleTestCase):
     def test_material_term_is_not_reused_as_object_info(self, _objects):
         self.assertEqual(_extract_object_info_constraints("Hitta alla inskrifter ristade i sten"), [])
 
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    def test_plural_english_object_terms_are_singularized(self, _objects, _materials, _translations):
+        cases = {
+            "Find inscriptions on baptismal fonts": "baptismal font",
+            "Find inscriptions on runestones": "runestone",
+            "Find inscriptions on amulets": "amulet",
+        }
+
+        for prompt, expected in cases.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(
+                    _extract_object_info_constraints(prompt),
+                    [{"id": "objectInfo", "field": "objectInfo", "value": expected}],
+                )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("comb", "comb"),))
+    def test_plural_object_terms_can_match_singular_db_values(self, _objects, _materials, _translations):
+        self.assertEqual(
+            _extract_object_info_constraints("Find inscriptions on combs"),
+            [{"id": "objectInfo", "field": "objectInfo", "value": "comb"}],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("amulets", "amulets"),))
+    def test_plural_object_db_values_do_not_duplicate_singular_mapping(
+        self, _objects, _materials, _translations
+    ):
+        self.assertEqual(
+            _extract_object_info_constraints("Find inscriptions on amulets"),
+            [{"id": "objectInfo", "field": "objectInfo", "value": "amulet"}],
+        )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[{"id": "objectInfo", "field": "objectInfo", "value": "amulet"}])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_removes_plural_object_info_duplicate(self, _styles, _objects):
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "objectInfo",
+                        "field": "objectInfo",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "amulet",
+                    },
+                    {
+                        "id": "objectInfo",
+                        "field": "objectInfo",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "amulets",
+                    },
+                ],
+                "not": False,
+                "valid": True,
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules("Find inscriptions on amulets", model_output))
+
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [("objectInfo", "amulet")],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_singular_object_info_for_baptismal_fonts(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find inscriptions on baptismal fonts"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(
+            result["rules"][0],
+            {
+                "id": "objectInfo",
+                "field": "objectInfo",
+                "type": "string",
+                "input": "text",
+                "operator": "contains",
+                "value": "baptismal font",
+                "ignoreCase": True,
+                "includeSpecialSymbols": False,
+            },
+        )
+
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
     def test_material_phrase_can_still_combine_with_real_province(self, _styles, _objects):

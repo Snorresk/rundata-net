@@ -79,6 +79,72 @@ def _has_location_value(root: dict[str, Any], rule_ids: tuple[str, ...], expecte
     return False
 
 
+def _singularize_english_object_phrase(value: str) -> str:
+    """Return a conservative singular form for English object-info matching."""
+    text = _fold_text(value or "")
+    words: list[str] = []
+    for word in re.findall(r"[a-zþðæøœ]+|[^a-zþðæøœ]+", text):
+        if not re.fullmatch(r"[a-zþðæøœ]+", word):
+            words.append(word)
+            continue
+        if len(word) <= 3 or word.endswith(("ss", "us", "is")):
+            words.append(word)
+        elif word.endswith("ies"):
+            words.append(f"{word[:-3]}y")
+        elif word.endswith(("ches", "shes", "xes", "zes", "ses")):
+            words.append(word[:-2])
+        elif word.endswith("ves"):
+            words.append(f"{word[:-3]}f")
+        elif word.endswith("s"):
+            words.append(word[:-1])
+        else:
+            words.append(word)
+    return "".join(words).strip()
+
+
+def _object_info_key(value: Any) -> str:
+    return _singularize_english_object_phrase(str(value or ""))
+
+
+def _is_singular_object_info_value(value: Any) -> bool:
+    folded = _fold_text(str(value or ""))
+    return bool(folded) and folded == _object_info_key(folded)
+
+
+def _dedupe_object_info_rules(group: dict[str, Any]) -> None:
+    """Remove duplicate singular/plural objectInfo rules, preferring singular."""
+    if not _is_group(group):
+        return
+
+    new_rules: list[dict[str, Any]] = []
+    seen_object_keys: dict[str, int] = {}
+    for rule in group.get("rules", []):
+        if _is_group(rule):
+            _dedupe_object_info_rules(rule)
+            new_rules.append(rule)
+            continue
+        if rule.get("id") != "objectInfo":
+            new_rules.append(rule)
+            continue
+
+        key = _object_info_key(rule.get("value"))
+        if not key:
+            new_rules.append(rule)
+            continue
+        if key in seen_object_keys:
+            existing_index = seen_object_keys[key]
+            existing = new_rules[existing_index]
+            if not _is_singular_object_info_value(existing.get("value")) and _is_singular_object_info_value(
+                rule.get("value")
+            ):
+                new_rules[existing_index] = rule
+            continue
+        seen_object_keys[key] = len(new_rules)
+        new_rules.append(rule)
+
+    group["rules"] = new_rules
+
+
 def _normalize_root(raw_rules: Any) -> dict[str, Any]:
     if _is_group(raw_rules):
         root = raw_rules
@@ -2229,6 +2295,7 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
     name_element_folded = _fold_text(name_element) if name_element else ""
     full_personal_name = _extract_full_personal_name(user_text)
     full_personal_name_folded = _fold_text(full_personal_name) if full_personal_name else ""
+    seen_object_keys: set[str] = set()
 
     def add_object(value: str) -> None:
         if _fold_text(value) in translation_terms:
@@ -2239,32 +2306,37 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
             return
         if full_personal_name_folded and _fold_text(value) == full_personal_name_folded:
             return
-        if value in seen_values:
+        object_key = _object_info_key(value)
+        if value in seen_values or object_key in seen_object_keys:
             return
         seen_values.add(value)
+        if object_key:
+            seen_object_keys.add(object_key)
         constraints.append({"id": "objectInfo", "field": "objectInfo", "value": value})
 
     # English/Swedish intent mapping to canonical objectInfo values.
+    # objectInfo is stored in English in the current database, so English
+    # plural object requests are normalised to singular English terms.
     pattern_map: list[tuple[str, str]] = [
-        (r"\b(coin|coins|mynt)\b", "mynt"),
-        (r"\b(runestone|runestones|runsten|runstenar)\b", "runsten"),
-        (r"\b(grave slab|grave slabs|gravhall|gravhallar|gravhäll|gravhällar)\b", "gravhäll"),
-        (r"\b(baptismal font|baptism|dopfunt|dopfund)\b", "dopfunt"),
-        (r"\b(bracteate|bracteates|brakteat)\b", "brakteat"),
-        (r"\b(amulet|amulets|amulett|amulett?er)\b", "amulett"),
-        (r"\b(metal plate|metal plates|bleck)\b", "bleck"),
-        (r"\b(stone cross|stenkors)\b", "stenkors"),
-        (r"\b(cross|kors)\b", "kors"),
-        (r"\b(whetstone|bryne)\b", "bryne"),
-        (r"\b(knife handle|knivskaft)\b", "knivskaft"),
-        (r"\b(wall inscription|wall graffiti|vagginskrift|vägginskrift|kyrkografitti)\b", "vägginskrift"),
-        (r"\b(rock face|rock carving|berghall|berghäll|bergvagg|bergvägg)\b", "berghäll"),
-        (r"\b(runic bone|runben)\b", "runben"),
-        (r"\b(runic staff|runic stick|runkavel)\b", "runkavel"),
-        (r"\b(wooden inscription|trainskrift|träinskrift)\b", "träinskrift"),
-        (r"\b(plaster inscription|putsinskrift)\b", "putsinskrift"),
-        (r"\b(bell|kyrkklocka)\b", "kyrkklocka"),
-        (r"\b(tag|label|marklapp|märklapp)\b", "märklapp"),
+        (r"\b(coin|coins|mynt)\b", "coin"),
+        (r"\b(runestone|runestones|runsten|runstenar)\b", "runestone"),
+        (r"\b(grave slab|grave slabs|gravhall|gravhallar|gravhäll|gravhällar)\b", "grave slab"),
+        (r"\b(baptismal font|baptismal fonts|baptism|dopfunt|dopfund)\b", "baptismal font"),
+        (r"\b(bracteate|bracteates|brakteat)\b", "bracteate"),
+        (r"\b(amulet|amulets|amulett|amulett?er)\b", "amulet"),
+        (r"\b(metal plate|metal plates|bleck)\b", "metal plate"),
+        (r"\b(stone cross|stone crosses|stenkors)\b", "stone cross"),
+        (r"\b(cross|crosses|kors)\b", "cross"),
+        (r"\b(whetstone|whetstones|bryne)\b", "whetstone"),
+        (r"\b(knife handle|knife handles|knivskaft)\b", "knife handle"),
+        (r"\b(wall inscription|wall inscriptions|wall graffiti|vagginskrift|vägginskrift|kyrkografitti)\b", "wall inscription"),
+        (r"\b(rock face|rock faces|rock carving|rock carvings|berghall|berghäll|bergvagg|bergvägg)\b", "rock face"),
+        (r"\b(runic bone|runic bones|bone inscription|bone inscriptions|runben)\b", "runic bone"),
+        (r"\b(runic staff|runic staffs|runic stick|runic sticks|runkavel)\b", "runic staff"),
+        (r"\b(wooden inscription|wooden inscriptions|trainskrift|träinskrift)\b", "wooden inscription"),
+        (r"\b(plaster inscription|plaster inscriptions|putsinskrift)\b", "plaster inscription"),
+        (r"\b(bell|bells|kyrkklocka)\b", "bell"),
+        (r"\b(tag|tags|label|labels|marklapp|märklapp)\b", "tag"),
     ]
     for pattern, canonical in pattern_map:
         for match in re.finditer(pattern, text):
@@ -2273,13 +2345,29 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
             add_object(canonical)
             break
 
+    object_text_variants = {text}
+    for match in re.finditer(
+        r"\b(?:on|onto|på|pa|with|med)\s+([^.;?!,]+)",
+        text,
+        flags=re.IGNORECASE,
+    ):
+        phrase = match.group(1).strip()
+        if phrase:
+            object_text_variants.add(phrase)
+            object_text_variants.add(_singularize_english_object_phrase(phrase))
+
     # Exact phrase match against all objectInfo values present in DB.
     # This makes all existing objectInfo denominations searchable/combinable
-    # when users type the Swedish term directly.
+    # when users type the term directly. Object-context phrases are also
+    # singularised so "combs" can match DB value "comb" without turning the
+    # generic word "inscriptions" into an object search.
     for value, folded_value in _get_object_info_values():
         if len(folded_value) < 3:
             continue
-        if re.search(rf"(^|\b){re.escape(folded_value)}(\b|$)", text):
+        if any(
+            re.search(rf"(^|\b){re.escape(folded_value)}(\b|$)", variant)
+            for variant in object_text_variants
+        ):
             add_object(value)
 
     return constraints
@@ -3578,6 +3666,7 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
                 _make_personal_name_presence_rule(personal_name_presence),
             )
 
+    _dedupe_object_info_rules(root)
     root.setdefault("valid", True)
     return json.dumps(root, ensure_ascii=False)
 
@@ -3787,6 +3876,7 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
             "not": False,
             "valid": True,
         }
+    _dedupe_object_info_rules(root)
     return json.dumps(root, ensure_ascii=False)
 
 
