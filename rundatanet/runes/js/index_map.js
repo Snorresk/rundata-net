@@ -1197,7 +1197,7 @@ function buildPublicationMapSvgDocument({
       .sea { fill: #f4f8fb; stroke: #313131; stroke-width: 1.2; }
       .graticule { stroke: #d7dde2; stroke-width: 0.8; }
       .land { fill: #f7f3e8; stroke: #707070; stroke-width: 1.1; stroke-linejoin: round; }
-      .inscription-symbol { stroke: #ffffff; stroke-width: 1.1; opacity: 0.92; }
+      .inscription-symbol { stroke: none; opacity: 0.92; }
       .title { fill: #111111; font-family: Arial, Helvetica, sans-serif; font-size: 26px; font-weight: 700; }
       .subtitle { fill: #4b4b4b; font-family: Arial, Helvetica, sans-serif; font-size: 15px; }
       .map-border { fill: none; stroke: #9a9a9a; stroke-width: 1; }
@@ -1323,8 +1323,6 @@ function drawPublicationMapCanvasSymbolAt(ctx, x, y, options) {
   ctx.save();
   ctx.globalAlpha = 0.92;
   ctx.fillStyle = color;
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1.1;
 
   if (options.symbol === 'triangle') {
     ctx.beginPath();
@@ -1333,15 +1331,12 @@ function drawPublicationMapCanvasSymbolAt(ctx, x, y, options) {
     ctx.lineTo(x - size, y + size * 0.8);
     ctx.closePath();
     ctx.fill();
-    ctx.stroke();
   } else if (options.symbol === 'square') {
     ctx.fillRect(x - size, y - size, size * 2, size * 2);
-    ctx.strokeRect(x - size, y - size, size * 2, size * 2);
   } else {
     ctx.beginPath();
     ctx.arc(x, y, size, 0, Math.PI * 2);
     ctx.fill();
-    ctx.stroke();
   }
 
   ctx.restore();
