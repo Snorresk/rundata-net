@@ -1445,7 +1445,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260728-display-coordinates-1"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260808-inscription-id-contains-1"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -1509,7 +1509,8 @@ function escapeAiResponseHtml(value) {
 
 function renderAiAssistantMessage(message) {
   return escapeAiResponseHtml(message)
-    .replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+    .replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
 }
 
 function showAiAssistantResponse(message) {
@@ -1731,6 +1732,7 @@ function getAiMatchedTextContextsFromRules(rules) {
     if (rule.id === 'normalization_norse_to_transliteration') {
       if (value.normalization) {
         addAiMatchedTextContext(contexts, 'normalisation_norse');
+        addAiMatchedTextContext(contexts, 'transliteration');
       }
       if (value.transliteration) {
         addAiMatchedTextContext(contexts, 'transliteration');
@@ -1741,6 +1743,7 @@ function getAiMatchedTextContextsFromRules(rules) {
     if (rule.id === 'normalization_scandinavian_to_transliteration') {
       if (value.normalization) {
         addAiMatchedTextContext(contexts, 'normalisation_scandinavian');
+        addAiMatchedTextContext(contexts, 'transliteration');
       }
       if (value.transliteration) {
         addAiMatchedTextContext(contexts, 'transliteration');
@@ -1755,6 +1758,9 @@ function getAiMatchedTextContextsFromRules(rules) {
 
     if (AI_MATCHED_TEXT_FIELDS[rule.field]) {
       addAiMatchedTextContext(contexts, rule.field);
+      if (rule.field === 'normalisation_norse' || rule.field === 'normalisation_scandinavian') {
+        addAiMatchedTextContext(contexts, 'transliteration');
+      }
     }
   }
 
@@ -1796,11 +1802,52 @@ function incrementAiCount(counts, value) {
   counts.set(value, (counts.get(value) || 0) + 1);
 }
 
+const AI_TRANSLITERATION_GROUPING_SYMBOLS = /[<>\|\[\]\(\)]/g;
+const AI_TRANSLITERATION_GROUPING_WARNING = 'Special symbols like <>, |, (), [] and others are ignored in grouping of examples';
+
+function getAiTransliterationGroupingKey(value) {
+  return decodeAiTokenEntities(value)
+    .replace(AI_TRANSLITERATION_GROUPING_SYMBOLS, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function incrementAiGroupedDisplayCount(counts, rawValue, groupingKey) {
+  const displayValue = compactAiValue(decodeAiTokenEntities(rawValue), 70);
+  const key = compactAiValue(groupingKey, 70);
+  if (!displayValue || !key) {
+    return;
+  }
+  if (!counts.has(key)) {
+    counts.set(key, { count: 0, displays: new Map() });
+  }
+  const entry = counts.get(key);
+  entry.count += 1;
+  entry.displays.set(displayValue, (entry.displays.get(displayValue) || 0) + 1);
+}
+
+function getAiGroupedDisplayValue(entry) {
+  return Array.from(entry.displays.entries())
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0][0];
+}
+
 function formatAiCounts(counts, limit = 8, formatter = value => value) {
   return Array.from(counts.entries())
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, limit)
     .map(([value, count]) => `${formatter(value)} (${count})`)
+    .join(', ');
+}
+
+function formatAiGroupedDisplayCounts(counts, limit = 8, formatter = value => value) {
+  return Array.from(counts.values())
+    .sort((left, right) => {
+      const leftDisplay = getAiGroupedDisplayValue(left);
+      const rightDisplay = getAiGroupedDisplayValue(right);
+      return right.count - left.count || leftDisplay.localeCompare(rightDisplay);
+    })
+    .slice(0, limit)
+    .map(entry => `${formatter(getAiGroupedDisplayValue(entry))} (${entry.count})`)
     .join(', ');
 }
 
@@ -1815,10 +1862,10 @@ function getAiMatchedTextStatistics(results, rules, limit = 8) {
     const counts = new Map();
     const nameCounts = new Map();
     for (const item of results || []) {
-    const indices = item?.matchDetails?.wordIndices;
-    if (!Array.isArray(indices) || indices.length === 0) {
-      continue;
-    }
+      const indices = item?.matchDetails?.wordIndices;
+      if (!Array.isArray(indices) || indices.length === 0) {
+        continue;
+      }
       const words = Array.isArray(item[context.wordsField]) ? item[context.wordsField] : [];
       const uniqueIndices = Array.from(new Set(indices));
       uniqueIndices.forEach(index => {
@@ -1835,6 +1882,10 @@ function getAiMatchedTextStatistics(results, rules, limit = 8) {
           }
           return;
         }
+        if (context.type === 'transliteration') {
+          incrementAiGroupedDisplayCount(counts, rawWord, getAiTransliterationGroupingKey(rawWord));
+          return;
+        }
         incrementAiCount(counts, compactAiValue(rawWord, 70));
       });
     }
@@ -1842,11 +1893,22 @@ function getAiMatchedTextStatistics(results, rules, limit = 8) {
     if (counts.size) {
       const formatter = context.type === 'transliteration'
         ? value => `**${value}**`
+        : context.type === 'normalisation'
+          ? value => `*${value}*`
         : value => value;
-      lines.push(`Matched ${context.label}: ${formatAiCounts(counts, limit, formatter)}.`);
+      const formattedCounts = context.type === 'transliteration'
+        ? formatAiGroupedDisplayCounts(counts, limit, formatter)
+        : formatAiCounts(counts, limit, formatter);
+      lines.push(`Matched ${context.label}: ${formattedCounts}.`);
+      if (context.type === 'transliteration') {
+        lines.push(AI_TRANSLITERATION_GROUPING_WARNING);
+      }
     }
     if (nameCounts.size) {
-      lines.push(`Names in ${context.label}: ${formatAiCounts(nameCounts, limit)}.`);
+      const formatter = context.type === 'normalisation'
+        ? value => `*${value}*`
+        : value => value;
+      lines.push(`Names in ${context.label}: ${formatAiCounts(nameCounts, limit, formatter)}.`);
     }
   });
   return lines;

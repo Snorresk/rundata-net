@@ -418,9 +418,6 @@ export function applyLiveQueryBuilderValuesToRules(rules, containerId = 'builder
 
     const nextValueIndex = nextValueIndexes[rule.id] || 0;
     if (nextValueIndex < liveValuesByRuleId[rule.id].length) {
-      if (rule.id === 'inscription_id') {
-        rule.operator = 'equal';
-      }
       rule.value = liveValuesByRuleId[rule.id][nextValueIndex];
       nextValueIndexes[rule.id] = nextValueIndex + 1;
     }
@@ -804,6 +801,13 @@ function createWordSearchRule(config) {
 export function initQueryBuilder(containerId, viewModel, getHumanName) {
   const dbMap = viewModel.getAllInscriptions();
   const queryBuilder = $(`#${containerId}`);
+  const signatureIdOperators = [
+    'equal', 'not_equal',
+    'contains', 'not_contains',
+    'begins_with', 'not_begins_with',
+    'ends_with', 'not_ends_with',
+    'is_empty', 'is_not_empty',
+  ];
 
   const qbOperators = $.fn.queryBuilder.constructor.DEFAULTS.operators.concat([
     // Add to default operators
@@ -832,10 +836,7 @@ export function initQueryBuilder(containerId, viewModel, getHumanName) {
       input: function(rule, name) {
         return `<input type="text" name="${name}" class="form-control" autocomplete="off">`;
       },
-      operators: [
-        'equal', 'begins_with', 'not_begins_with',
-        'ends_with', 'not_ends_with', 'contains', 'not_contains',
-      ],
+      operators: signatureIdOperators,
       validation: {
         callback: function(value) {
           return true;

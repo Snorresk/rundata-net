@@ -6,11 +6,14 @@ from django.test import SimpleTestCase, TestCase
 from rundatanet.runes.api import (
     _build_rules_fallback_from_text,
     _extract_aligned_word_spelling,
+    _extract_bracteate_type_object,
     _extract_carver_constraints,
     _extract_carver_status,
     _extract_cross_form_group_requests,
+    _extract_detailed_material_constraints,
     _extract_english_translation_terms,
     _extract_excluded_initial_rune,
+    _extract_explicit_normalization_word_terms,
     _extract_full_personal_name,
     _extract_full_personal_names,
     _extract_location_terms,
@@ -20,9 +23,13 @@ from rundatanet.runes.api import (
     _extract_object_info_constraints,
     _extract_personal_name_presence_constraint,
     _extract_phrase_query,
+    _extract_prohibited_final_runes,
+    _extract_prohibited_initial_runes,
+    _extract_required_final_runes,
     _extract_required_initial_runes,
     _extract_rune_type_constraints,
     _extract_sound_term,
+    _extract_specific_location_constraints,
     _extract_standalone_transliteration_rune,
     _has_coordinate_rune_intent,
     _excludes_palatal_r,
@@ -186,6 +193,219 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(result["rules"][0]["id"], "english_translation")
         self.assertEqual(result["rules"][0]["value"], "stone")
 
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("stone", "stone"),))
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_does_not_reuse_english_word_as_object_info(self, _styles, _objects):
+        result = json.loads(_build_rules_fallback_from_text(self.prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [("english_translation", "stone")],
+        )
+
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_scandinavian")
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_english_translation_wins_before_normalisation_for_english_word(
+        self, _styles, _objects, _language, _english
+    ):
+        prompt = "Find all inscriptions with the word my"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "english_translation")
+        self.assertEqual(result["rules"][0]["value"], "my ")
+        self.assertTrue(result["rules"][0]["ignoreCase"])
+
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_scandinavian")
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_english_pronoun_i_uses_case_sensitive_word_boundary(
+        self, _styles, _objects, _language, _english
+    ):
+        prompt = 'Find inscriptions with the word "I"'
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "english_translation")
+        self.assertEqual(result["rules"][0]["value"], "I ")
+        self.assertFalse(result["rules"][0]["ignoreCase"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_explicit_old_norse_normalisation_word_query(self, _styles, _objects):
+        prompt = "Find in normalisation to Old Norse the word þegn"
+
+        self.assertEqual(_extract_explicit_normalization_word_terms(prompt), [("þegn", True)])
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(result["rules"][0]["field"], "normalization_norse")
+        self.assertEqual(result["rules"][0]["value"]["normalization"], "þegn")
+        self.assertEqual(result["rules"][0]["value"]["transliteration"], "")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "excludeNames")
+
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._normalization_language_hits", return_value=(True, True))
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_explicit_old_norse_word_phrase_beats_english_translation(
+        self, _styles, _objects, _hits, _english
+    ):
+        prompt = "Find inscription with the Old Norse word steinn"
+
+        self.assertEqual(_extract_explicit_normalization_word_terms(prompt), [("steinn", True)])
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(result["rules"][0]["field"], "normalization_norse")
+        self.assertEqual(result["rules"][0]["value"]["normalization"], "steinn")
+        self.assertEqual(result["rules"][0]["value"]["transliteration"], "")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_explicit_old_scandinavian_normalisation_word_query(self, _styles, _objects):
+        prompt = "Find in the normalisation to Old Scandinavian a word kumbl"
+
+        self.assertEqual(_extract_explicit_normalization_word_terms(prompt), [("kumbl", False)])
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "normalization_scandinavian_to_transliteration")
+        self.assertEqual(result["rules"][0]["field"], "normalisation_scandinavian")
+        self.assertEqual(result["rules"][0]["value"]["normalization"], "kumbl")
+        self.assertEqual(result["rules"][0]["value"]["transliteration"], "")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "excludeNames")
+
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._normalization_language_hits", return_value=(True, True))
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_explicit_old_scandinavian_word_phrase_beats_english_translation(
+        self, _styles, _objects, _hits, _english
+    ):
+        prompt = "Find inscriptions with the Old Scandinavian word kumbl"
+
+        self.assertEqual(_extract_explicit_normalization_word_terms(prompt), [("kumbl", False)])
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "normalization_scandinavian_to_transliteration")
+        self.assertEqual(result["rules"][0]["field"], "normalisation_scandinavian")
+        self.assertEqual(result["rules"][0]["value"]["normalization"], "kumbl")
+
+    @patch("rundatanet.runes.api._normalization_language_hits", return_value=(True, True))
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_west_norse")
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=False)
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_ambiguous_normalisation_word_searches_both_languages(
+        self, _styles, _objects, _english, _language, _hits
+    ):
+        prompt = "Find all inscriptions with word kuml"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        group = result["rules"][0]
+        self.assertEqual(group["condition"], "OR")
+        self.assertEqual(
+            [rule["id"] for rule in group["rules"]],
+            [
+                "normalization_norse_to_transliteration",
+                "normalization_scandinavian_to_transliteration",
+            ],
+        )
+        self.assertEqual(
+            [rule["value"]["normalization"] for rule in group["rules"]],
+            ["kuml", "kuml"],
+        )
+
+    @patch("rundatanet.runes.api._normalization_language_hits", return_value=(True, True))
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_west_norse")
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_ambiguous_word_with_spelling_searches_both_normalisations_with_transliteration(
+        self, _styles, _objects, _language, _hits
+    ):
+        prompt = "Find all inscriptions with word kuml written in runes kubl"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        group = result["rules"][0]
+        self.assertEqual(group["condition"], "OR")
+        self.assertEqual(
+            [rule["id"] for rule in group["rules"]],
+            [
+                "normalization_norse_to_transliteration",
+                "normalization_scandinavian_to_transliteration",
+            ],
+        )
+        self.assertEqual(
+            [rule["value"] for rule in group["rules"]],
+            [
+                {"normalization": "kuml", "transliteration": "kubl", "names_mode": "excludeNames"},
+                {"normalization": "kuml", "transliteration": "kubl", "names_mode": "excludeNames"},
+            ],
+        )
+
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_scandinavian")
+    def test_generic_runological_word_query_does_not_target_english_translation(
+        self, _language, _english
+    ):
+        for prompt, term in {
+            "Find the word austr on runestones": "austr",
+            "Find the word þegn on runestones": "þegn",
+        }.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_english_translation_terms(prompt), [])
+                self.assertEqual(_extract_swedish_word_terms(prompt), [term])
+
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_scandinavian")
+    def test_explicit_english_word_still_targets_english_translation(
+        self, _language, _english
+    ):
+        prompt = "Find the English word austr on runestones"
+
+        self.assertEqual(_extract_english_translation_terms(prompt), ["austr"])
+        self.assertEqual(_extract_swedish_word_terms(prompt), ["austr"])
+
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_scandinavian")
+    @patch("rundatanet.runes.api._normalization_language_hits", return_value=(False, True))
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[{"id": "objectInfo", "field": "objectInfo", "value": "runestone"}])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_targets_normalisation_and_runestone_for_generic_runological_word(
+        self, _styles, _objects, _hits, _language, _english
+    ):
+        prompt = "Find the word austr on runestones"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertCountEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [
+                ("objectInfo", "runestone"),
+                (
+                    "normalization_scandinavian_to_transliteration",
+                    {"normalization": "austr", "transliteration": "", "names_mode": "excludeNames"},
+                ),
+            ],
+        )
+
     @patch("rundatanet.runes.api._language_containing_word", return_value="old_scandinavian")
     def test_english_word_query_can_target_old_scandinavian_normalisation(self, _language):
         prompt = "Find inscriptions with the word þiagn"
@@ -208,6 +428,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(len(result["rules"]), 1)
         self.assertEqual(result["rules"][0]["id"], "normalization_scandinavian_to_transliteration")
         self.assertEqual(result["rules"][0]["value"]["normalization"], "þiagn")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "excludeNames")
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
@@ -231,6 +452,100 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual([rule["id"] for rule in result["rules"]], ["english_translation"])
         self.assertEqual(result["rules"][0]["value"], "stone")
 
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("stone", "stone"),))
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_removes_mistaken_object_info_for_english_word(self, _styles, _objects):
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "english_translation",
+                        "field": "english_translation",
+                        "operator": "contains",
+                        "value": "stone",
+                    },
+                    {
+                        "id": "objectInfo",
+                        "field": "objectInfo",
+                        "operator": "contains",
+                        "value": "stone",
+                    },
+                ],
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(self.prompt, model_output))
+
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [("english_translation", "stone")],
+        )
+
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_rewrites_pronoun_i_to_case_sensitive_english_rule(
+        self, _styles, _objects, _english
+    ):
+        prompt = 'Find inscriptions with the word "I"'
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "normalization_scandinavian_to_transliteration",
+                        "field": "normalisation_scandinavian",
+                        "operator": "contains",
+                        "value": {
+                            "normalization": "I",
+                            "transliteration": "",
+                            "names_mode": "includeAll",
+                        },
+                    }
+                ],
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(prompt, model_output))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "english_translation")
+        self.assertEqual(result["rules"][0]["value"], "I ")
+        self.assertFalse(result["rules"][0]["ignoreCase"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_respects_explicit_old_norse_normalisation_field(
+        self, _styles, _objects
+    ):
+        prompts = {
+            "Find in normalisation to Old Norse the word þegn": "þegn",
+            "Find inscription with the Old Norse word steinn": "steinn",
+        }
+
+        for prompt, term in prompts.items():
+            with self.subTest(prompt=prompt):
+                model_output = json.dumps(
+                    {
+                        "condition": "AND",
+                        "rules": [
+                            {
+                                "id": "english_translation",
+                                "field": "english_translation",
+                                "operator": "contains",
+                                "value": term,
+                            }
+                        ],
+                    }
+                )
+
+                result = json.loads(_postprocess_ai_rules(prompt, model_output))
+
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+                self.assertEqual(result["rules"][0]["value"]["normalization"], term)
+
     def test_explicit_material_intent_is_preserved(self):
         constraints = _extract_material_constraints("Find inscriptions carved on stone")
 
@@ -248,6 +563,183 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         for prompt in prompts:
             with self.subTest(prompt=prompt):
                 self.assertEqual(_extract_location_terms(prompt), [])
+
+    def test_specific_location_suffixes_choose_precise_geo_fields(self):
+        prompts = {
+            "Find inscriptions from Össeby-Garns parish": ("parish", "parish", "Össeby-Garns"),
+            "Find inscription from Motala municipality": ("municipality", "municipality", "Motala"),
+            "Find inscriptions from Bråbo hd": ("district", "district", "Bråbo"),
+            "Hitta inskrifter från Össeby-Garns sn": ("parish", "parish", "Össeby-Garns"),
+            "Hitta inskrifter från Bråbo härad": ("district", "district", "Bråbo"),
+            "Hitta inskrifter från Motala kommun": ("municipality", "municipality", "Motala"),
+        }
+
+        for prompt, expected in prompts.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_specific_location_constraints(prompt), [
+                    {"id": expected[0], "field": expected[1], "value": expected[2]}
+                ])
+
+    def test_church_location_terms_choose_found_location(self):
+        prompts = {
+            "Find inscriptions from Vallentuna church": "Vallentuna kyrka",
+            "Find inscriptions from Vallentuna kyrka": "Vallentuna kyrka",
+            "Find inscriptions from Vallentuna k:a": "Vallentuna kyrka",
+            "Find inscriptions from Vallentuna ch": "Vallentuna kyrka",
+        }
+
+        for prompt, value in prompts.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_specific_location_constraints(prompt), [
+                    {"id": "found_location", "field": "found_location", "value": value}
+                ])
+
+    def test_explicit_found_location_terms_choose_found_location(self):
+        prompts = {
+            "Find inscriptions which have found location in Karlevi": "Karlevi",
+            "Find inscriptions which have Found location in Karlevi": "Karlevi",
+            "Find inscriptions which have found location Karlevi": "Karlevi",
+            "Find inscriptions with found location in churches": "kyrka",
+            "Find inscriptions with found location in church": "kyrka",
+            "Find inscriptions with found location in graveyards": "kyrkogård",
+            "Find inscriptions with found location in graveyard": "kyrkogård",
+            "Find inscriptions with found location in cemeteries": "kyrkogård",
+            "Find inscriptions with found location in cemetery": "kyrkogård",
+            "Find inscriptions with found location in churchyards": "kyrkogård",
+            "Find inscriptions with found location in churchyard": "kyrkogård",
+            "Find inscriptions with found location in kyrkogårdar": "kyrkogård",
+            "Find inscriptions with found location in kyrkogård": "kyrkogård",
+        }
+
+        for prompt, value in prompts.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_specific_location_constraints(prompt), [
+                    {"id": "found_location", "field": "found_location", "value": value}
+                ])
+
+    def test_kyrka_inside_compound_name_does_not_choose_found_location(self):
+        constraints = _extract_specific_location_constraints("Find inscriptions from Botkyrka")
+
+        self.assertEqual(constraints, [])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_specific_location_field_without_any_location_duplicate(self, _styles, _objects):
+        prompts = {
+            "Find inscriptions from Össeby-Garns parish": ("parish", "Össeby-Garns"),
+            "Find inscription from Motala municipality": ("municipality", "Motala"),
+            "Find inscriptions from Bråbo hd": ("district", "Bråbo"),
+        }
+
+        for prompt, expected in prompts.items():
+            with self.subTest(prompt=prompt):
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(result["rules"][0]["id"], expected[0])
+                self.assertEqual(result["rules"][0]["field"], expected[0])
+                self.assertEqual(result["rules"][0]["operator"], "contains")
+                self.assertEqual(result["rules"][0]["value"], expected[1])
+                self.assertTrue(_is_simple_deterministic_query(prompt, json.dumps(result)))
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_found_location_for_church_without_any_location_duplicate(self, _styles, _objects):
+        prompts = (
+            "Find inscriptions from Vallentuna church",
+            "Find inscriptions from Vallentuna kyrka",
+            "Find inscriptions from Vallentuna k:a",
+            "Find inscriptions from Vallentuna ch",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(result["rules"][0]["id"], "found_location")
+                self.assertEqual(result["rules"][0]["field"], "found_location")
+                self.assertEqual(result["rules"][0]["operator"], "contains")
+                self.assertEqual(result["rules"][0]["value"], "Vallentuna kyrka")
+                self.assertTrue(_is_simple_deterministic_query(prompt, json.dumps(result)))
+                self.assertIsNone(_query_builder_guidance_message(prompt, result))
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_found_location_for_explicit_found_location_without_duplicate(self, _styles, _objects):
+        prompts = {
+            "Find inscriptions which have found location in Karlevi": "Karlevi",
+            "Find inscriptions which have found location Karlevi": "Karlevi",
+            "Find inscriptions with found location in churches": "kyrka",
+            "Find inscriptions with found location in graveyards": "kyrkogård",
+            "Find inscriptions with found location in cemeteries": "kyrkogård",
+            "Find inscriptions with found location in churchyards": "kyrkogård",
+            "Find inscriptions with found location in kyrkogårdar": "kyrkogård",
+        }
+
+        for prompt, value in prompts.items():
+            with self.subTest(prompt=prompt):
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(result["rules"][0]["id"], "found_location")
+                self.assertEqual(result["rules"][0]["field"], "found_location")
+                self.assertEqual(result["rules"][0]["operator"], "contains")
+                self.assertEqual(result["rules"][0]["value"], value)
+                self.assertTrue(_is_simple_deterministic_query(prompt, json.dumps(result)))
+                self.assertIsNone(_query_builder_guidance_message(prompt, result))
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_replaces_any_location_with_specific_location_field(self, _styles, _objects):
+        prompt = "Find inscriptions from Bråbo hd"
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "full_address",
+                        "field": "full_address",
+                        "operator": "contains",
+                        "value": "Bråbo hd",
+                    }
+                ],
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(prompt, model_output))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "district")
+        self.assertEqual(result["rules"][0]["field"], "district")
+        self.assertEqual(result["rules"][0]["operator"], "contains")
+        self.assertEqual(result["rules"][0]["value"], "Bråbo")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_replaces_church_any_location_with_found_location(self, _styles, _objects):
+        prompt = "Find inscriptions from Vallentuna church"
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "full_address",
+                        "field": "full_address",
+                        "operator": "contains",
+                        "value": "Vallentuna church",
+                    }
+                ],
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(prompt, model_output))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(result["rules"][0]["id"], "found_location")
+        self.assertEqual(result["rules"][0]["field"], "found_location")
+        self.assertEqual(result["rules"][0]["operator"], "contains")
+        self.assertEqual(result["rules"][0]["value"], "Vallentuna kyrka")
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
@@ -276,6 +768,263 @@ class EnglishTranslationIntentTests(SimpleTestCase):
     @patch("rundatanet.runes.api._get_object_info_values", return_value=(("sten", "sten"),))
     def test_material_term_is_not_reused_as_object_info(self, _objects):
         self.assertEqual(_extract_object_info_constraints("Hitta alla inskrifter ristade i sten"), [])
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch(
+        "rundatanet.runes.api._get_material_values",
+        return_value=(("limestone", "limestone"), ("lime plaster", "lime plaster"), ("copper", "copper")),
+    )
+    def test_detailed_material_terms_target_material_field(self, _materials, _translations):
+        cases = {
+            "Find all inscriptions on limestones": "limestone",
+            "Find inscriptions made on lime plaster": "lime plaster",
+            "Find inscriptions on copper plates": "copper",
+        }
+
+        for prompt, expected in cases.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(
+                    _extract_detailed_material_constraints(prompt),
+                    [{"id": "material", "field": "material", "value": expected}],
+                )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=(("limestone", "limestone"),))
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_material_field_for_limestones(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find all inscriptions on limestones"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [("material", "material", "limestone")],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=(("lime plaster", "lime plaster"),))
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_detailed_material_suppresses_broad_material_type(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find inscriptions on Gotland made on lime plaster"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [("inscription_country", "signature_text", ["G "]), ("material", "material", "lime plaster")],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=(("copper", "copper"),))
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("plate", "plate"),))
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_material_object_and_transliteration_can_combine(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find inscriptions on copper plates with runes iii"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [
+                (
+                    "normalization_scandinavian_to_transliteration",
+                    "normalisation_scandinavian",
+                    {"normalization": "", "transliteration": "iii", "names_mode": "includeAll"},
+                ),
+                ("material", "material", "copper"),
+                ("objectInfo", "objectInfo", "plate"),
+            ],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    def test_plural_english_object_terms_are_singularized(self, _objects, _materials, _translations):
+        cases = {
+            "Find inscriptions on baptismal fonts": "baptismal font",
+            "Find inscriptions on runestones": "runestone",
+            "Find inscriptions on amulets": "amulet",
+        }
+
+        for prompt, expected in cases.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(
+                    _extract_object_info_constraints(prompt),
+                    [{"id": "objectInfo", "field": "objectInfo", "value": expected}],
+                )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("comb", "comb"),))
+    def test_plural_object_terms_can_match_singular_db_values(self, _objects, _materials, _translations):
+        self.assertEqual(
+            _extract_object_info_constraints("Find inscriptions on combs"),
+            [{"id": "objectInfo", "field": "objectInfo", "value": "comb"}],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    def test_bracteate_type_queries_use_specific_object_info(
+        self, _objects, _materials, _translations
+    ):
+        cases = {
+            "Find all bracteates of C type": "bracteate (C-type)",
+            "Find bracteates of C type": "bracteate (C-type)",
+            "Find bracteates with C-type": "bracteate (C-type)",
+            "Find C type bracteates": "bracteate (C-type)",
+        }
+
+        for prompt, expected in cases.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_bracteate_type_object(prompt), expected)
+                self.assertEqual(
+                    _extract_object_info_constraints(prompt),
+                    [{"id": "objectInfo", "field": "objectInfo", "value": expected}],
+                )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_specific_bracteate_type_object_info(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find all bracteates of C type"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(
+            result["rules"][0],
+            {
+                "id": "objectInfo",
+                "field": "objectInfo",
+                "type": "string",
+                "input": "text",
+                "operator": "contains",
+                "value": "bracteate (C-type)",
+                "ignoreCase": True,
+                "includeSpecialSymbols": False,
+            },
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("amulets", "amulets"),))
+    def test_plural_object_db_values_do_not_duplicate_singular_mapping(
+        self, _objects, _materials, _translations
+    ):
+        self.assertEqual(
+            _extract_object_info_constraints("Find inscriptions on amulets"),
+            [{"id": "objectInfo", "field": "objectInfo", "value": "amulet"}],
+        )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[{"id": "objectInfo", "field": "objectInfo", "value": "amulet"}])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_removes_plural_object_info_duplicate(self, _styles, _objects):
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "objectInfo",
+                        "field": "objectInfo",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "amulet",
+                    },
+                    {
+                        "id": "objectInfo",
+                        "field": "objectInfo",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "amulets",
+                    },
+                ],
+                "not": False,
+                "valid": True,
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules("Find inscriptions on amulets", model_output))
+
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [("objectInfo", "amulet")],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_detailed_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch(
+        "rundatanet.runes.api._extract_object_info_constraints",
+        return_value=[{"id": "objectInfo", "field": "objectInfo", "value": "bracteate (C-type)"}],
+    )
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_prefers_specific_bracteate_type_over_generic(
+        self, _styles, _objects, _materials, _detailed_materials, _translations
+    ):
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "objectInfo",
+                        "field": "objectInfo",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "bracteate",
+                    }
+                ],
+                "not": False,
+                "valid": True,
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules("Find all bracteates of C type", model_output))
+
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [("objectInfo", "bracteate (C-type)")],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_singular_object_info_for_baptismal_fonts(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find inscriptions on baptismal fonts"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(
+            result["rules"][0],
+            {
+                "id": "objectInfo",
+                "field": "objectInfo",
+                "type": "string",
+                "input": "text",
+                "operator": "contains",
+                "value": "baptismal font",
+                "ignoreCase": True,
+                "includeSpecialSymbols": False,
+            },
+        )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
@@ -351,6 +1100,52 @@ class EnglishTranslationIntentTests(SimpleTestCase):
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_middle_ages_queries_use_medieval_dating_prefix(self, _styles, _objects):
+        prompts = (
+            "Find all inscriptions from the Middle Ages",
+            "Find all inscriptions from the Middle ages",
+            "Find all inscriptions from the Middle Age",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                rule = result["rules"][0]
+                self.assertEqual(rule["id"], "dating")
+                self.assertEqual(rule["field"], "dating")
+                self.assertEqual(rule["operator"], "begins_with")
+                self.assertEqual(rule["value"], "M")
+                self.assertTrue(rule["ignoreCase"])
+                self.assertFalse(rule["includeSpecialSymbols"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_proto_norse_queries_use_proto_dating_prefix(self, _styles, _objects):
+        prompts = (
+            "Find all inscriptions from Proto–Norse period",
+            "Find all inscriptions from Proto-Norse time",
+            "Find all inscriptions from time before Viking age",
+            "Hitta alla urnordiska inskrifter",
+            "hitta inskrifter from Urnordisk tid",
+        )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                result = json.loads(_build_rules_fallback_from_text(prompt))
+
+                self.assertEqual(len(result["rules"]), 1)
+                rule = result["rules"][0]
+                self.assertEqual(rule["id"], "dating")
+                self.assertEqual(rule["field"], "dating")
+                self.assertEqual(rule["operator"], "begins_with")
+                self.assertEqual(rule["value"], "Proto")
+                self.assertTrue(rule["ignoreCase"])
+                self.assertFalse(rule["includeSpecialSymbols"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
     def test_word_runes_with_denmark_uses_fast_deterministic_path(self, _styles, _objects):
         prompt = "Find all inscription from Denmark with the word runes"
 
@@ -395,6 +1190,37 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(len(result["rules"]), 1)
         self.assertEqual(result["rules"][0]["id"], "inscription_id")
         self.assertEqual(result["rules"][0]["value"], "U 212|Sö 46|DR 42")
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_partial_signature_id_query_uses_contains_rule(self, _styles, _objects):
+        prompt = "Find id number Sl9"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertEqual(len(result["rules"]), 1)
+        rule = result["rules"][0]
+        self.assertEqual(rule["id"], "inscription_id")
+        self.assertEqual(rule["field"], "signature_text")
+        self.assertEqual(rule["operator"], "contains")
+        self.assertEqual(rule["value"], "Sl9")
+        self.assertTrue(rule["ignoreCase"])
+        self.assertTrue(rule["data"]["multiField"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_full_signature_id_query_keeps_exact_list_rule(self, _styles, _objects):
+        prompt = "Find id number U Sl9"
+
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertEqual(len(result["rules"]), 1)
+        rule = result["rules"][0]
+        self.assertEqual(rule["id"], "inscription_id")
+        self.assertEqual(rule["operator"], "in")
+        self.assertEqual(rule["value"], "U Sl9")
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
@@ -472,7 +1298,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
         self.assertEqual(
             result["rules"][0]["value"],
-            {"normalization": "eptir", "transliteration": "", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -530,7 +1356,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
         self.assertEqual(
             result["rules"][0]["value"],
-            {"normalization": "ok", "transliteration": "ak", "names_mode": "includeAll"},
+            {"normalization": "ok", "transliteration": "ak", "names_mode": "excludeNames"},
         )
 
     def test_rune_spelling_phrase_variants(self):
@@ -567,14 +1393,14 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(word_rule["id"], "normalization_norse_to_transliteration")
         self.assertEqual(
             word_rule["value"],
-            {"normalization": "stæin", "transliteration": "stan", "names_mode": "includeAll"},
+            {"normalization": "stæin", "transliteration": "stan", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
-    @patch("rundatanet.runes.api._normalization_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._normalization_language_hits", return_value=(False, True))
     def test_english_word_written_in_runes_uses_transliteration_not_location(
-        self, _contains, _styles, _objects
+        self, _hits, _styles, _objects
     ):
         prompt = "Find inscriptions with the word þegn written in runes þikn."
 
@@ -590,7 +1416,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(result["rules"][0]["id"], "normalization_scandinavian_to_transliteration")
         self.assertEqual(
             result["rules"][0]["value"],
-            {"normalization": "þegn", "transliteration": "þikn", "names_mode": "includeAll"},
+            {"normalization": "þegn", "transliteration": "þikn", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -615,7 +1441,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(word_rule["id"], "normalization_norse_to_transliteration")
         self.assertEqual(
             word_rule["value"],
-            {"normalization": "reisti", "transliteration": "þ", "names_mode": "includeAll"},
+            {"normalization": "reisti", "transliteration": "þ", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -646,7 +1472,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
                         "value": {
                             "normalization": "reisti",
                             "transliteration": "",
-                            "names_mode": "includeAll",
+                            "names_mode": "excludeNames",
                         },
                         "data": {"multiField": True},
                         "ignoreCase": True,
@@ -668,7 +1494,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(word_rule["id"], "normalization_norse_to_transliteration")
         self.assertEqual(
             word_rule["value"],
-            {"normalization": "reisti", "transliteration": "þ", "names_mode": "includeAll"},
+            {"normalization": "reisti", "transliteration": "þ", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -677,20 +1503,25 @@ class EnglishTranslationIntentTests(SimpleTestCase):
     def test_name_element_is_resolved_and_paired_with_rune_spelling(
         self, _resolved_element, _styles, _objects
     ):
-        prompt = "Sök efter samtliga fall där namnleden björn uppträder med skrivningen iau"
-
-        self.assertEqual(_extract_name_element(prompt), "björn")
-        self.assertEqual(_extract_rune_spelling(prompt), "iau")
-        fallback = _build_rules_fallback_from_text(prompt)
-        result = json.loads(fallback)
-
-        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
-        self.assertEqual(len(result["rules"]), 1)
-        self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
-        self.assertEqual(
-            result["rules"][0]["value"],
-            {"normalization": "bjôrn", "transliteration": "iau", "names_mode": "namesOnly"},
+        prompts = (
+            "Sök efter samtliga fall där namnleden björn uppträder med skrivningen iau",
+            "Hitta inskrifter med namnelementet björn som innehåller runor iau",
         )
+
+        for prompt in prompts:
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_name_element(prompt), "björn")
+                self.assertEqual(_extract_rune_spelling(prompt), "iau")
+                fallback = _build_rules_fallback_from_text(prompt)
+                result = json.loads(fallback)
+
+                self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+                self.assertEqual(len(result["rules"]), 1)
+                self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
+                self.assertEqual(
+                    result["rules"][0]["value"],
+                    {"normalization": "bjôrn", "transliteration": "iau", "names_mode": "namesOnly"},
+                )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
@@ -841,7 +1672,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(positive_rule["operator"], "contains")
         self.assertEqual(
             positive_rule["value"],
-            {"normalization": "hiogg", "transliteration": "", "names_mode": "includeAll"},
+            {"normalization": "hiogg", "transliteration": "", "names_mode": "excludeNames"},
         )
         self.assertTrue(negated_group["not"])
         self.assertEqual(negated_group["condition"], "AND")
@@ -850,7 +1681,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(negative_rule["operator"], "begins_with")
         self.assertEqual(
             negative_rule["value"],
-            {"normalization": "hiogg", "transliteration": "h", "names_mode": "includeAll"},
+            {"normalization": "hiogg", "transliteration": "h", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -919,8 +1750,179 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(rule["operator"], "begins_with")
         self.assertEqual(
             rule["value"],
-            {"normalization": "eptir", "transliteration": "ai", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "ai", "names_mode": "excludeNames"},
         )
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_explicit_old_norse_word_starts_with_runes(self, _styles, _objects):
+        prompt = "Find inscriptions with the Old Norse word eptir which starts with runes ai"
+
+        self.assertEqual(_extract_explicit_normalization_word_terms(prompt), [("eptir", True)])
+        self.assertEqual(_extract_required_initial_runes(prompt), "ai")
+        self.assertIsNone(_extract_standalone_transliteration_rune(prompt))
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(len(result["rules"]), 1)
+        rule = result["rules"][0]
+        self.assertEqual(rule["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(rule["operator"], "begins_with")
+        self.assertEqual(
+            rule["value"],
+            {"normalization": "eptir", "transliteration": "ai", "names_mode": "excludeNames"},
+        )
+        self.assertTrue(rule["ignoreCase"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_explicit_old_norse_word_starts_and_ends_with_runes(self, _styles, _objects):
+        prompt = (
+            "Find inscriptions with the Old Norse word eptir which starts with runes ai "
+            "and ends with the rune r"
+        )
+
+        self.assertEqual(_extract_explicit_normalization_word_terms(prompt), [("eptir", True)])
+        self.assertEqual(_extract_required_initial_runes(prompt), "ai")
+        self.assertEqual(_extract_required_final_runes(prompt), "r")
+        self.assertIsNone(_extract_standalone_transliteration_rune(prompt))
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(len(result["rules"]), 2)
+        first_rule, final_rule = result["rules"]
+        self.assertEqual(first_rule["operator"], "begins_with")
+        self.assertEqual(
+            first_rule["value"],
+            {"normalization": "eptir", "transliteration": "ai", "names_mode": "excludeNames"},
+        )
+        self.assertTrue(first_rule["ignoreCase"])
+        self.assertEqual(final_rule["id"], "normalization_norse_to_transliteration")
+        self.assertEqual(final_rule["operator"], "ends_with")
+        self.assertEqual(
+            final_rule["value"],
+            {"normalization": "eptir", "transliteration": "r", "names_mode": "excludeNames"},
+        )
+        self.assertFalse(final_rule["ignoreCase"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_explicit_old_norse_word_ending_with_R_is_case_sensitive(self, _styles, _objects):
+        prompt = "Find inscriptions with the Old Norse word eptir which ends with the rune R"
+
+        self.assertEqual(_extract_required_final_runes(prompt), "R")
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(len(result["rules"]), 1)
+        rule = result["rules"][0]
+        self.assertEqual(rule["operator"], "ends_with")
+        self.assertEqual(
+            rule["value"],
+            {"normalization": "eptir", "transliteration": "R", "names_mode": "excludeNames"},
+        )
+        self.assertFalse(rule["ignoreCase"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_explicit_old_scandinavian_word_does_not_start_with_rune(self, _styles, _objects):
+        prompt = "Find inscriptions with the Old Scandinavian word hiogg which does not start with rune h"
+
+        self.assertEqual(_extract_explicit_normalization_word_terms(prompt), [("hiogg", False)])
+        self.assertIsNone(_extract_required_initial_runes(prompt))
+        self.assertEqual(_extract_prohibited_initial_runes(prompt), "h")
+        self.assertIsNone(_extract_standalone_transliteration_rune(prompt))
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(len(result["rules"]), 2)
+        positive_rule, negated_group = result["rules"]
+        self.assertEqual(positive_rule["id"], "normalization_scandinavian_to_transliteration")
+        self.assertEqual(positive_rule["operator"], "begins_with")
+        self.assertEqual(
+            positive_rule["value"],
+            {"normalization": "hiogg", "transliteration": "", "names_mode": "excludeNames"},
+        )
+        self.assertTrue(negated_group["not"])
+        negative_rule = negated_group["rules"][0]
+        self.assertEqual(negative_rule["id"], "normalization_scandinavian_to_transliteration")
+        self.assertEqual(negative_rule["operator"], "begins_with")
+        self.assertEqual(
+            negative_rule["value"],
+            {"normalization": "hiogg", "transliteration": "h", "names_mode": "excludeNames"},
+        )
+        self.assertTrue(negative_rule["ignoreCase"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_negative_initial_r_or_R_is_case_sensitive(self, _styles, _objects):
+        prompts = {
+            "Find inscriptions with the Old Norse word eptir which does not start with rune r": "r",
+            "Find inscriptions with the Old Norse word eptir which does not start with rune R": "R",
+        }
+
+        for prompt, rune in prompts.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_prohibited_initial_runes(prompt), rune)
+                fallback = _build_rules_fallback_from_text(prompt)
+                result = json.loads(fallback)
+
+                negative_rule = result["rules"][1]["rules"][0]
+                self.assertEqual(negative_rule["value"]["transliteration"], rune)
+                self.assertFalse(negative_rule["ignoreCase"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_explicit_old_scandinavian_word_does_not_end_with_rune(self, _styles, _objects):
+        prompt = "Find inscriptions with the Old Scandinavian word hiogg which does not end with rune k"
+
+        self.assertEqual(_extract_explicit_normalization_word_terms(prompt), [("hiogg", False)])
+        self.assertIsNone(_extract_required_final_runes(prompt))
+        self.assertEqual(_extract_prohibited_final_runes(prompt), "k")
+        self.assertIsNone(_extract_standalone_transliteration_rune(prompt))
+        fallback = _build_rules_fallback_from_text(prompt)
+        result = json.loads(fallback)
+
+        self.assertTrue(_is_simple_deterministic_query(prompt, fallback))
+        self.assertEqual(len(result["rules"]), 2)
+        positive_rule, negated_group = result["rules"]
+        self.assertEqual(positive_rule["id"], "normalization_scandinavian_to_transliteration")
+        self.assertEqual(positive_rule["operator"], "ends_with")
+        self.assertEqual(
+            positive_rule["value"],
+            {"normalization": "hiogg", "transliteration": "", "names_mode": "excludeNames"},
+        )
+        self.assertTrue(negated_group["not"])
+        negative_rule = negated_group["rules"][0]
+        self.assertEqual(negative_rule["id"], "normalization_scandinavian_to_transliteration")
+        self.assertEqual(negative_rule["operator"], "ends_with")
+        self.assertEqual(
+            negative_rule["value"],
+            {"normalization": "hiogg", "transliteration": "k ", "names_mode": "excludeNames"},
+        )
+        self.assertTrue(negative_rule["ignoreCase"])
+
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_negative_final_r_or_R_is_case_sensitive(self, _styles, _objects):
+        prompts = {
+            "Find inscriptions with the Old Norse word eptir which does not end with rune r": "r ",
+            "Find inscriptions with the Old Norse word eptir which does not end with rune R": "R ",
+        }
+
+        for prompt, rune in prompts.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_prohibited_final_runes(prompt), rune.strip())
+                fallback = _build_rules_fallback_from_text(prompt)
+                result = json.loads(fallback)
+
+                negative_rule = result["rules"][1]["rules"][0]
+                self.assertEqual(negative_rule["value"]["transliteration"], rune)
+                self.assertFalse(negative_rule["ignoreCase"])
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
@@ -941,14 +1943,14 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(positive_rule["operator"], "begins_with")
         self.assertEqual(
             positive_rule["value"],
-            {"normalization": "eptir", "transliteration": "ai", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "ai", "names_mode": "excludeNames"},
         )
         self.assertTrue(negated_group["not"])
         negative_rule = negated_group["rules"][0]
         self.assertEqual(negative_rule["operator"], "ends_with")
         self.assertEqual(
             negative_rule["value"],
-            {"normalization": "eptir", "transliteration": "R", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "R", "names_mode": "excludeNames"},
         )
         self.assertFalse(negative_rule["ignoreCase"])
 

@@ -929,7 +929,7 @@ const customSearchFunctions = {
     contains: (record, ruleValue, rule) => searchSignatureWrapper(record, ruleValue, operators.contains, false, !!rule.ignoreCase),
     not_contains: (record, ruleValue, rule) => searchSignatureWrapper(record, ruleValue, operators.contains, true, !!rule.ignoreCase),
     equal: (record, ruleValue, rule) => searchSignatureWrapper(record, ruleValue, operators.equal, false, !!rule.ignoreCase),
-    not_equal: (record, ruleValue, rule) => searchSignatureWrapper(record, ruleValue, operators.not_equal, false, !!rule.ignoreCase),
+    not_equal: (record, ruleValue, rule) => searchSignatureWrapper(record, ruleValue, operators.equal, true, !!rule.ignoreCase),
   },
   inscription_country: {
     in: searchCountryOrProvince,

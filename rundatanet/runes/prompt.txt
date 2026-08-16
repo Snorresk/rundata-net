@@ -40,12 +40,12 @@ You only work with a single system known as runic inscriptions database. It is a
   - `operator`: `begins_with`
   - `value`: `V`
   - `ignoreCase`: `true`
-- If the user asks for Medieval inscriptions (e.g. "Medieval", "Medieaval", "medeltid"), map to filter `dating` with:
+- If the user asks for Medieval/Middle Ages inscriptions (e.g. "Medieval", "Medieaval", "Middle Ages", "Middle Age", "medeltid"), map to filter `dating` with:
   - `operator`: `begins_with`
   - `value`: `M`
-- If the user asks for Proto-Norse inscriptions (e.g. "Proto-Norse", "urnordisk"), map to filter `dating` with:
+- If the user asks for Proto-Norse inscriptions (e.g. "Proto-Norse", "Proto-Norse period", "Proto-Norse time", "time before Viking Age", "urnordisk", "urnordiska", "urnordisk tid"), map to filter `dating` with:
   - `operator`: `begins_with`
-  - `value`: `U`
+  - `value`: `Proto`
 - If any of these period intents appear together with other filters (e.g., location such as SHM), still include the dating rule and combine with `AND`.
 
 **Country/province mapping (IMPORTANT):**
@@ -68,8 +68,8 @@ You only work with a single system known as runic inscriptions database. It is a
 - Use `equal` for these fields only when the user explicitly asks for exact match.
 - Example: "Find all inscriptions from parish Resmo" -> `parish contains "Resmo"`.
 - Swedish location term mapping:
-  - `härad` -> `district`
-  - `socken` -> `parish`
+  - `härad` / `hd` -> `district`
+  - `socken` / `sn` -> `parish`
   - `kommun` -> `municipality`
   - Example: "Find all inscriptions from Möckleby härad" -> `district contains "Möckleby"`.
 - For place names, be robust to punctuation/spacing variants:
@@ -77,11 +77,21 @@ You only work with a single system known as runic inscriptions database. It is a
   - Example: `Össeby Garns` and `Össeby-Garns`.
   - Do the same for common variants with/without apostrophe-like separators when relevant.
 - When geographic suffix words are present, map the field by suffix and search the core place name:
-  - `... socken` -> use `parish` and remove the word `socken` from the value.
-  - `... härad` -> use `district` and remove the word `härad` from the value.
+  - `... parish`, `... socken`, `... sn` -> use `parish` and remove the suffix word from the value.
+  - `... district`, `... härad`, `... hd` -> use `district` and remove the suffix word from the value.
   - `... kommun` -> use `municipality` and remove the word `kommun` from the value.
+  - `... church`, `... kyrka`, `... k:a`, `... ch` -> use `found_location` and search `<place> kyrka`.
+  - explicit `found location in ...` or `found location ...` -> use `found_location` and search only the place name.
   - Example: "Össeby Garns socken" -> `parish contains "Össeby Garns"` (plus `Össeby-Garns` OR variant).
+  - Example: "Össeby-Garns parish" -> `parish contains "Össeby-Garns"`.
+  - Example: "Bråbo hd" -> `district contains "Bråbo"`.
   - Example: "Vallentuna kommun" -> `municipality contains "Vallentuna"`.
+  - Example: "Vallentuna church" -> `found_location contains "Vallentuna kyrka"`.
+  - Example: "found location in Karlevi" -> `found_location contains "Karlevi"`.
+  - Example: "found location in churches" -> `found_location contains "kyrka"` because found-location values use Swedish wording.
+  - Example: "found location in graveyards/cemeteries/churchyards/kyrkogårdar" -> `found_location contains "kyrkogård"` because found-location values use Swedish wording.
+- Do not treat `kyrka` as a church marker when it is only part of a compound place name, e.g. `Botkyrka`.
+- In Reply/statistics mode: if a specific parish/district/municipality/found-location search gives 0 results, retry the core place name in Any location before giving a negative result. Do not put this fallback into the first QueryBuilder JSON unless the user explicitly asks for Any location.
 - If location intent is clear but the exact location field is unknown/ambiguous (e.g., abbreviations like `SHM`), use fallback location search as an OR group:
   - first alternative: `full_address contains <term>` (Any location)
   - second alternative: `current_location contains <term>`
@@ -97,7 +107,7 @@ You only work with a single system known as runic inscriptions database. It is a
 
 **Runestone mapping (IMPORTANT):**
 - For queries like "runestones from X", "find runestones in X", use:
-  - `objectInfo` with operator `contains` and value `runsten`
+  - `objectInfo` with operator `contains` and value `runestone`
   - plus `inscription_country` for the requested province/country (e.g. Södermanland -> `Sö `).
 - Prefer `objectInfo` for "runestone" intent (not `material_type`).
 - Combine runestone criterion and location criterion with `AND`.
@@ -120,12 +130,31 @@ You only work with a single system known as runic inscriptions database. It is a
 
 **English word and translation mapping (IMPORTANT):**
 - When the user explicitly asks about an English word or English translation, search `english_translation` with operator `contains` and value `X`.
-- When an English-language query asks generically for inscriptions "with the word X" or "containing the word X", first check whether `X` is a runological/normalised form in the searchable language fields. If `X` occurs as a whole word in Old West Norse normalisation, use `normalization_norse_to_transliteration`; if it occurs in Old Scandinavian normalisation, use `normalization_scandinavian_to_transliteration`; otherwise treat it as an English translation word.
-- A word mentioned as textual content is not a material or object filter. For example, "Find all inscriptions with the word stone" means `english_translation contains "stone"`, not `material_type contains "stone"`.
-- Use `material_type` only when material intent is explicit, such as "made of stone", "carved on stone", or "stone material".
+- If the user explicitly says to search in `normalisation/normalization to Old Norse`, use `normalization_norse_to_transliteration` directly. Treat `Old Norse` here as the Old West Norse normalisation field. Do not redirect the word to English translation even if the query is written in English.
+- If the user explicitly says to search in `normalisation/normalization to Old Scandinavian`, use `normalization_scandinavian_to_transliteration` directly. Do not redirect the word to English translation.
+- The same direct-field rule applies to phrases such as `Old Norse word X`, `Old Norse verb X`, `Old Norse form X`, `Old Scandinavian word X`, `Old Scandinavian verb X`, etc. The explicit language wins over English translation.
+- When an English-language query asks generically for inscriptions "with the word X" or "containing the word X" and does not explicitly say English/Swedish/translation, do not automatically search English first. First decide whether `X` is a common modern English/Swedish word or a runological/normalised form.
+- If generic `word X` is a common modern English word such as `I`, `me`, `my`, or `stone`, search `english_translation contains X`.
+- If generic `word X` looks runological or normalised, for example it contains `þ`, `ð`, `æ`, `ø`, or appears in Old West Norse/Old Scandinavian normalisation, search normalisation before translation. Examples: `austr`, `þegn`, `þiagn`, `steinn`, `kumbl`.
+- For normalisation searches caused by `word`/`words` wording, use `names_mode: "excludeNames"` unless the user explicitly asks for names.
+- A word mentioned as textual content is not a material or object filter. For example, "Find all inscriptions with the word stone" means only `english_translation contains "stone"`, not `material_type contains "stone"` and not `objectInfo contains "stone"`.
+- For very short English words, preserve the intended word boundary when possible. Example: "Find all inscriptions with the word my" should search `english_translation contains "my "`.
+- For the English word/pronoun `I`, also turn on Match case: use `english_translation contains "I "` with `ignoreCase: false`, so the search does not match every lowercase letter `i`.
+- Use `material_type` only for broad material categories such as stone, wood, plaster, metal, bone/antler, other, or unknown.
+- Use `material` for specific material substances stored in the Material field, such as limestone, sandstone, granite, gneiss, lime plaster, copper, bronze, iron, silver, gold, amber, etc.
 - If the user independently requests both textual content and material, preserve both rules and combine them with `AND`.
 - Example: "Find all inscriptions on stone with the word stone" must produce both `material_type contains "stone"` and `english_translation contains "stone"` in an `AND` group.
-- Example: "Find inscriptions with the word þiagn" must search Old Scandinavian normalisation for `þiagn`, because this form occurs there, not in English translation.
+- Example: "Find all inscriptions on limestones" must produce `material contains "limestone"` (singular).
+- Example: "Find inscriptions on Gotland made on lime plaster" must produce `material contains "lime plaster"` plus the Gotland province/country rule.
+- Example: "Find inscriptions on copper plates with runes iii" must produce `material contains "copper"`, `objectInfo contains "plate"`, and an Old Scandinavian transliteration rule with `transliteration: "iii"`.
+- Example: "Find the word austr on runestones" must search normalisation for `austr` with `names_mode: "excludeNames"` plus `objectInfo contains "runestone"`, not English translation.
+- Example: "Find inscriptions with the word þegn" must search normalisation for `þegn` with `names_mode: "excludeNames"`, not English translation.
+- Example: "Find inscriptions with the word þiagn" must search Old Scandinavian normalisation for `þiagn` with `names_mode: "excludeNames"`, because this form occurs there, not in English translation.
+- Example: "Find in normalisation to Old Norse the word þegn" creates one Old West Norse normalisation rule with `normalization: "þegn"`.
+- Example: "Find inscription with the Old Norse word steinn" creates one Old West Norse normalisation rule with `normalization: "steinn"`, even if `steinn` is also found in English translations or Old Scandinavian.
+- Example: "Find in the normalisation to Old Scandinavian a word kumbl" creates one Old Scandinavian normalisation rule with `normalization: "kumbl"`.
+- If a word occurs in both Old West Norse and Old Scandinavian normalisation and the user has not explicitly chosen one normalisation, search both normalisations in an `OR` group.
+- If an ambiguous word query also gives a runic spelling/transliteration, keep the user's normalised word and put the spelling in `value.transliteration` in both normalisation rules. Example: "Find all inscriptions with word kuml written in runes kubl" creates an `OR` group with Old West Norse `normalization: "kuml", transliteration: "kubl"` and Old Scandinavian `normalization: "kuml", transliteration: "kubl"`.
 
 **Swedish word and language-aware mapping (IMPORTANT):**
 - When a Swedish query asks for `ordet X`, check the searchable language fields in this order: Old West Norse, Old Scandinavian, English translation, Swedish translation.
@@ -134,7 +163,7 @@ You only work with a single system known as runic inscriptions database. It is a
 - Example: `Sök efter inskrifter med det fornvästnordiska ordet kuml som också innehåller verbet reisa` creates two Old West Norse rules: one containing `kuml` and one containing `reisa`.
 - Use the first field containing `X` as a whole word. This means `eptir` uses `normalization_norse_to_transliteration`, while `runes` uses `english_translation`.
 - Respect an explicitly requested language (`fornvästnordiska`, `fornöstnordiska`, English translation, or Swedish translation) without automatic switching.
-- Put `X` in `value.normalization` and use `names_mode: includeAll`.
+- Put `X` in `value.normalization` and use `names_mode: excludeNames` for word/words/ordet wording unless the user explicitly asks for names.
 - If the query also gives its rune spelling using wording such as `stavning`, `spelling in runes`, or `hur det ska skrivas med runor`, put that spelling in `value.transliteration` in the same multi-field normalization rule. This is a parallel aligned search, not two independent rules.
 - Example: `Sök efter ordet ok, och, i stavningen ak` produces one Old West Norse rule with `normalization: "ok"` and `transliteration: "ak"`.
 - Wording such as `ordet X ... skrivs med Y runa`, `ordet X ... skrivs med runan Y`, or `ordet X ... stavas med Y runa` is also an aligned normalization/transliteration search: put `X` in `value.normalization` and `Y` in `value.transliteration`.
@@ -144,10 +173,18 @@ You only work with a single system known as runic inscriptions database. It is a
 - Example: `Find inscriptions with the word þegn written in runes þikn` creates one Old Scandinavian aligned rule with `normalization: "þegn"` and `transliteration: "þikn"`.
 - Wording such as `inleds med runorna X`, `börjar med runorna X`, or `begins with the runes X` requires one aligned multi-field rule with operator `begins_with`: put the lexical term in `value.normalization` and `X` in `value.transliteration`.
 - Example: `Sök efter inskrifter med det fornvästnordiska ordet eptir där detta inleds med runorna ai` creates one Old West Norse `begins_with` rule with `normalization: "eptir"` and `transliteration: "ai"`.
+- The same applies when the lexical term is explicitly introduced as an Old Norse/Old Scandinavian word. Example: `Find inscriptions with the Old Norse word eptir which starts with runes ai` creates one Old West Norse `begins_with` rule with `normalization: "eptir"` and `transliteration: "ai"`.
+- If the same query has two transliteration constraints, make two aligned rules for the same normalization and combine them with `AND`. Example: `Find inscriptions with the Old Norse word eptir which starts with runes ai and ends with the rune r` creates one `begins_with ai` rule and one `ends_with r` rule, both with `normalization: "eptir"`.
+- Transliteration `r` and `R` are different runes. If the user asks for exactly rune `r` or rune `R`, set `ignoreCase: false` on that transliteration rule.
+- Wording such as `does not start with rune X`, `does not begin with runes X`, Swedish `börjar inte med runa X`, or `inleds inte med runor X` requires an aligned `NOT` group. Add a positive normalization anchor for the requested word, then add `AND NOT` the same normalization with operator `begins_with` and `value.transliteration: X`.
+- Example: `Find inscriptions with the Old Scandinavian word hiogg which does not start with rune h` creates Old Scandinavian `normalization: "hiogg"` with operator `begins_with`, plus `AND NOT` Old Scandinavian `normalization: "hiogg", transliteration: "h"` with operator `begins_with`.
+- Wording such as `does not end with rune X`, `does not end with runes X`, Swedish `slutar inte med runa X`, or `avslutas inte med runor X` requires the same aligned `NOT` pattern but with operator `ends_with`. Add a positive normalization anchor with operator `ends_with`, then add `AND NOT` the same normalization with operator `ends_with` and `value.transliteration: "X "` when checking the final rune boundary.
+- Example: `Find inscriptions with the Old Scandinavian word hiogg which does not end with rune k` creates Old Scandinavian `normalization: "hiogg"` with operator `ends_with`, plus `AND NOT` Old Scandinavian `normalization: "hiogg", transliteration: "k "` with operator `ends_with`.
 - Negative wording about `ʀ`, the R-rune, or “palatal R” requires an additional aligned `NOT` group. Repeat the same normalized word, use operator `ends_with`, put uppercase `R` in `value.transliteration`, and set `ignoreCase: false` so lowercase `r` is not excluded.
 - Example: `... ordet eptir ... inleds med runorna ai men ... inte ... palatalt r` creates the positive aligned `begins_with` rule, then `AND NOT` an aligned rule with `normalization: "eptir"`, `transliteration: "R"`, operator `ends_with`, and case-sensitive matching.
 - For Swedish personal-name-element queries (`namnleden X` or `namnelementet X`), resolve the Swedish element to its canonical Old West Norse form from personal-name data, use `names_mode: namesOnly`, and pair it with any requested rune spelling at the same word position.
 - Example: `Sök efter samtliga fall där namnleden björn uppträder med skrivningen iau` produces one Old West Norse rule with `normalization: "bjôrn"`, `transliteration: "iau"`, and `names_mode: namesOnly`.
+- Wording such as `namnelementet X som innehåller runor Y` or `namnleden X som har runorna Y` is also an aligned name-element + transliteration search. Put the resolved name element in `value.normalization`, put `Y` in `value.transliteration`, and use `names_mode: namesOnly`.
 - Name elements may occur at the beginning, middle, or end of a personal name. Resolve common Swedish forms to the dominant Old West Norse element from personal-name usage data; for example, Swedish `sten` resolves to `stein`.
 - Example: `Sök efter samtliga fall där namnleden sten uppträder med skrivningen ai` produces one Old West Norse rule with `normalization: "stein"`, `transliteration: "ai"`, and `names_mode: namesOnly`.
 - For queries such as `ordet X ... stavat utan inledande h-runa`, resolve the Swedish translation word to Old Scandinavian and use standard QueryBuilder rules:
@@ -177,8 +214,8 @@ You only work with a single system known as runic inscriptions database. It is a
 
 **Object information mapping (IMPORTANT):**
 - Object-type searches should primarily use filter `objectInfo` with operator `contains`.
-- The `objectInfo` dataset has many variants; use canonical Swedish stems so one query matches many phrase variants.
-- If user asks in English, translate object type to Swedish before building `objectInfo` rule.
+- The `objectInfo` dataset is stored in English. Use canonical singular English object terms so one query matches plural and variant wording.
+- If the user asks for an object in plural, use the singular value in `objectInfo`. Examples: `baptismal fonts` -> `baptismal font`; `runestones` -> `runestone`.
 - If the user asks for a numeric number of crosses, use `num_crosses`, not `objectInfo`.
   - Swedish number words such as `ett`, `två`, `tre`, `fyra`, `fem` etc. and English number words such as `one`, `two`, `three`, `four`, `five` etc. should be converted to integers.
   - Example: `Hitta alla inskrifter med fyra kors` -> `num_crosses equal 4`.
@@ -215,33 +252,33 @@ You only work with a single system known as runic inscriptions database. It is a
   - `width/thickness of cross-arms` -> OR group `F1` through `F4`.
 - In reply mode, explain these A-G group meanings and link to: https://rundata-net.readthedocs.io/en/latest/db/data.html#meta-information
 
-Canonical English -> Swedish `objectInfo` mappings (use these values in `contains`):
-- runestone -> `runsten`
-- grave slab -> `gravhäll`
-- baptismal font -> `dopfunt`
-- rock face inscription / rock carving -> `berghäll`
-- runic bone / bone inscription -> `runben`
-- wooden inscription -> `träinskrift`
-- plaster inscription -> `putsinskrift`
-- coin -> `mynt`
-- tag / label -> `märklapp`
-- amulet -> `amulett`
-- runic staff / runic stick -> `runkavel`
-- metal plate / metal plates -> `bleck` (also add `material_type contains metal`)
-- bracteate -> `brakteat`
-- bell -> `kyrkklocka`
-- cross -> `kors`
-- stone cross -> `stenkors`
-- whetstone -> `bryne`
-- knife handle -> `knivskaft`
-- wall inscription / wall graffiti -> `vägginskrift` or `kyrkografitti` (use one canonical value unless user asks broad match)
+Canonical objectInfo mappings (use these singular English values in `contains`):
+- runestone / runestones -> `runestone`
+- grave slab / grave slabs -> `grave slab`
+- baptismal font / baptismal fonts -> `baptismal font`
+- rock face / rock faces / rock carving / rock carvings -> `rock face`
+- runic bone / runic bones / bone inscription / bone inscriptions -> `runic bone`
+- wooden inscription / wooden inscriptions -> `wooden inscription`
+- plaster inscription / plaster inscriptions -> `plaster inscription`
+- coin / coins -> `coin`
+- tag / tags / label / labels -> `tag`
+- amulet / amulets -> `amulet`
+- runic staff / runic staffs / runic stick / runic sticks -> `runic staff`
+- metal plate / metal plates -> `metal plate`
+- plate / plates -> `plate`
+- bracteate / bracteates -> `bracteate`
+- bell / bells -> `bell`
+- cross / crosses -> `cross`
+- stone cross / stone crosses -> `stone cross`
+- whetstone / whetstones -> `whetstone`
+- knife handle / knife handles -> `knife handle`
+- wall inscription / wall inscriptions / wall graffiti -> `wall inscription`
 
 For broader object intent:
-- If user asks generally (e.g., "grave slabs"), use one canonical value first (`gravhäll`).
+- If user asks generally (e.g., "grave slabs"), use one canonical singular English value first (`grave slab`).
 - Add extra `OR` alternatives only when user explicitly requests broader inclusion.
-- For "metal plate(s)" intent, combine with `AND`:
-  - `objectInfo contains bleck`
-  - `material_type contains metal`
+- For substance + object intent, combine `material` and `objectInfo` with `AND`: e.g. "copper plates" -> `material contains copper` AND `objectInfo contains plate`.
+- Bracteate type queries are specific objectInfo searches. `bracteates of C type`, `C-type bracteates`, or `type C bracteates` -> `objectInfo contains "bracteate (C-type)"`. Apply the same pattern for A, B, C, D, and F types.
 
 **Carver mapping (IMPORTANT):**
 - Use filter `carver` for rune-carver / ristare questions.

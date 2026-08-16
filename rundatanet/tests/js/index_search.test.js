@@ -365,6 +365,47 @@ testSingleRuleSearch({
 });
 testSingleRuleSearch({
   id: 'inscription_id',
+  operator: 'contains',
+  value: 'Sl9',
+  expectedCount: 12,
+  testName: 'partial inscription id search finds signatures containing Sl9',
+  multiField: true,
+});
+test('partial inscription id search includes U Sl9 alias', () => {
+  const rules = {
+    condition: 'AND',
+    rules: [
+      {
+        id: 'inscription_id',
+        field: 'signature_text',
+        type: 'string',
+        input: 'text',
+        operator: 'contains',
+        value: 'Sl9',
+        data: { multiField: true },
+        ignoreCase: true,
+      },
+    ],
+    not: false,
+    valid: true,
+  };
+
+  const results = doSearch(rules, dbMap.values());
+  assert.ok(
+    results.some(result => result.signature_text === 'U Sl9' || String(result.aliases || '').split('|').includes('U Sl9'))
+  );
+});
+testSingleRuleSearch({
+  id: 'inscription_id',
+  operator: 'not_equal',
+  value: 'U Sl9',
+  expectedCount: 6814,
+  firstResultCheck: 'Öl 1',
+  multiField: true,
+  testName: 'inscription id not_equal excludes aliases too',
+});
+testSingleRuleSearch({
+  id: 'inscription_id',
   operator: 'not_contains',
   value: 'Öl',
   expectedCount: 6625,
