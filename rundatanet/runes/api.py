@@ -118,6 +118,12 @@ def _dedupe_object_info_rules(group: dict[str, Any]) -> None:
 
     new_rules: list[dict[str, Any]] = []
     seen_object_keys: dict[str, int] = {}
+    has_bracteate_subtype = any(
+        not _is_group(rule)
+        and rule.get("id") == "objectInfo"
+        and _object_info_key(rule.get("value")).startswith("bracteate (")
+        for rule in group.get("rules", [])
+    )
     for rule in group.get("rules", []):
         if _is_group(rule):
             _dedupe_object_info_rules(rule)
@@ -130,6 +136,8 @@ def _dedupe_object_info_rules(group: dict[str, Any]) -> None:
         key = _object_info_key(rule.get("value"))
         if not key:
             new_rules.append(rule)
+            continue
+        if key == "bracteate" and has_bracteate_subtype:
             continue
         if key in seen_object_keys:
             existing_index = seen_object_keys[key]
@@ -2254,10 +2262,29 @@ def _material_values_for_terms(terms: set[str]) -> set[str]:
     }
 
 
+def _material_type_values_for_detailed_materials(values: set[str]) -> set[str]:
+    folded_values = {_fold_text(value) for value in values}
+    mapped: set[str] = set()
+    material_type_keywords = {
+        "stone": ("stone", "limestone", "sandstone", "granite", "gneiss", "slate", "marble", "quartzite", "soapstone"),
+        "plaster": ("plaster", "mortar"),
+        "wood": ("wood", "ash", "beech", "birch", "boxwood", "hazel", "juniper", "oak"),
+        "metal": ("metal", "copper", "bronze", "iron", "lead", "silver", "gold"),
+        "bone/antler": ("bone", "antler", "horn", "tooth"),
+    }
+    for material_type, keywords in material_type_keywords.items():
+        if any(keyword in value for value in folded_values for keyword in keywords):
+            mapped.add(material_type)
+    return mapped
+
+
 def _extract_material_constraints(user_text: str) -> list[dict[str, str]]:
     text = _fold_text(user_text or "")
     constraints: list[dict[str, str]] = []
     seen_values: set[str] = set()
+    detailed_material_types = _material_type_values_for_detailed_materials(
+        {item["value"] for item in _extract_detailed_material_constraints(user_text)}
+    )
     translation_terms = {_fold_text(term) for term in _extract_english_translation_terms(user_text)}
     name_element = _extract_name_element(user_text)
     name_element_terms = {_fold_text(name_element)} if name_element else set()
@@ -2266,6 +2293,8 @@ def _extract_material_constraints(user_text: str) -> list[dict[str, str]]:
     explicit_material_terms = _extract_explicit_material_terms(user_text)
 
     def add_material(value: str, aliases: frozenset[str]) -> None:
+        if value in detailed_material_types:
+            return
         if translation_terms.intersection(aliases) and not explicit_material_terms.intersection(aliases):
             return
         if name_element_terms.intersection(aliases) and not explicit_material_terms.intersection(aliases):
@@ -2283,6 +2312,69 @@ def _extract_material_constraints(user_text: str) -> list[dict[str, str]]:
             add_material(canonical, aliases)
 
     return constraints
+
+
+def _extract_detailed_material_constraints(user_text: str) -> list[dict[str, str]]:
+    text = _fold_text(user_text or "")
+    constraints: list[dict[str, str]] = []
+    seen_keys: set[str] = set()
+    translation_terms = {_fold_text(term) for term in _extract_english_translation_terms(user_text)}
+
+    def add_material(value: str) -> None:
+        folded = _fold_text(value)
+        key = _singularize_english_object_phrase(folded)
+        if not folded or folded in translation_terms or key in translation_terms:
+            return
+        if any(existing != key and key in existing for existing in seen_keys):
+            return
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+        constraints.append({"id": "material", "field": "material", "value": value})
+
+    context_variants = {text}
+    for match in re.finditer(
+        r"\b(?:on|onto|in|with|med|på|pa|made\s+(?:on|of|from|in)|"
+        r"carved\s+(?:on|in)|inscribed\s+(?:on|in)|ristad\s+(?:på|pa|i))\s+([^.;?!,]+)",
+        text,
+        flags=re.IGNORECASE,
+    ):
+        phrase = match.group(1).strip()
+        if phrase:
+            context_variants.add(phrase)
+            context_variants.add(_singularize_english_object_phrase(phrase))
+
+    try:
+        material_values = _get_material_values()
+    except Exception:
+        logger.warning("Could not inspect material corpus", exc_info=True)
+        material_values = ()
+
+    for value, folded_value in material_values:
+        if len(folded_value) < 3:
+            continue
+        if any(
+            re.search(rf"(^|\b){re.escape(folded_value)}(\b|$)", variant)
+            for variant in context_variants
+        ):
+            add_material(value)
+
+    return constraints
+
+
+def _extract_bracteate_type_object(user_text: str) -> Optional[str]:
+    text = user_text or ""
+    patterns = (
+        r"\bbracteates?\s+(?:of|in|with)\s+([ABCDF])\s*-?\s*type\b",
+        r"\bbracteates?\s+(?:of|in|with)\s+type\s+([ABCDF])\b",
+        r"\b([ABCDF])\s*-?\s*type\s+bracteates?\b",
+        r"\btype\s+([ABCDF])\s+bracteates?\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return f"bracteate ({match.group(1).upper()}-type)"
+    return None
 
 
 def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
@@ -2307,6 +2399,8 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
         if full_personal_name_folded and _fold_text(value) == full_personal_name_folded:
             return
         object_key = _object_info_key(value)
+        if object_key == "bracteate" and any(key.startswith("bracteate (") for key in seen_object_keys):
+            return
         if value in seen_values or object_key in seen_object_keys:
             return
         seen_values.add(value)
@@ -2317,6 +2411,10 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
     # English/Swedish intent mapping to canonical objectInfo values.
     # objectInfo is stored in English in the current database, so English
     # plural object requests are normalised to singular English terms.
+    bracteate_type = _extract_bracteate_type_object(user_text)
+    if bracteate_type:
+        add_object(bracteate_type)
+
     pattern_map: list[tuple[str, str]] = [
         (r"\b(coin|coins|mynt)\b", "coin"),
         (r"\b(runestone|runestones|runsten|runstenar)\b", "runestone"),
@@ -2325,6 +2423,7 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
         (r"\b(bracteate|bracteates|brakteat)\b", "bracteate"),
         (r"\b(amulet|amulets|amulett|amulett?er)\b", "amulet"),
         (r"\b(metal plate|metal plates|bleck)\b", "metal plate"),
+        (r"\b(plate|plates)\b", "plate"),
         (r"\b(stone cross|stone crosses|stenkors)\b", "stone cross"),
         (r"\b(cross|crosses|kors)\b", "cross"),
         (r"\b(whetstone|whetstones|bryne)\b", "whetstone"),
@@ -3100,6 +3199,29 @@ def _get_object_info_values() -> tuple[tuple[str, str], ...]:
     return tuple(cleaned_pairs)
 
 
+@lru_cache(maxsize=1)
+def _get_material_values() -> tuple[tuple[str, str], ...]:
+    values = (
+        MetaInformation.objects.exclude(material__isnull=True)
+        .exclude(material__exact="")
+        .values_list("material", flat=True)
+        .distinct()
+    )
+    cleaned_pairs: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for raw in values:
+        value = str(raw or "").strip()
+        if not value:
+            continue
+        folded = _fold_text(value)
+        if folded in seen:
+            continue
+        seen.add(folded)
+        cleaned_pairs.append((value, folded))
+    cleaned_pairs.sort(key=lambda item: len(item[1]), reverse=True)
+    return tuple(cleaned_pairs)
+
+
 def _enforce_inscription_country_codes(root: dict[str, Any], codes: list[str]) -> dict[str, Any]:
     merged_codes = []
     seen = set()
@@ -3540,6 +3662,20 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
         if not _has_location_value(root, (item["id"],), item["value"]):
             root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
 
+    detailed_material_constraints = _extract_detailed_material_constraints(user_text)
+    if detailed_material_constraints:
+        detailed_material_types = _material_type_values_for_detailed_materials(
+            {item["value"] for item in detailed_material_constraints}
+        )
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") == "material_type"
+            and _fold_text(str(rule.get("value") or "")) in detailed_material_types,
+        )
+    for item in detailed_material_constraints:
+        if not _has_location_value(root, (item["id"],), item["value"]):
+            root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
+
     for item in _extract_material_constraints(user_text):
         if not _has_location_value(root, (item["id"],), item["value"]):
             root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
@@ -3818,6 +3954,8 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     specific_location_constraints = _extract_specific_location_constraints(user_text)
     for item in specific_location_constraints:
         rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
+
+    rules.extend(_make_contains_rule(item["id"], item["field"], item["value"]) for item in _extract_detailed_material_constraints(user_text))
 
     for item in _extract_material_constraints(user_text):
         rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
@@ -4411,6 +4549,9 @@ def _build_meta_queryset_from_text(
     for material in _extract_material_constraints(user_text):
         # material_type is modeled as FK to MaterialType.name in ORM.
         qs = qs.filter(materialType__name__iexact=material["value"])
+
+    for material in _extract_detailed_material_constraints(user_text):
+        qs = qs.filter(material__icontains=material["value"])
 
     cross_count_constraints = _extract_cross_count_constraints(user_text)
     for constraint in cross_count_constraints:

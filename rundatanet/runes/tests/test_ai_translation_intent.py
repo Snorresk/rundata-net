@@ -6,9 +6,11 @@ from django.test import SimpleTestCase, TestCase
 from rundatanet.runes.api import (
     _build_rules_fallback_from_text,
     _extract_aligned_word_spelling,
+    _extract_bracteate_type_object,
     _extract_carver_constraints,
     _extract_carver_status,
     _extract_cross_form_group_requests,
+    _extract_detailed_material_constraints,
     _extract_english_translation_terms,
     _extract_excluded_initial_rune,
     _extract_explicit_normalization_word_terms,
@@ -721,6 +723,81 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(_extract_object_info_constraints("Hitta alla inskrifter ristade i sten"), [])
 
     @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch(
+        "rundatanet.runes.api._get_material_values",
+        return_value=(("limestone", "limestone"), ("lime plaster", "lime plaster"), ("copper", "copper")),
+    )
+    def test_detailed_material_terms_target_material_field(self, _materials, _translations):
+        cases = {
+            "Find all inscriptions on limestones": "limestone",
+            "Find inscriptions made on lime plaster": "lime plaster",
+            "Find inscriptions on copper plates": "copper",
+        }
+
+        for prompt, expected in cases.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(
+                    _extract_detailed_material_constraints(prompt),
+                    [{"id": "material", "field": "material", "value": expected}],
+                )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=(("limestone", "limestone"),))
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_material_field_for_limestones(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find all inscriptions on limestones"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [("material", "material", "limestone")],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=(("lime plaster", "lime plaster"),))
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_detailed_material_suppresses_broad_material_type(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find inscriptions on Gotland made on lime plaster"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [("inscription_country", "signature_text", ["G "]), ("material", "material", "lime plaster")],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=(("copper", "copper"),))
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("plate", "plate"),))
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_material_object_and_transliteration_can_combine(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find inscriptions on copper plates with runes iii"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [
+                (
+                    "normalization_scandinavian_to_transliteration",
+                    "normalisation_scandinavian",
+                    {"normalization": "", "transliteration": "iii", "names_mode": "includeAll"},
+                ),
+                ("material", "material", "copper"),
+                ("objectInfo", "objectInfo", "plate"),
+            ],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
     @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
     @patch("rundatanet.runes.api._get_object_info_values", return_value=())
     def test_plural_english_object_terms_are_singularized(self, _objects, _materials, _translations):
@@ -744,6 +821,53 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(
             _extract_object_info_constraints("Find inscriptions on combs"),
             [{"id": "objectInfo", "field": "objectInfo", "value": "comb"}],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    def test_bracteate_type_queries_use_specific_object_info(
+        self, _objects, _materials, _translations
+    ):
+        cases = {
+            "Find all bracteates of C type": "bracteate (C-type)",
+            "Find bracteates of C type": "bracteate (C-type)",
+            "Find bracteates with C-type": "bracteate (C-type)",
+            "Find C type bracteates": "bracteate (C-type)",
+        }
+
+        for prompt, expected in cases.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_bracteate_type_object(prompt), expected)
+                self.assertEqual(
+                    _extract_object_info_constraints(prompt),
+                    [{"id": "objectInfo", "field": "objectInfo", "value": expected}],
+                )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_uses_specific_bracteate_type_object_info(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find all bracteates of C type"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(len(result["rules"]), 1)
+        self.assertEqual(
+            result["rules"][0],
+            {
+                "id": "objectInfo",
+                "field": "objectInfo",
+                "type": "string",
+                "input": "text",
+                "operator": "contains",
+                "value": "bracteate (C-type)",
+                "ignoreCase": True,
+                "includeSpecialSymbols": False,
+            },
         )
 
     @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
@@ -791,6 +915,42 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(
             [(rule["id"], rule["value"]) for rule in result["rules"]],
             [("objectInfo", "amulet")],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._extract_detailed_material_constraints", return_value=[])
+    @patch("rundatanet.runes.api._extract_material_constraints", return_value=[])
+    @patch(
+        "rundatanet.runes.api._extract_object_info_constraints",
+        return_value=[{"id": "objectInfo", "field": "objectInfo", "value": "bracteate (C-type)"}],
+    )
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_prefers_specific_bracteate_type_over_generic(
+        self, _styles, _objects, _materials, _detailed_materials, _translations
+    ):
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "objectInfo",
+                        "field": "objectInfo",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "bracteate",
+                    }
+                ],
+                "not": False,
+                "valid": True,
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules("Find all bracteates of C type", model_output))
+
+        self.assertEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [("objectInfo", "bracteate (C-type)")],
         )
 
     @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])

@@ -137,9 +137,13 @@ You only work with a single system known as runic inscriptions database. It is a
 - A word mentioned as textual content is not a material or object filter. For example, "Find all inscriptions with the word stone" means only `english_translation contains "stone"`, not `material_type contains "stone"` and not `objectInfo contains "stone"`.
 - For very short English words, preserve the intended word boundary when possible. Example: "Find all inscriptions with the word my" should search `english_translation contains "my "`.
 - For the English word/pronoun `I`, also turn on Match case: use `english_translation contains "I "` with `ignoreCase: false`, so the search does not match every lowercase letter `i`.
-- Use `material_type` only when material intent is explicit, such as "made of stone", "carved on stone", or "stone material".
+- Use `material_type` only for broad material categories such as stone, wood, plaster, metal, bone/antler, other, or unknown.
+- Use `material` for specific material substances stored in the Material field, such as limestone, sandstone, granite, gneiss, lime plaster, copper, bronze, iron, silver, gold, amber, etc.
 - If the user independently requests both textual content and material, preserve both rules and combine them with `AND`.
 - Example: "Find all inscriptions on stone with the word stone" must produce both `material_type contains "stone"` and `english_translation contains "stone"` in an `AND` group.
+- Example: "Find all inscriptions on limestones" must produce `material contains "limestone"` (singular).
+- Example: "Find inscriptions on Gotland made on lime plaster" must produce `material contains "lime plaster"` plus the Gotland province/country rule.
+- Example: "Find inscriptions on copper plates with runes iii" must produce `material contains "copper"`, `objectInfo contains "plate"`, and an Old Scandinavian transliteration rule with `transliteration: "iii"`.
 - Example: "Find inscriptions with the word þiagn" must search Old Scandinavian normalisation for `þiagn`, because this form occurs there, not in English translation.
 - Example: "Find in normalisation to Old Norse the word þegn" creates one Old West Norse normalisation rule with `normalization: "þegn"`.
 - Example: "Find inscription with the Old Norse word steinn" creates one Old West Norse normalisation rule with `normalization: "steinn"`, even if `steinn` is also found in English translations or Old Scandinavian.
@@ -253,23 +257,23 @@ Canonical objectInfo mappings (use these singular English values in `contains`):
 - plaster inscription / plaster inscriptions -> `plaster inscription`
 - coin / coins -> `coin`
 - tag / tags / label / labels -> `tag`
-- amulet -> `amulett`
-- runic staff / runic stick -> `runkavel`
-- metal plate / metal plates -> `bleck` (also add `material_type contains metal`)
-- bracteate -> `brakteat`
-- bell -> `kyrkklocka`
-- cross -> `kors`
-- stone cross -> `stenkors`
-- whetstone -> `bryne`
-- knife handle -> `knivskaft`
-- wall inscription / wall graffiti -> `vägginskrift` or `kyrkografitti` (use one canonical value unless user asks broad match)
+- amulet / amulets -> `amulet`
+- runic staff / runic staffs / runic stick / runic sticks -> `runic staff`
+- metal plate / metal plates -> `metal plate`
+- plate / plates -> `plate`
+- bracteate / bracteates -> `bracteate`
+- bell / bells -> `bell`
+- cross / crosses -> `cross`
+- stone cross / stone crosses -> `stone cross`
+- whetstone / whetstones -> `whetstone`
+- knife handle / knife handles -> `knife handle`
+- wall inscription / wall inscriptions / wall graffiti -> `wall inscription`
 
 For broader object intent:
-- If user asks generally (e.g., "grave slabs"), use one canonical value first (`gravhäll`).
+- If user asks generally (e.g., "grave slabs"), use one canonical singular English value first (`grave slab`).
 - Add extra `OR` alternatives only when user explicitly requests broader inclusion.
-- For "metal plate(s)" intent, combine with `AND`:
-  - `objectInfo contains bleck`
-  - `material_type contains metal`
+- For substance + object intent, combine `material` and `objectInfo` with `AND`: e.g. "copper plates" -> `material contains copper` AND `objectInfo contains plate`.
+- Bracteate type queries are specific objectInfo searches. `bracteates of C type`, `C-type bracteates`, or `type C bracteates` -> `objectInfo contains "bracteate (C-type)"`. Apply the same pattern for A, B, C, D, and F types.
 
 **Carver mapping (IMPORTANT):**
 - Use filter `carver` for rune-carver / ristare questions.
