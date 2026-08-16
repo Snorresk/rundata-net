@@ -1,6 +1,13 @@
 import { test } from 'uvu';
 import * as assert from 'uvu/assert';
 import {
+  applyPublicationMapBoundsZoom,
+  buildPublicationMapPngBlob,
+  buildPublicationMapSvg,
+  choosePublicationMapOsmZoom,
+  expandPublicationMapBoundsToAspect,
+  getPublicationMapOsmTileLayout,
+  getPublicationMapCoordinate,
   getMarkerClusterOptions,
   getSpiderfiedTooltipDirection,
   handleMobileClusterClick,
@@ -426,4 +433,319 @@ test('openMobileInscriptionInfo() selects inscription before opening Info pane',
   });
   globalThis.window = originalWindow;
   globalThis.document = originalDocument;
+});
+
+test('getPublicationMapCoordinate() prefers current location and falls back to original', () => {
+  const inscription = {
+    latitude: 59.5,
+    longitude: 17.8,
+    present_latitude: 0,
+    present_longitude: 0,
+  };
+
+  assert.equal(getPublicationMapCoordinate(inscription, 'current'), {
+    lat: 59.5,
+    lon: 17.8,
+    source: 'original',
+  });
+  assert.equal(getPublicationMapCoordinate({
+    ...inscription,
+    present_latitude: 58.4,
+    present_longitude: 15.6,
+  }, 'current'), {
+    lat: 58.4,
+    lon: 15.6,
+    source: 'current',
+  });
+});
+
+test('buildPublicationMapSvg() creates editable SVG symbols from inscriptions', () => {
+  const result = buildPublicationMapSvg([
+    {
+      id: 1,
+      signature_text: 'U 1',
+      latitude: 59.4,
+      longitude: 17.8,
+      present_latitude: 59.4,
+      present_longitude: 17.8,
+    },
+    {
+      id: 2,
+      signature_text: 'U 2',
+      latitude: 60.0,
+      longitude: 18.2,
+      present_latitude: 0,
+      present_longitude: 0,
+    },
+    {
+      id: 3,
+      signature_text: 'No coordinates',
+      latitude: 0,
+      longitude: 0,
+      present_latitude: 0,
+      present_longitude: 0,
+    },
+  ], {
+    groupName: 'Test group',
+    symbol: 'triangle',
+    symbolColour: '#cc0000',
+  });
+
+  assert.is(result.pointCount, 2);
+  assert.is(result.skippedCount, 1);
+  assert.match(result.svg, /<svg /);
+  assert.match(result.svg, /Test group/);
+  assert.match(result.svg, /<polygon class="inscription-symbol"/);
+  assert.match(result.svg, /fill="#cc0000"/);
+  assert.match(result.svg, /U 1/);
+  assert.match(result.svg, /To publish or present this map, specify its source: https:\/\/rundata\.info\./);
+});
+
+test('buildPublicationMapSvg() wraps long source captions inside the page', () => {
+  const result = buildPublicationMapSvg([
+    {
+      id: 1,
+      signature_text: 'U 1',
+      latitude: 59.4,
+      longitude: 17.8,
+      present_latitude: 59.4,
+      present_longitude: 17.8,
+    },
+  ], {
+    width: 600,
+    height: 450,
+  });
+
+  const captionTspans = result.svg.match(/<tspan x="82" y="\d+">/g) || [];
+  assert.ok(captionTspans.length > 1);
+  assert.match(result.svg, /Coordinates exported from Rundata-net/);
+  assert.match(result.svg, /https:\/\/rundata\.info\./);
+});
+
+test('buildPublicationMapPngBlob() draws map tiles and symbols on canvas', async () => {
+  const originalDocument = globalThis.document;
+  const originalImage = globalThis.Image;
+  const originalFileReader = globalThis.FileReader;
+  const calls = [];
+  const canvasContext = {
+    scale: (...args) => calls.push(['scale', ...args]),
+    fillRect: (...args) => calls.push(['fillRect', ...args]),
+    save: () => calls.push(['save']),
+    restore: () => calls.push(['restore']),
+    beginPath: () => calls.push(['beginPath']),
+    rect: (...args) => calls.push(['rect', ...args]),
+    clip: () => calls.push(['clip']),
+    drawImage: (...args) => calls.push(['drawImage', ...args]),
+    strokeRect: (...args) => calls.push(['strokeRect', ...args]),
+    fillText: (...args) => calls.push(['fillText', ...args]),
+    arc: (...args) => calls.push(['arc', ...args]),
+    moveTo: (...args) => calls.push(['moveTo', ...args]),
+    lineTo: (...args) => calls.push(['lineTo', ...args]),
+    closePath: () => calls.push(['closePath']),
+    fill: () => calls.push(['fill']),
+    stroke: () => calls.push(['stroke']),
+    quadraticCurveTo: (...args) => calls.push(['quadraticCurveTo', ...args]),
+    set fillStyle(value) { calls.push(['fillStyle', value]); },
+    set strokeStyle(value) { calls.push(['strokeStyle', value]); },
+    set lineWidth(value) { calls.push(['lineWidth', value]); },
+    set globalAlpha(value) { calls.push(['globalAlpha', value]); },
+    set font(value) { calls.push(['font', value]); },
+  };
+
+  globalThis.document = {
+    createElement: (tagName) => {
+      assert.is(tagName, 'canvas');
+      return {
+        width: 0,
+        height: 0,
+        getContext: () => canvasContext,
+        toBlob: callback => callback(new Blob(['png'], {type: 'image/png'})),
+      };
+    },
+  };
+  globalThis.Image = class {
+    set src(value) {
+      this._src = value;
+      setTimeout(() => this.onload && this.onload(), 0);
+    }
+    get src() {
+      return this._src;
+    }
+  };
+  globalThis.FileReader = class {
+    readAsDataURL() {
+      this.result = 'data:image/png;base64,dGlsZQ==';
+      setTimeout(() => this.onload && this.onload(), 0);
+    }
+  };
+
+  try {
+    const result = await buildPublicationMapPngBlob([{
+      id: 1,
+      signature_text: 'U 1',
+      latitude: 59.4,
+      longitude: 17.8,
+      present_latitude: 59.4,
+      present_longitude: 17.8,
+    }], {
+      width: 600,
+      height: 450,
+      pngScale: 1,
+      fetchTile: async () => ({
+        ok: true,
+        blob: async () => new Blob(['tile'], {type: 'image/png'}),
+      }),
+    });
+
+    assert.is(result.pointCount, 1);
+    assert.is(result.blob.type, 'image/png');
+    assert.ok(calls.some(call => call[0] === 'drawImage'));
+    assert.ok(calls.some(call => call[0] === 'arc'));
+  } finally {
+    globalThis.document = originalDocument;
+    globalThis.Image = originalImage;
+    globalThis.FileReader = originalFileReader;
+  }
+});
+
+test('buildPublicationMapSvg() allows smaller symbols and clamps oversized symbols', () => {
+  const inscriptions = [
+    {
+      id: 1,
+      signature_text: 'U 1',
+      latitude: 59.4,
+      longitude: 17.8,
+      present_latitude: 59.4,
+      present_longitude: 17.8,
+    },
+  ];
+
+  const small = buildPublicationMapSvg(inscriptions, {
+    symbol: 'dot',
+    symbolSize: 3,
+  });
+  const oversized = buildPublicationMapSvg(inscriptions, {
+    symbol: 'dot',
+    symbolSize: 20,
+  });
+
+  assert.match(small.svg, / r="3\.0"/);
+  assert.match(oversized.svg, / r="6\.0"/);
+});
+
+test('buildPublicationMapSvg() creates grouped publication maps', () => {
+  const result = buildPublicationMapSvg([], {
+    groups: [
+      {
+        groupName: 'Opir Pr 3',
+        symbol: 'dot',
+        symbolColour: '#d62728',
+        symbolSize: 4,
+        inscriptions: [{
+          id: 1,
+          signature_text: 'U 1',
+          latitude: 59.4,
+          longitude: 17.8,
+          present_latitude: 59.4,
+          present_longitude: 17.8,
+        }],
+      },
+      {
+        groupName: 'Opir Pr 4',
+        symbol: 'square',
+        symbolColour: '#1f77b4',
+        symbolSize: 3,
+        inscriptions: [{
+          id: 2,
+          signature_text: 'U 2',
+          latitude: 59.7,
+          longitude: 18.1,
+          present_latitude: 59.7,
+          present_longitude: 18.1,
+        }],
+      },
+    ],
+  });
+
+  assert.is(result.pointCount, 2);
+  assert.match(result.svg, /2 inscriptions in 2 groups/);
+  assert.match(result.svg, /Opir Pr 3/);
+  assert.match(result.svg, /Opir Pr 4/);
+  assert.match(result.svg, /<circle class="inscription-symbol"/);
+  assert.match(result.svg, /<rect class="inscription-symbol"/);
+  assert.match(result.svg, /fill="#d62728"/);
+  assert.match(result.svg, /fill="#1f77b4"/);
+  assert.match(result.svg, /<rect class="legend-frame"/);
+  assert.not.match(result.svg, /\.legend rect/);
+});
+
+test('getPublicationMapOsmTileLayout() keeps OSM tile export bounded', () => {
+  const bounds = {
+    minLat: 58.5,
+    maxLat: 59.8,
+    minLon: 16.5,
+    maxLon: 18.8,
+  };
+  const zoom = choosePublicationMapOsmZoom(bounds);
+  const layout = getPublicationMapOsmTileLayout(bounds);
+
+  assert.ok(zoom >= 3);
+  assert.ok(zoom <= 14);
+  assert.ok(layout.tiles.length > 0);
+  assert.ok(layout.tiles.length <= 80);
+  assert.match(layout.tiles[0].url, /^https:\/\/tile\.openstreetmap\.org\/\d+\/\d+\/\d+\.png$/);
+});
+
+test('getPublicationMapOsmTileLayout() supports the publication basemap provider', () => {
+  const bounds = {
+    minLat: 58.5,
+    maxLat: 59.8,
+    minLon: 16.5,
+    maxLon: 18.8,
+  };
+  const layout = getPublicationMapOsmTileLayout(bounds, 1200, 900, 'carto-positron');
+
+  assert.is(layout.provider.name, 'CARTO Positron');
+  assert.ok(layout.tiles.length > 0);
+  assert.match(layout.tiles[0].url, /^https:\/\/a\.basemaps\.cartocdn\.com\/light_all\/\d+\/\d+\/\d+\.png$/);
+});
+
+test('applyPublicationMapBoundsZoom() changes map extent without hiding points', () => {
+  const bounds = {
+    minLat: 58.4,
+    maxLat: 60.2,
+    minLon: 16.1,
+    maxLon: 19.2,
+  };
+  const points = [
+    {lat: 58.9, lon: 17.0},
+    {lat: 59.7, lon: 18.3},
+  ];
+  const zoomedIn = applyPublicationMapBoundsZoom(bounds, points, 2);
+  const zoomedOut = applyPublicationMapBoundsZoom(bounds, points, -2);
+
+  assert.ok(zoomedIn.maxLon - zoomedIn.minLon < bounds.maxLon - bounds.minLon);
+  assert.ok(zoomedIn.minLat < 58.9);
+  assert.ok(zoomedIn.maxLat > 59.7);
+  assert.ok(zoomedIn.minLon < 17.0);
+  assert.ok(zoomedIn.maxLon > 18.3);
+  assert.ok(zoomedOut.maxLon - zoomedOut.minLon > bounds.maxLon - bounds.minLon);
+  assert.ok(zoomedOut.maxLat - zoomedOut.minLat > bounds.maxLat - bounds.minLat);
+});
+
+test('publication map export expands narrow bounds to the page shape', () => {
+  const narrowBounds = {
+    minLat: 58.65,
+    maxLat: 60.1,
+    minLon: 17.2,
+    maxLon: 17.85,
+  };
+
+  const framedBounds = expandPublicationMapBoundsToAspect(narrowBounds);
+  const layout = getPublicationMapOsmTileLayout(narrowBounds);
+
+  assert.ok(framedBounds.minLon < narrowBounds.minLon);
+  assert.ok(framedBounds.maxLon > narrowBounds.maxLon);
+  assert.ok(layout.projection.mapRect.width > 1000);
+  assert.ok(layout.projection.mapRect.height > 720);
 });
