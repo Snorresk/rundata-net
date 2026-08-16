@@ -249,7 +249,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(result["rules"][0]["field"], "normalization_norse")
         self.assertEqual(result["rules"][0]["value"]["normalization"], "þegn")
         self.assertEqual(result["rules"][0]["value"]["transliteration"], "")
-        self.assertEqual(result["rules"][0]["value"]["names_mode"], "includeAll")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "excludeNames")
 
     @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
     @patch("rundatanet.runes.api._normalization_language_hits", return_value=(True, True))
@@ -284,7 +284,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(result["rules"][0]["field"], "normalisation_scandinavian")
         self.assertEqual(result["rules"][0]["value"]["normalization"], "kumbl")
         self.assertEqual(result["rules"][0]["value"]["transliteration"], "")
-        self.assertEqual(result["rules"][0]["value"]["names_mode"], "includeAll")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "excludeNames")
 
     @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
     @patch("rundatanet.runes.api._normalization_language_hits", return_value=(True, True))
@@ -355,8 +355,54 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(
             [rule["value"] for rule in group["rules"]],
             [
-                {"normalization": "kuml", "transliteration": "kubl", "names_mode": "includeAll"},
-                {"normalization": "kuml", "transliteration": "kubl", "names_mode": "includeAll"},
+                {"normalization": "kuml", "transliteration": "kubl", "names_mode": "excludeNames"},
+                {"normalization": "kuml", "transliteration": "kubl", "names_mode": "excludeNames"},
+            ],
+        )
+
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_scandinavian")
+    def test_generic_runological_word_query_does_not_target_english_translation(
+        self, _language, _english
+    ):
+        for prompt, term in {
+            "Find the word austr on runestones": "austr",
+            "Find the word þegn on runestones": "þegn",
+        }.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_english_translation_terms(prompt), [])
+                self.assertEqual(_extract_swedish_word_terms(prompt), [term])
+
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_scandinavian")
+    def test_explicit_english_word_still_targets_english_translation(
+        self, _language, _english
+    ):
+        prompt = "Find the English word austr on runestones"
+
+        self.assertEqual(_extract_english_translation_terms(prompt), ["austr"])
+        self.assertEqual(_extract_swedish_word_terms(prompt), ["austr"])
+
+    @patch("rundatanet.runes.api._english_translation_contains_word", return_value=True)
+    @patch("rundatanet.runes.api._language_containing_word", return_value="old_scandinavian")
+    @patch("rundatanet.runes.api._normalization_language_hits", return_value=(False, True))
+    @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[{"id": "objectInfo", "field": "objectInfo", "value": "runestone"}])
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_fallback_targets_normalisation_and_runestone_for_generic_runological_word(
+        self, _styles, _objects, _hits, _language, _english
+    ):
+        prompt = "Find the word austr on runestones"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertCountEqual(
+            [(rule["id"], rule["value"]) for rule in result["rules"]],
+            [
+                ("objectInfo", "runestone"),
+                (
+                    "normalization_scandinavian_to_transliteration",
+                    {"normalization": "austr", "transliteration": "", "names_mode": "excludeNames"},
+                ),
             ],
         )
 
@@ -382,6 +428,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(len(result["rules"]), 1)
         self.assertEqual(result["rules"][0]["id"], "normalization_scandinavian_to_transliteration")
         self.assertEqual(result["rules"][0]["value"]["normalization"], "þiagn")
+        self.assertEqual(result["rules"][0]["value"]["names_mode"], "excludeNames")
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
     @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
@@ -1251,7 +1298,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
         self.assertEqual(
             result["rules"][0]["value"],
-            {"normalization": "eptir", "transliteration": "", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -1309,7 +1356,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(result["rules"][0]["id"], "normalization_norse_to_transliteration")
         self.assertEqual(
             result["rules"][0]["value"],
-            {"normalization": "ok", "transliteration": "ak", "names_mode": "includeAll"},
+            {"normalization": "ok", "transliteration": "ak", "names_mode": "excludeNames"},
         )
 
     def test_rune_spelling_phrase_variants(self):
@@ -1346,7 +1393,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(word_rule["id"], "normalization_norse_to_transliteration")
         self.assertEqual(
             word_rule["value"],
-            {"normalization": "stæin", "transliteration": "stan", "names_mode": "includeAll"},
+            {"normalization": "stæin", "transliteration": "stan", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -1369,7 +1416,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(result["rules"][0]["id"], "normalization_scandinavian_to_transliteration")
         self.assertEqual(
             result["rules"][0]["value"],
-            {"normalization": "þegn", "transliteration": "þikn", "names_mode": "includeAll"},
+            {"normalization": "þegn", "transliteration": "þikn", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -1394,7 +1441,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(word_rule["id"], "normalization_norse_to_transliteration")
         self.assertEqual(
             word_rule["value"],
-            {"normalization": "reisti", "transliteration": "þ", "names_mode": "includeAll"},
+            {"normalization": "reisti", "transliteration": "þ", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -1425,7 +1472,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
                         "value": {
                             "normalization": "reisti",
                             "transliteration": "",
-                            "names_mode": "includeAll",
+                            "names_mode": "excludeNames",
                         },
                         "data": {"multiField": True},
                         "ignoreCase": True,
@@ -1447,7 +1494,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(word_rule["id"], "normalization_norse_to_transliteration")
         self.assertEqual(
             word_rule["value"],
-            {"normalization": "reisti", "transliteration": "þ", "names_mode": "includeAll"},
+            {"normalization": "reisti", "transliteration": "þ", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -1625,7 +1672,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(positive_rule["operator"], "contains")
         self.assertEqual(
             positive_rule["value"],
-            {"normalization": "hiogg", "transliteration": "", "names_mode": "includeAll"},
+            {"normalization": "hiogg", "transliteration": "", "names_mode": "excludeNames"},
         )
         self.assertTrue(negated_group["not"])
         self.assertEqual(negated_group["condition"], "AND")
@@ -1634,7 +1681,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(negative_rule["operator"], "begins_with")
         self.assertEqual(
             negative_rule["value"],
-            {"normalization": "hiogg", "transliteration": "h", "names_mode": "includeAll"},
+            {"normalization": "hiogg", "transliteration": "h", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -1703,7 +1750,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(rule["operator"], "begins_with")
         self.assertEqual(
             rule["value"],
-            {"normalization": "eptir", "transliteration": "ai", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "ai", "names_mode": "excludeNames"},
         )
 
     @patch("rundatanet.runes.api._extract_object_info_constraints", return_value=[])
@@ -1724,7 +1771,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(rule["operator"], "begins_with")
         self.assertEqual(
             rule["value"],
-            {"normalization": "eptir", "transliteration": "ai", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "ai", "names_mode": "excludeNames"},
         )
         self.assertTrue(rule["ignoreCase"])
 
@@ -1749,14 +1796,14 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(first_rule["operator"], "begins_with")
         self.assertEqual(
             first_rule["value"],
-            {"normalization": "eptir", "transliteration": "ai", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "ai", "names_mode": "excludeNames"},
         )
         self.assertTrue(first_rule["ignoreCase"])
         self.assertEqual(final_rule["id"], "normalization_norse_to_transliteration")
         self.assertEqual(final_rule["operator"], "ends_with")
         self.assertEqual(
             final_rule["value"],
-            {"normalization": "eptir", "transliteration": "r", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "r", "names_mode": "excludeNames"},
         )
         self.assertFalse(final_rule["ignoreCase"])
 
@@ -1775,7 +1822,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(rule["operator"], "ends_with")
         self.assertEqual(
             rule["value"],
-            {"normalization": "eptir", "transliteration": "R", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "R", "names_mode": "excludeNames"},
         )
         self.assertFalse(rule["ignoreCase"])
 
@@ -1798,7 +1845,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(positive_rule["operator"], "begins_with")
         self.assertEqual(
             positive_rule["value"],
-            {"normalization": "hiogg", "transliteration": "", "names_mode": "includeAll"},
+            {"normalization": "hiogg", "transliteration": "", "names_mode": "excludeNames"},
         )
         self.assertTrue(negated_group["not"])
         negative_rule = negated_group["rules"][0]
@@ -1806,7 +1853,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(negative_rule["operator"], "begins_with")
         self.assertEqual(
             negative_rule["value"],
-            {"normalization": "hiogg", "transliteration": "h", "names_mode": "includeAll"},
+            {"normalization": "hiogg", "transliteration": "h", "names_mode": "excludeNames"},
         )
         self.assertTrue(negative_rule["ignoreCase"])
 
@@ -1847,7 +1894,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(positive_rule["operator"], "ends_with")
         self.assertEqual(
             positive_rule["value"],
-            {"normalization": "hiogg", "transliteration": "", "names_mode": "includeAll"},
+            {"normalization": "hiogg", "transliteration": "", "names_mode": "excludeNames"},
         )
         self.assertTrue(negated_group["not"])
         negative_rule = negated_group["rules"][0]
@@ -1855,7 +1902,7 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(negative_rule["operator"], "ends_with")
         self.assertEqual(
             negative_rule["value"],
-            {"normalization": "hiogg", "transliteration": "k ", "names_mode": "includeAll"},
+            {"normalization": "hiogg", "transliteration": "k ", "names_mode": "excludeNames"},
         )
         self.assertTrue(negative_rule["ignoreCase"])
 
@@ -1896,14 +1943,14 @@ class EnglishTranslationIntentTests(SimpleTestCase):
         self.assertEqual(positive_rule["operator"], "begins_with")
         self.assertEqual(
             positive_rule["value"],
-            {"normalization": "eptir", "transliteration": "ai", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "ai", "names_mode": "excludeNames"},
         )
         self.assertTrue(negated_group["not"])
         negative_rule = negated_group["rules"][0]
         self.assertEqual(negative_rule["operator"], "ends_with")
         self.assertEqual(
             negative_rule["value"],
-            {"normalization": "eptir", "transliteration": "R", "names_mode": "includeAll"},
+            {"normalization": "eptir", "transliteration": "R", "names_mode": "excludeNames"},
         )
         self.assertFalse(negative_rule["ignoreCase"])
 

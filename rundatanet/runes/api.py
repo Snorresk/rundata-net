@@ -1033,16 +1033,62 @@ def _extract_english_translation_terms(user_text: str) -> list[str]:
             term = match.group(1).strip(" .,!?:;\"'“”")
             if term and _is_unquoted_grammar_value(term, text, match):
                 continue
-            if (
-                term
-                and not force_english
-                and not _english_translation_contains_word(term)
-                and _language_containing_word(term) in {"old_west_norse", "old_scandinavian"}
-            ):
+            if term and not force_english and _generic_word_should_prefer_normalization(term):
                 continue
             if term and term.lower() not in {value.lower() for value in terms}:
                 terms.append(term)
     return terms
+
+
+COMMON_MODERN_TRANSLATION_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "he",
+        "her",
+        "him",
+        "his",
+        "i",
+        "in",
+        "is",
+        "it",
+        "me",
+        "my",
+        "of",
+        "on",
+        "or",
+        "she",
+        "the",
+        "their",
+        "them",
+        "they",
+        "to",
+        "we",
+        "with",
+        "you",
+    }
+)
+
+
+def _is_common_modern_translation_word(term: str) -> bool:
+    return _fold_text(term.strip(" .,!?:;\"'“”")) in COMMON_MODERN_TRANSLATION_WORDS
+
+
+def _generic_word_should_prefer_normalization(term: str) -> bool:
+    value = term.strip(" .,!?:;\"'“”")
+    if not value or _is_common_modern_translation_word(value):
+        return False
+    if re.search(r"[þðæøœÞÐÆØŒ]", value):
+        return True
+    return _language_containing_word(value) in {"old_west_norse", "old_scandinavian"}
 
 
 def _extract_swedish_word_terms(user_text: str) -> list[str]:
@@ -1063,16 +1109,16 @@ def _extract_swedish_word_terms(user_text: str) -> list[str]:
             continue
         add_term(term)
 
-    # English "word X" usually means an English translation word, but a form
-    # such as þiagn is not English lexical content. If the corpus contains it
-    # in a normalisation language, route it through the same language-aware
-    # normalisation selector used by Swedish `ordet X` queries.
+    # English "word X" usually means an English translation word, but forms
+    # such as austr, þegn, and þiagn are not modern translation content. Route
+    # them through the same language-aware normalisation selector used by
+    # Swedish `ordet X` queries.
     english_pattern = r"\b(?:the\s+)?words?\s+[\"'“”]?([\wþðæøœÞÐÆØŒ'’-]+)"
     for match in re.finditer(english_pattern, text, flags=re.IGNORECASE):
         term = match.group(1).strip(" .,!?:;\"'“”")
         if _is_unquoted_grammar_value(term, text, match):
             continue
-        if _language_containing_word(term) in {"old_west_norse", "old_scandinavian"}:
+        if _generic_word_should_prefer_normalization(term):
             add_term(term)
     return terms
 
@@ -1585,7 +1631,12 @@ def _excludes_palatal_r(user_text: str) -> bool:
     )
 
 
-def _make_palatal_r_exclusion_group(term: str, *, old_west_norse: bool) -> dict[str, Any]:
+def _make_palatal_r_exclusion_group(
+    term: str,
+    *,
+    old_west_norse: bool,
+    names_mode: str = "includeAll",
+) -> dict[str, Any]:
     return {
         "condition": "AND",
         "rules": [
@@ -1593,6 +1644,7 @@ def _make_palatal_r_exclusion_group(term: str, *, old_west_norse: bool) -> dict[
                 term,
                 old_west_norse=old_west_norse,
                 transliteration="R",
+                names_mode=names_mode,
                 operator="ends_with",
                 ignore_case=False,
             )
@@ -1607,6 +1659,7 @@ def _make_initial_rune_exclusion_group(
     *,
     old_west_norse: bool,
     transliteration: str,
+    names_mode: str = "includeAll",
 ) -> dict[str, Any]:
     return {
         "condition": "AND",
@@ -1615,6 +1668,7 @@ def _make_initial_rune_exclusion_group(
                 term,
                 old_west_norse=old_west_norse,
                 transliteration=transliteration,
+                names_mode=names_mode,
                 operator="begins_with",
                 ignore_case=_transliteration_ignore_case(transliteration),
             )
@@ -1634,6 +1688,7 @@ def _make_final_rune_exclusion_group(
     *,
     old_west_norse: bool,
     transliteration: str,
+    names_mode: str = "includeAll",
 ) -> dict[str, Any]:
     excluded_value = _final_exclusion_transliteration_value(transliteration)
     return {
@@ -1643,6 +1698,7 @@ def _make_final_rune_exclusion_group(
                 term,
                 old_west_norse=old_west_norse,
                 transliteration=excluded_value,
+                names_mode=names_mode,
                 operator="ends_with",
                 ignore_case=_transliteration_ignore_case(transliteration),
             )
@@ -1657,6 +1713,7 @@ def _make_explicit_normalization_transliteration_rules(
     term: str,
     *,
     old_west_norse: bool,
+    names_mode: str = "excludeNames",
 ) -> list[dict[str, Any]]:
     """Build explicit normalisation rules, preserving aligned rune constraints."""
     required_initial = _extract_required_initial_runes(user_text) or ""
@@ -1671,6 +1728,7 @@ def _make_explicit_normalization_transliteration_rules(
                 term,
                 old_west_norse=old_west_norse,
                 transliteration=required_initial,
+                names_mode=names_mode,
                 operator="begins_with",
                 ignore_case=_transliteration_ignore_case(required_initial),
             )
@@ -1682,6 +1740,7 @@ def _make_explicit_normalization_transliteration_rules(
                 _make_normalization_rule(
                     term,
                     old_west_norse=old_west_norse,
+                    names_mode=names_mode,
                     operator="begins_with",
                 )
             )
@@ -1690,6 +1749,7 @@ def _make_explicit_normalization_transliteration_rules(
                 term,
                 old_west_norse=old_west_norse,
                 transliteration=prohibited_initial,
+                names_mode=names_mode,
             )
         )
 
@@ -1699,6 +1759,7 @@ def _make_explicit_normalization_transliteration_rules(
                 term,
                 old_west_norse=old_west_norse,
                 transliteration=required_final,
+                names_mode=names_mode,
                 operator="ends_with",
                 ignore_case=_transliteration_ignore_case(required_final),
             )
@@ -1710,6 +1771,7 @@ def _make_explicit_normalization_transliteration_rules(
                 _make_normalization_rule(
                     term,
                     old_west_norse=old_west_norse,
+                    names_mode=names_mode,
                     operator="ends_with",
                 )
             )
@@ -1718,13 +1780,14 @@ def _make_explicit_normalization_transliteration_rules(
                 term,
                 old_west_norse=old_west_norse,
                 transliteration=prohibited_final,
+                names_mode=names_mode,
             )
         )
 
     if rules:
         return rules
 
-    return [_make_normalization_rule(term, old_west_norse=old_west_norse)]
+    return [_make_normalization_rule(term, old_west_norse=old_west_norse, names_mode=names_mode)]
 
 
 @lru_cache(maxsize=256)
@@ -1766,6 +1829,7 @@ def _make_normalization_exclusion_rules(term: str, excluded_initial: str) -> lis
     positive_rule = _make_normalization_rule(
         old_scandinavian,
         old_west_norse=False,
+        names_mode="excludeNames",
     )
     negated_transliteration_group = {
         "condition": "AND",
@@ -1774,6 +1838,7 @@ def _make_normalization_exclusion_rules(term: str, excluded_initial: str) -> lis
                 old_scandinavian,
                 old_west_norse=False,
                 transliteration=excluded_initial,
+                names_mode="excludeNames",
                 operator="begins_with",
             )
         ],
@@ -2075,6 +2140,7 @@ def _make_ambiguous_normalization_group(
     *,
     transliteration: str = "",
     operator: str = "contains",
+    names_mode: str = "includeAll",
 ) -> dict[str, Any]:
     return {
         "condition": "OR",
@@ -2084,12 +2150,14 @@ def _make_ambiguous_normalization_group(
                 old_west_norse=True,
                 transliteration=transliteration,
                 operator=operator,
+                names_mode=names_mode,
             ),
             _make_normalization_rule(
                 term,
                 old_west_norse=False,
                 transliteration=transliteration,
                 operator=operator,
+                names_mode=names_mode,
             ),
         ],
         "not": False,
@@ -2116,6 +2184,7 @@ def _make_requested_word_rule(
     *,
     transliteration: str = "",
     operator: str = "contains",
+    names_mode: str = "includeAll",
 ) -> dict[str, Any]:
     folded = _fold_text(user_text)
     explicitly_old_west = re.search(r"\b(fornvastnordisk\w*|old (?:west )?norse)\b", folded)
@@ -2143,6 +2212,7 @@ def _make_requested_word_rule(
                 term,
                 transliteration=transliteration,
                 operator=operator,
+                names_mode=names_mode,
             )
         if old_scandinavian_hit:
             language = "old_scandinavian"
@@ -2153,7 +2223,11 @@ def _make_requested_word_rule(
     else:
         old_west_hit, old_scandinavian_hit = _normalization_language_hits(term)
         if old_west_hit and old_scandinavian_hit and not explicit_language:
-            return _make_ambiguous_normalization_group(term, operator=operator)
+            return _make_ambiguous_normalization_group(
+                term,
+                operator=operator,
+                names_mode=names_mode,
+            )
         language = _language_containing_word(term)
 
     if transliteration and language not in {"old_west_norse", "old_scandinavian"}:
@@ -2168,6 +2242,7 @@ def _make_requested_word_rule(
         old_west_norse=language == "old_west_norse",
         transliteration=transliteration,
         operator=operator,
+        names_mode=names_mode,
     )
 
 
@@ -3507,7 +3582,12 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
         )
         root = _append_and_constraint(
             root,
-            _make_requested_word_rule(user_text, term, transliteration=spelling),
+            _make_requested_word_rule(
+                user_text,
+                term,
+                transliteration=spelling,
+                names_mode="excludeNames",
+            ),
         )
 
     standalone_transliteration_rune = _extract_standalone_transliteration_rune(user_text)
@@ -3574,6 +3654,7 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
             term,
             transliteration=rune_spelling,
             operator="begins_with" if required_initial_runes else "contains",
+            names_mode="excludeNames",
         )
         language_rule_ids = {
             "normalization_norse_to_transliteration",
@@ -3591,7 +3672,11 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
             if old_west_norse or selected_rule.get("id") == "normalization_scandinavian_to_transliteration":
                 root = _append_and_constraint(
                     root,
-                    _make_palatal_r_exclusion_group(term, old_west_norse=old_west_norse),
+                    _make_palatal_r_exclusion_group(
+                        term,
+                        old_west_norse=old_west_norse,
+                        names_mode="excludeNames",
+                    ),
                 )
 
     name_element = _extract_name_element(user_text)
@@ -3902,7 +3987,14 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
     if aligned_word_spelling:
         term, spelling = aligned_word_spelling
         aligned_word_terms.add(_fold_text(term))
-        rules.append(_make_requested_word_rule(user_text, term, transliteration=spelling))
+        rules.append(
+            _make_requested_word_rule(
+                user_text,
+                term,
+                transliteration=spelling,
+                names_mode="excludeNames",
+            )
+        )
 
     standalone_transliteration_rune = _extract_standalone_transliteration_rune(user_text)
     if standalone_transliteration_rune:
@@ -3933,6 +4025,7 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
                 term,
                 transliteration=rune_spelling,
                 operator="begins_with" if required_initial_runes else "contains",
+                names_mode="excludeNames",
             )
             rules.append(selected_rule)
             if excludes_palatal_r:
@@ -3942,6 +4035,7 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
                         _make_palatal_r_exclusion_group(
                             term,
                             old_west_norse=old_west_norse,
+                            names_mode="excludeNames",
                         )
                     )
     name_element = _extract_name_element(user_text)
