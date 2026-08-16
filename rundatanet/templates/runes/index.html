@@ -1550,7 +1550,7 @@
         <div class="modal-body">
           <div class="row" id="resultsExportSection">
             <div class="col-xs-offset-1 col-xs-10">
-              <p>Export the current visible search results. Use Excel for structured data, or highlighted text for a readable HTML file with search matches in red.<br>Read more about exporting <a href="https://rundata-net.readthedocs.io/en/latest/getting-started/user_guide.html#importing-and-exporting-results">in the documentation</a>.</p>
+              <p>Export the current visible search results. Use Excel for structured data. Use other formats if you want to preserve text matches in red colour.</p>
             </div>
           </div>
           <div class="row" id="resultsIoDivider">
@@ -1572,7 +1572,9 @@
 
         <div class="modal-footer" id="resultsIoFooter">
           <button type="button" class="btn btn-success" id="btnExportResults"><b>Export Excel</b></button>
-          <button type="button" class="btn btn-primary" id="btnExportHighlightedResults"><b>Export highlighted text</b></button>
+          <button type="button" class="btn btn-outline-primary" id="btnExportRtfResults"><b>Export RTF</b></button>
+          <button type="button" class="btn btn-outline-primary" id="btnExportWordResults"><b>Export Word</b></button>
+          <button type="button" class="btn btn-primary" id="btnExportHtmlResults"><b>Export HTML</b></button>
         </div>
 
   </section>
@@ -2299,7 +2301,7 @@ function normalizeHighlightedExportArticles(container, inscriptions) {
   });
 }
 
-function buildHighlightedResultsHtmlDocument(inscriptions) {
+function buildHighlightedResultsExportContainer(inscriptions) {
   const exportContainer = document.createElement('div');
   const markup = inscriptions.length > 0
     ? inscriptions2markup(inscriptions).join('\n')
@@ -2307,7 +2309,11 @@ function buildHighlightedResultsHtmlDocument(inscriptions) {
   exportContainer.innerHTML = markup;
   normalizeHighlightedExportArticles(exportContainer, inscriptions);
   absolutizeHighlightedExportUrls(exportContainer);
+  return exportContainer;
+}
 
+function buildHighlightedResultsHtmlDocument(inscriptions) {
+  const exportContainer = buildHighlightedResultsExportContainer(inscriptions);
   const generatedAt = new Date().toLocaleString();
   const resultCount = inscriptions.length;
 
@@ -2394,18 +2400,134 @@ ${exportContainer.innerHTML}
 </html>`;
 }
 
-function exportHighlightedResultsHtml() {
+function buildHighlightedResultsWordDocument(inscriptions) {
+  const html = buildHighlightedResultsHtmlDocument(inscriptions);
+  return html
+    .replace('<html lang="en">', '<html lang="en" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">')
+    .replace('<head>', '<head><meta name="ProgId" content="Word.Document"><meta name="Generator" content="Rundata-net">')
+    .replace('</style>', '</style><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->');
+}
+
+function escapeRtfText(value) {
+  let result = '';
+  const text = String(value ?? '');
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    const char = text[index];
+    if (char === '\\') {
+      result += '\\\\';
+    } else if (char === '{') {
+      result += '\\{';
+    } else if (char === '}') {
+      result += '\\}';
+    } else if (char === '\n' || char === '\r') {
+      result += '\\line ';
+    } else if (code > 127) {
+      result += `\\u${code > 32767 ? code - 65536 : code}?`;
+    } else {
+      result += char;
+    }
+  }
+  return result;
+}
+
+function getRtfTextFromNode(node) {
+  if (!node) {
+    return '';
+  }
+  if (node.nodeType === Node.TEXT_NODE) {
+    return escapeRtfText(node.textContent);
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return '';
+  }
+
+  const tagName = node.tagName.toLowerCase();
+  if (tagName === 'br') {
+    return '\\line ';
+  }
+  if (tagName === 'img') {
+    const altText = node.getAttribute('alt') || node.getAttribute('src') || 'Image';
+    return `[${escapeRtfText(altText)}]`;
+  }
+
+  let content = Array.from(node.childNodes).map(getRtfTextFromNode).join('');
+  if (tagName === 'a') {
+    const href = node.getAttribute('href');
+    if (href && href !== node.textContent.trim()) {
+      content += ` (${escapeRtfText(href)})`;
+    }
+  }
+  if (tagName === 'li') {
+    content = `\\bullet\\tab ${content}\\par\n`;
+  } else if (tagName === 'h1') {
+    content = `\\fs32\\b ${content}\\b0\\fs24\\par\n`;
+  } else if (tagName === 'h2') {
+    content = `\\fs28\\b ${content}\\b0\\fs24\\par\n`;
+  } else if (tagName === 'h3' || tagName === 'h4') {
+    content = `\\b ${content}\\b0\\par\n`;
+  } else if (tagName === 'p' || tagName === 'div' || tagName === 'article' || tagName === 'section') {
+    content = `${content}\\par\n`;
+  } else if (tagName === 'tr') {
+    content = `${content}\\par\n`;
+  } else if (tagName === 'td' || tagName === 'th') {
+    content = `${content}\\tab `;
+  }
+
+  if (node.classList.contains('highlight')) {
+    content = `\\cf1\\b ${content}\\b0\\cf0 `;
+  }
+  if (node.classList.contains('transliteration')) {
+    content = `\\b ${content}\\b0 `;
+  }
+  if (node.classList.contains('normalization')) {
+    content = `\\i ${content}\\i0 `;
+  }
+
+  return content;
+}
+
+function buildHighlightedResultsRtfDocument(inscriptions) {
+  const exportContainer = buildHighlightedResultsExportContainer(inscriptions);
+  const generatedAt = new Date().toLocaleString();
+  const resultCount = inscriptions.length;
+  const body = getRtfTextFromNode(exportContainer);
+
+  return [
+    '{\\rtf1\\ansi\\ansicpg65001\\uc1\\deff0',
+    '{\\fonttbl{\\f0 Arial;}}',
+    '{\\colortbl ;\\red208\\green0\\blue0;}',
+    '\\f0\\fs24 ',
+    `\\fs32\\b Rundata-net highlighted search results\\b0\\fs24\\par\n`,
+    `Generated on ${escapeRtfText(generatedAt)}. Results: ${resultCount}.\\par\\par\n`,
+    body,
+    '}'
+  ].join('');
+}
+
+function exportHighlightedResults(format) {
   if (gExportInProgress) {
     return;
   }
   gExportInProgress = true;
 
   try {
-    showLoading('Preparing highlighted text export.');
+    const formatLabel = format === 'rtf' ? 'RTF' : format === 'word' ? 'Word' : 'HTML';
+    showLoading(`Preparing ${formatLabel} export.`);
     const inscriptionsForExport = getVisibleResultInscriptionsForExport();
-    const html = buildHighlightedResultsHtmlDocument(inscriptionsForExport);
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    downloadExportBlob(blob, 'rundata-net_highlighted_results.html');
+    if (format === 'rtf') {
+      const rtf = buildHighlightedResultsRtfDocument(inscriptionsForExport);
+      const blob = new Blob([rtf], { type: 'application/rtf;charset=utf-8' });
+      downloadExportBlob(blob, 'rundata-net_highlighted_results.rtf');
+    } else if (format === 'word') {
+      const wordHtml = buildHighlightedResultsWordDocument(inscriptionsForExport);
+      const blob = new Blob([wordHtml], { type: 'application/msword;charset=utf-8' });
+      downloadExportBlob(blob, 'rundata-net_highlighted_results.doc');
+    } else {
+      const html = buildHighlightedResultsHtmlDocument(inscriptionsForExport);
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      downloadExportBlob(blob, 'rundata-net_highlighted_results.html');
+    }
     closeResultsIoModal();
   } catch (error) {
     onExportError(error);
@@ -3813,7 +3935,9 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('btnAddMapGroupJson').addEventListener('click', addJsonRulesPublicationMapGroup);
   document.getElementById('btnResetMapExport').addEventListener('click', resetPublicationMapExportGroups);
   document.getElementById('btnExportMapSvg').addEventListener('click', exportPublicationMapSvg);
-  document.getElementById('btnExportHighlightedResults').addEventListener('click', exportHighlightedResultsHtml);
+  document.getElementById('btnExportRtfResults').addEventListener('click', () => exportHighlightedResults('rtf'));
+  document.getElementById('btnExportWordResults').addEventListener('click', () => exportHighlightedResults('word'));
+  document.getElementById('btnExportHtmlResults').addEventListener('click', () => exportHighlightedResults('html'));
   // Export Excel button handler
   document.getElementById('btnExportResults').addEventListener('click', function() {
     if (gExportInProgress) {
