@@ -162,6 +162,51 @@
       #alertObj {
         display: none;
       }
+      .special-letters-toggle {
+        min-width: 3rem;
+        height: 2.5rem;
+        padding-inline: 0.7rem;
+        color: #fff;
+        background-color: #c9511b;
+        border-color: #c9511b;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .special-letters-toggle:hover,
+      .special-letters-toggle:focus {
+        color: #fff;
+        background-color: #b84717;
+        border-color: #b84717;
+      }
+      .special-letters-toggle .bi {
+        font-size: 1.45rem;
+        line-height: 1;
+      }
+      .special-letters-panel {
+        max-width: 100%;
+      }
+      .special-letters-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 2.8rem);
+        gap: 0.25rem;
+      }
+      .special-letters-panel .clip {
+        width: 2.8rem;
+        min-width: 2.8rem;
+        height: 2.5rem;
+        padding-inline: 0;
+      }
+      .display-panel-control {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 0.5rem;
+        text-align: center;
+      }
+      .display-panel-control .top-control-link {
+        max-width: 100%;
+        white-space: normal;
+      }
       .my-fixed-height {
         height: clamp(320px, calc(100vh - 380px), 500px);
         min-height: 320px;
@@ -638,6 +683,52 @@
           }
         }
       }
+      .display-options-transfer-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding-top: 0.2rem;
+      }
+      .display-options-control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+      .display-options-control-label {
+        color: #5f6b76;
+        font-size: 0.78rem;
+        font-weight: 700;
+        line-height: 1.2;
+        text-align: center;
+      }
+      .display-options-transfer-controls .btn,
+      .display-options-order-controls .btn {
+        min-height: 2.45rem;
+        border-radius: 0.45rem;
+        font-size: 1.1rem;
+        line-height: 1;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+      }
+      .display-options-transfer-controls .btn i,
+      .display-options-order-controls .btn i {
+        display: inline-block;
+        transform: translateY(1px);
+      }
+      .display-options-transfer-controls .btn-block + .btn-block {
+        margin-top: 0;
+      }
+      .display-options-order-controls {
+        align-items: end;
+      }
+      .display-options-selected-column {
+        background: #eef7f1;
+        border: 1px solid #cfe8d6;
+        border-radius: 0.5rem;
+        padding: 0.55rem;
+      }
+      .display-options-selected-column #multiselect_to {
+        border-color: #b9d9c2;
+      }
       @media (max-width: 767.98px), (max-width: 1366px) and (any-pointer: coarse) {
         .display-options-checklist {
           max-height: 52vh;
@@ -993,20 +1084,6 @@
           <li class="nav-item"><a class="nav-link" href="http://rundata-net.rtfd.io/" target="_blank">Help</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'runes:references' %}" target="_blank">Bibliography</a></li>
         </ul>
-        <ul id="topControlButtons" class="navbar-nav me-auto mb-2 mb-lg-0">
-          <li class="nav-item d-flex align-items-center ms-2">
-            <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#divFormatDialog">
-              <span class="db-compact-inline">Info filter</span>
-              <span class="db-desktop-inline">Choose what to show about inscriptions in the main display</span>
-            </button>
-          </li>
-          <li class="nav-item d-flex align-items-center ms-2">
-            <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#mapDisplayOptionsDialog">
-              <span class="db-compact-inline">Map filter</span>
-              <span class="db-desktop-inline">Choose what to show on the map</span>
-            </button>
-          </li>
-        </ul>
       </div>
     </div>
   </nav>
@@ -1153,6 +1230,12 @@
       </div>
 
       <div id="mainPanel" class="col my-2 my-md-0">
+        <div class="display-panel-control">
+          <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#divFormatDialog">
+            <span class="db-compact-inline">Info filter</span>
+            <span class="db-desktop-inline">Information filter</span>
+          </button>
+        </div>
         <div id="mobileSearchResultsSummary" aria-live="polite">
           <span class="mobile-stat-label">Search results:</span>
           <span>Inscriptions: <span id="mobileOutNumSignaturesFound" class="mobile-stat-value">6815</span></span>
@@ -1164,6 +1247,12 @@
       </div>
 
       <div id="mapDisplayWrapper" class="map-two-cm-narrow col-md-4 col-sm-2 ps-0 pe-3 pe-md-0 mt-3 mt-md-0">
+        <div class="display-panel-control">
+          <button type="button" class="btn btn-outline-secondary btn-sm top-control-link" data-bs-toggle="modal" data-bs-target="#mapDisplayOptionsDialog">
+            <span class="db-compact-inline">Map filter</span>
+            <span class="db-desktop-inline">Map filter</span>
+          </button>
+        </div>
         <div id="mapDisplayContainer" class="map-display-container">
           <button type="button" class="btn btn-outline-secondary btn-sm map-corner-toggle" id="mHideMap" aria-label="Hide map" title="Hide map">×</button>
           <div id="mobileMapPopupHint" role="note">
@@ -1176,29 +1265,34 @@
 
     <div id="searchControlsRow" class="row py-3" role="group" aria-label="">
       <div id="searchControlsContainer" class="col d-flex flex-wrap justify-content-start align-items-start gap-2">
-        <div class="btn-group flex-wrap" role="group">
-          <button type="button" class="btn btn-default clip" id="btnOUmlautSmall">ö</button>
-          <button type="button" class="btn btn-default clip" id="btnOUmlaut">Ö</button>
-          <button type="button" class="btn btn-default clip" id="btnAaSmall">å</button>
-          <button type="button" class="btn btn-default clip" id="btnAa">Å</button>
-          <button type="button" class="btn btn-default clip" id="btnAaUmlautSmall">ä</button>
-          <button type="button" class="btn btn-default clip" id="btnAaUmlaut">Ä</button>
-          <button type="button" class="btn btn-default clip" id="btnTh">þ</button>
-          <button type="button" class="btn btn-default clip" id="btnEn">ñ</button>
-          <button type="button" class="btn btn-default clip" id="btnDh">ð</button>
-          <button type="button" class="btn btn-default clip" id="btnDh">ï</button>
-          <button type="button" class="btn btn-default clip" id="btnAe">æ</button>
-          <button type="button" class="btn btn-default clip" id="btnAe">Æ</button>
-          <button type="button" class="btn btn-default clip" id="btnOe">ø</button>
-          <button type="button" class="btn btn-default clip" id="btnOe">Ø</button>
-          <button type="button" class="btn btn-default clip" id="btnOe2">œ</button>
-          <button type="button" class="btn btn-default clip" id="btnOe2">Œ</button>
-          <button type="button" class="btn btn-default clip" id="btnOhakeSmall">ô</button>
-          <button type="button" class="btn btn-default clip" id="btnOhakeCapital">Ô</button>
+        <button type="button" class="btn special-letters-toggle" id="btnSpecialLettersToggle" data-bs-toggle="collapse" data-bs-target="#specialLettersPanel" aria-expanded="false" aria-controls="specialLettersPanel" aria-label="Open special letters keyboard" title="Special letters">
+          <i class="bi bi-keyboard" aria-hidden="true"></i>
+        </button>
+        <div class="collapse special-letters-panel" id="specialLettersPanel">
+          <div class="special-letters-grid" role="group" aria-label="Copy special letters">
+            <button type="button" class="btn btn-default clip" id="btnOUmlautSmall">ö</button>
+            <button type="button" class="btn btn-default clip" id="btnOUmlaut">Ö</button>
+            <button type="button" class="btn btn-default clip" id="btnAaSmall">å</button>
+            <button type="button" class="btn btn-default clip" id="btnAa">Å</button>
+            <button type="button" class="btn btn-default clip" id="btnAaUmlautSmall">ä</button>
+            <button type="button" class="btn btn-default clip" id="btnAaUmlaut">Ä</button>
+            <button type="button" class="btn btn-default clip" id="btnTh">þ</button>
+            <button type="button" class="btn btn-default clip" id="btnEn">ñ</button>
+            <button type="button" class="btn btn-default clip" id="btnDh">ð</button>
+            <button type="button" class="btn btn-default clip" id="btnIiDiaeresis">ï</button>
+            <button type="button" class="btn btn-default clip" id="btnAe">æ</button>
+            <button type="button" class="btn btn-default clip" id="btnAeCapital">Æ</button>
+            <button type="button" class="btn btn-default clip" id="btnOe">ø</button>
+            <button type="button" class="btn btn-default clip" id="btnOeCapital">Ø</button>
+            <button type="button" class="btn btn-default clip" id="btnOe2">œ</button>
+            <button type="button" class="btn btn-default clip" id="btnOe2Capital">Œ</button>
+            <button type="button" class="btn btn-default clip" id="btnOhakeSmall">ô</button>
+            <button type="button" class="btn btn-default clip" id="btnOhakeCapital">Ô</button>
+          </div>
         </div>
         <button type="button" class="btn btn-success px-4" id="btnSearch">Search</button>
         <button type="button" class="btn btn-danger" id="btnResetSearch">Reset search</button>
-        <button type="button" class="btn btn-default" id="btnOpenSearchParameters" data-bs-toggle="modal" data-bs-target="#containerRuleIo">Search parameters</button>
+        <button type="button" class="btn btn-default" id="btnOpenSearchParameters" data-bs-toggle="modal" data-bs-target="#containerRuleIo">JSON rules</button>
         <button type="button" class="btn btn-default" id="btnOpenExportResults" data-bs-toggle="modal" data-bs-target="#modalResultsIo" data-results-mode="export">Export search</button>
         <button type="button" class="btn btn-default" id="btnOpenExportMap" data-bs-toggle="modal" data-bs-target="#modalMapExport">Export map</button>
       </div>
@@ -1233,39 +1327,51 @@
     <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
         <div class="modal-header">
-          <h4 class="modal-title" id="divFormatDialogLabel">Configure inscription display</h4>
+          <h4 class="modal-title" id="divFormatDialogLabel">Choose what to show about inscriptions in the main display</h4>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body" style="padding-top: 1em; padding-left: 1em; padding-right: 1em;">
           <div class="row" style="padding-left: 1em; padding-right: 1em;">
             <p class="col alert alert-danger hidden" role="alert" id="formatDialogAlertObj"></p>
           </div>
-          <div class="row" style="padding-left: 1em; padding-right: 1em;">
-            <div class="col"><p>Here you can select which properties are shown on the main display when an inscription is selected.</p>
-            <p class="db-desktop-block">List on the left contains properties available for selection. List on the right contains properties selected for display.</p>
-            <p>Check <em>Display headers</em> checkbox if you want to see property name as long as it's value. If unchecked, only the value is displayed.</p>
-            </div>
-          </div>
           <div class="row">
             <div class="col-12 db-desktop-block">
+              <div class="row mb-1">
+                <div class="col-sm-5">
+                  <label class="form-label fw-semibold mb-0" for="multiselect">Available for selection</label>
+                </div>
+                <div class="col-sm-2"></div>
+                <div class="col-sm-5">
+                  <label class="form-label fw-semibold mb-0" for="multiselect_to">Already selected</label>
+                </div>
+              </div>
               <div class="row">
                 <div class="col-sm-5">
-                  <select name="from[]" id="multiselect" class="form-control" size="8" multiple="multiple"></select>
+                  <select name="from[]" id="multiselect" class="form-control" size="12" multiple="multiple"></select>
                 </div>
-                <div class="col-sm-2">
-                  <button type="button" id="multiselect_rightAll" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-double-right"></i></button>
-                  <button type="button" id="multiselect_rightSelected" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-right"></i></button>
-                  <button type="button" id="multiselect_leftSelected" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-left"></i></button>
-                  <button type="button" id="multiselect_leftAll" class="btn btn-secondary w-100 btn-block btn-no-hover"><i class="bi bi-chevron-double-left"></i></button>
+                <div class="col-sm-2 display-options-transfer-controls">
+                  <div class="display-options-control-group">
+                    <div class="display-options-control-label">Add</div>
+                    <button type="button" id="multiselect_rightAll" class="btn btn-primary w-100 btn-block" title="Add all" aria-label="Add all"><i class="bi bi-chevron-double-right"></i></button>
+                    <button type="button" id="multiselect_rightSelected" class="btn btn-primary w-100 btn-block" title="Add selected" aria-label="Add selected"><i class="bi bi-chevron-right"></i></button>
+                  </div>
+                  <div class="display-options-control-group">
+                    <div class="display-options-control-label">Remove</div>
+                    <button type="button" id="multiselect_leftSelected" class="btn btn-outline-secondary w-100 btn-block" title="Remove selected" aria-label="Remove selected"><i class="bi bi-chevron-left"></i></button>
+                    <button type="button" id="multiselect_leftAll" class="btn btn-outline-secondary w-100 btn-block" title="Remove all" aria-label="Remove all"><i class="bi bi-chevron-double-left"></i></button>
+                  </div>
                 </div>
-                <div class="col-sm-5">
-                  <select name="to[]" id="multiselect_to" class="form-control" size="8" multiple="multiple"></select>
-                  <div class="row mt-2">
-                    <div class="col-sm-6">
-                      <button type="button" id="multiselect_move_up" class="btn btn-secondary btn-block w-100"><i class="bi bi-chevron-up"></i></button>
+                <div class="col-sm-5 display-options-selected-column">
+                  <select name="to[]" id="multiselect_to" class="form-control" size="12" multiple="multiple"></select>
+                  <div class="row mt-2 display-options-order-controls">
+                    <div class="col-sm-12">
+                      <div class="display-options-control-label">Order</div>
                     </div>
                     <div class="col-sm-6">
-                      <button type="button" id="multiselect_move_down" class="btn btn-secondary btn-block w-100"><i class="bi bi-chevron-down"></i></button>
+                      <button type="button" id="multiselect_move_up" class="btn btn-outline-primary btn-block w-100" title="Move selected up" aria-label="Move selected up"><i class="bi bi-chevron-up"></i></button>
+                    </div>
+                    <div class="col-sm-6">
+                      <button type="button" id="multiselect_move_down" class="btn btn-outline-primary btn-block w-100" title="Move selected down" aria-label="Move selected down"><i class="bi bi-chevron-down"></i></button>
                     </div>
                   </div>
                 </div>
@@ -1285,8 +1391,7 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-default" data-bs-dismiss="modal" id="btnDismissDisplayFormat">Close</button>
-          <button type="button" class="btn btn-primary db-desktop-inline-block" id="btnApplyDisplayFormat">Apply changes</button>
+          <button type="button" class="btn btn-primary db-desktop-inline-block" id="btnApplyDisplayFormat">Save display settings</button>
         </div>
       </div>
     </div>
@@ -1528,7 +1633,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260816-map-export-symbol-fill-1"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260816-display-filter-close-1"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;

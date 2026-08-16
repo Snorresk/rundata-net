@@ -376,9 +376,28 @@ function applyDisplayFormatChanges({ closeDialog = false } = {}) {
   }
 
   if (closeDialog) {
-    document.getElementById('btnDismissDisplayFormat').click();
+    closeDisplayFormatDialog();
   }
   return true;
+}
+
+function closeDisplayFormatDialog() {
+  const formatDialogEl = document.getElementById('divFormatDialog');
+  if (!formatDialogEl || !window.bootstrap || !window.bootstrap.Modal) {
+    return;
+  }
+
+  const modal = window.bootstrap.Modal.getInstance(formatDialogEl)
+    || window.bootstrap.Modal.getOrCreateInstance(formatDialogEl);
+  modal.hide();
+}
+
+function restoreSavedDisplayFormatOptions() {
+  const savedShowHeaders = localStorage.getItem(gShowHeadersKey);
+  const showHeaders = savedShowHeaders ? savedShowHeaders === 'true' : true;
+  const savedSelected = localStorage.getItem(gUserSelectedDisplayKey);
+  const selectedValues = normalizeSelectedValues(savedSelected ? JSON.parse(savedSelected) : getDefaultSelectedDisplayValues());
+  setMultiselectOptions(selectedValues, showHeaders);
 }
 
 function applyMobileDisplayFormatImmediately() {
@@ -464,14 +483,10 @@ export function initMultiselect() {
   document.getElementById('displayOptionsChecklist').addEventListener('change', applyMobileDisplayFormatImmediately);
   document.getElementById('displayOptionsChecklist').addEventListener('click', moveMobileDisplayOption);
   document.getElementById('chkDisplayHeaders').addEventListener('change', applyMobileDisplayFormatImmediately);
-  document.getElementById('btnDismissDisplayFormat').addEventListener('click', () => {
-    // revert the changes
-    const savedShowHeaders = localStorage.getItem(gShowHeadersKey);
-    const showHeaders = savedShowHeaders ? savedShowHeaders === 'true' : true;
-    const savedSelected = localStorage.getItem(gUserSelectedDisplayKey);
-    const selectedValues = normalizeSelectedValues(savedSelected ? JSON.parse(savedSelected) : getDefaultSelectedDisplayValues());
-    setMultiselectOptions(selectedValues, showHeaders);
-  });
+  const dismissDisplayFormatButton = document.getElementById('btnDismissDisplayFormat');
+  if (dismissDisplayFormatButton) {
+    dismissDisplayFormatButton.addEventListener('click', restoreSavedDisplayFormatOptions);
+  }
 
   const formatDialogEl = document.getElementById('divFormatDialog')
   formatDialogEl.addEventListener('shown.bs.modal', event => {
@@ -483,6 +498,7 @@ export function initMultiselect() {
     saveUserSelectedDisplay(userSelectedDisplay);
     localStorage.setItem(gShowHeadersKey, lastShowHeaders);
   });
+  formatDialogEl.addEventListener('hidden.bs.modal', restoreSavedDisplayFormatOptions);
 }
 
 function onDisplayFormatClicked(e) {
