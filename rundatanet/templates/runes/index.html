@@ -1199,8 +1199,8 @@
         <button type="button" class="btn btn-success px-4" id="btnSearch">Search</button>
         <button type="button" class="btn btn-danger" id="btnResetSearch">Reset search</button>
         <button type="button" class="btn btn-default" id="btnOpenSearchParameters" data-bs-toggle="modal" data-bs-target="#containerRuleIo">Search parameters</button>
-        <button type="button" class="btn btn-default" id="btnOpenImportId" data-bs-toggle="modal" data-bs-target="#modalResultsIo" data-results-mode="import">Import ID</button>
-        <button type="button" class="btn btn-default" id="btnOpenExportResults" data-bs-toggle="modal" data-bs-target="#modalResultsIo" data-results-mode="export">Export</button>
+        <button type="button" class="btn btn-default" id="btnOpenExportResults" data-bs-toggle="modal" data-bs-target="#modalResultsIo" data-results-mode="export">Export search</button>
+        <button type="button" class="btn btn-default" id="btnOpenExportMap" data-bs-toggle="modal" data-bs-target="#modalMapExport">Export map</button>
       </div>
     </div>
 
@@ -1351,6 +1351,89 @@
     </div>
   </div>
 
+  <div id="modalMapExport" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalMapExportLabel">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalMapExportLabel">Export map</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label" for="mapExportGroupName">Group name</label>
+            <input type="text" class="form-control" id="mapExportGroupName" value="Search results">
+          </div>
+
+          <div class="mb-3">
+            <div class="form-label">Groups</div>
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-2">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Symbol</th>
+                    <th>Size</th>
+                    <th>Colour</th>
+                    <th>Count</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="mapExportGroupsBody"></tbody>
+              </table>
+            </div>
+            <div class="d-flex gap-2 mb-2">
+              <button type="button" class="btn btn-success btn-sm" id="btnAddMapGroupJson">Add JSON rules</button>
+              <button type="button" class="btn btn-default btn-sm" id="btnResetMapExport">Reset export</button>
+            </div>
+            <textarea class="form-control" id="mapExportGroupRulesJson" rows="4" placeholder="Paste search-rule JSON for another group"></textarea>
+          </div>
+
+          <fieldset class="mb-3">
+            <legend class="col-form-label pt-0">Choose background</legend>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="mapExportBackground" id="mapExportBackgroundCarto" value="carto-positron" checked>
+              <label class="form-check-label" for="mapExportBackgroundCarto">Publication basemap</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="mapExportBackground" id="mapExportBackgroundOsm" value="osm">
+              <label class="form-check-label" for="mapExportBackgroundOsm">OpenStreetMap standard</label>
+            </div>
+          </fieldset>
+
+          <div class="mb-3">
+            <label class="form-label" for="mapExportZoom">Choose zoom</label>
+            <select class="form-select" id="mapExportZoom">
+              <option value="-2">Zoom out 2</option>
+              <option value="-1">Zoom out 1</option>
+              <option value="0" selected>Default</option>
+              <option value="1">Zoom in 1</option>
+              <option value="2">Zoom in 2</option>
+            </select>
+          </div>
+
+          <fieldset class="mb-3">
+            <legend class="col-form-label pt-0">Choose format</legend>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="mapExportFormat" id="mapExportFormatSvg" value="svg" checked>
+              <label class="form-check-label" for="mapExportFormatSvg">SVG</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="mapExportFormat" id="mapExportFormatPng" value="png">
+              <label class="form-check-label" for="mapExportFormatPng">PNG</label>
+            </div>
+          </fieldset>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary" id="btnExportMapSvg">Download map</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <section role="dialog" class="modal fade" id="modalResultsIo" tabindex="-1" role="dialog" arial-labelledby="divResultsIoLabel">
     <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
@@ -1445,7 +1528,7 @@ function isSafari() {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260808-inscription-id-contains-1"></script>
+<script type="text/javascript" src="{% static 'runes/index.min.js' %}?v=20260816-map-export-symbol-fill-1"></script>
 
 <script type="text/javascript">
 let gSqlDb = null;
@@ -1460,7 +1543,10 @@ let gExportInProgress = false;
 let gTranslationOccurrenceCount = null;
 let gSearchHintMessage = null;
 let gActiveResultRules = null;
+let gPublicationMapExportGroups = [];
+let gPublicationMapExportLocked = false;
 const INCLUDE_SYMBOLS_HINT = 'Your query includes symbols. To search symbols, enable the "Include symbols" filter.';
+const PUBLICATION_MAP_PNG_SCALE = 2;
 
 function hideAiAssistantAlert() {
   const alertObj = document.getElementById('aiAssistantAlert');
@@ -2216,6 +2302,401 @@ function exportHighlightedResultsHtml() {
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     downloadExportBlob(blob, 'rundata-net_highlighted_results.html');
     closeResultsIoModal();
+  } catch (error) {
+    onExportError(error);
+  } finally {
+    gExportInProgress = false;
+    hideLoading();
+  }
+}
+
+function getCheckedRadioValue(name, fallbackValue) {
+  const checked = document.querySelector(`input[name="${name}"]:checked`);
+  return checked ? checked.value : fallbackValue;
+}
+
+function getPublicationMapGroupPalette(index) {
+  const colours = ['#111111', '#d62728', '#1f77b4', '#ff7f0e', '#2ca02c', '#9467bd', '#8c564b'];
+  return colours[index % colours.length];
+}
+
+function getPublicationMapGroupSymbol(index) {
+  const symbols = ['dot', 'triangle', 'square'];
+  return symbols[index % symbols.length];
+}
+
+function getPublicationMapGroupNameFromInput(fallbackValue = 'Search results') {
+  const groupNameInput = document.getElementById('mapExportGroupName');
+  return (groupNameInput ? groupNameInput.value.trim() : '') || fallbackValue;
+}
+
+function createPublicationMapExportGroup({name, inscriptions, rules = null, index = 0}) {
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    groupName: name || `Group ${index + 1}`,
+    inscriptions: Array.isArray(inscriptions) ? inscriptions : [],
+    rules: rules ? cloneSearchRulesForExport(rules) : null,
+    symbol: getPublicationMapGroupSymbol(index),
+    symbolSize: 6,
+    symbolColour: getPublicationMapGroupPalette(index),
+  };
+}
+
+function isPublicationMapSplittableOrGroup(rulesNode) {
+  return rulesNode
+    && Array.isArray(rulesNode.rules)
+    && String(rulesNode.condition || '').toUpperCase() === 'OR'
+    && rulesNode.not !== true
+    && rulesNode.rules.length > 1;
+}
+
+function findPublicationMapSplitGroup(rulesNode) {
+  if (!rulesNode || !Array.isArray(rulesNode.rules)) {
+    return null;
+  }
+  for (const rule of rulesNode.rules) {
+    if (isPublicationMapSplittableOrGroup(rule)) {
+      return rule;
+    }
+    const nested = findPublicationMapSplitGroup(rule);
+    if (nested) {
+      return nested;
+    }
+  }
+  return isPublicationMapSplittableOrGroup(rulesNode) ? rulesNode : null;
+}
+
+function replacePublicationMapSplitGroup(rulesNode, targetGroup, replacementRule) {
+  if (rulesNode === targetGroup) {
+    return cloneSearchRulesForExport(replacementRule);
+  }
+  if (!rulesNode || typeof rulesNode !== 'object') {
+    return rulesNode;
+  }
+  const cloned = Array.isArray(rulesNode) ? [] : {...rulesNode};
+  if (Array.isArray(rulesNode.rules)) {
+    cloned.rules = rulesNode.rules.map(rule => replacePublicationMapSplitGroup(rule, targetGroup, replacementRule));
+  }
+  return cloned;
+}
+
+function ensurePublicationMapSearchRulesGroup(rulesNode) {
+  const clonedRules = cloneSearchRulesForExport(rulesNode);
+  if (!clonedRules || typeof clonedRules !== 'object') {
+    return clonedRules;
+  }
+  if (Array.isArray(clonedRules.rules) && clonedRules.condition) {
+    return clonedRules;
+  }
+  return {
+    condition: 'AND',
+    rules: [clonedRules],
+    not: false,
+    valid: true,
+  };
+}
+
+function getPublicationMapRuleGroupName(rule, fallbackName) {
+  if (!rule || Array.isArray(rule.rules)) {
+    return fallbackName;
+  }
+  const value = formatAiRuleValue(rule.value);
+  if (value) {
+    return value;
+  }
+  return AI_RULE_LABELS[rule.id] || AI_RULE_LABELS[rule.field] || rule.label || rule.id || rule.field || fallbackName;
+}
+
+function createPublicationMapGroupsFromCurrentSearch() {
+  const currentRules = gActiveResultRules || getQueryBuilderRulesWithLiveValues(inpQueryBuilder);
+  const splitGroup = findPublicationMapSplitGroup(currentRules);
+  if (!splitGroup) {
+    return [
+      createPublicationMapExportGroup({
+        name: getPublicationMapGroupNameFromInput(),
+        inscriptions: getVisibleResultInscriptionsForExport(),
+        rules: currentRules,
+        index: 0,
+      }),
+    ];
+  }
+
+  return splitGroup.rules.map((rule, index) => {
+    const groupRules = ensurePublicationMapSearchRulesGroup(
+      replacePublicationMapSplitGroup(currentRules, splitGroup, rule)
+    );
+    const inscriptions = doSearch(groupRules, gViewModel.getAllInscriptions().values());
+    return createPublicationMapExportGroup({
+      name: getPublicationMapRuleGroupName(rule, `Group ${index + 1}`),
+      inscriptions,
+      rules: groupRules,
+      index,
+    });
+  });
+}
+
+function initializePublicationMapExportGroups() {
+  if (gPublicationMapExportGroups.length > 0) {
+    renderPublicationMapExportGroups();
+    return;
+  }
+  gPublicationMapExportGroups = createPublicationMapGroupsFromCurrentSearch();
+  gPublicationMapExportLocked = true;
+  renderPublicationMapExportGroups();
+}
+
+function resetPublicationMapExportGroups() {
+  gPublicationMapExportLocked = false;
+  const groupNameInput = document.getElementById('mapExportGroupName');
+  if (groupNameInput) {
+    groupNameInput.value = 'Search results';
+  }
+  const rulesInput = document.getElementById('mapExportGroupRulesJson');
+  if (rulesInput) {
+    rulesInput.value = '';
+  }
+  const zoomInput = document.getElementById('mapExportZoom');
+  if (zoomInput) {
+    zoomInput.value = '0';
+  }
+  gPublicationMapExportGroups = createPublicationMapGroupsFromCurrentSearch();
+  renderPublicationMapExportGroups();
+}
+
+function getPublicationMapGroupById(groupId) {
+  return gPublicationMapExportGroups.find(group => group.id === groupId) || null;
+}
+
+function updatePublicationMapGroup(groupId, field, value) {
+  const group = getPublicationMapGroupById(groupId);
+  if (!group) {
+    return;
+  }
+  if (field === 'symbolSize') {
+    group.symbolSize = Math.max(1, Math.min(6, parseFloat(value) || 6));
+  } else if (field === 'groupName') {
+    group.groupName = String(value || '').trim() || 'Group';
+    if (gPublicationMapExportGroups[0] && gPublicationMapExportGroups[0].id === groupId) {
+      const groupNameInput = document.getElementById('mapExportGroupName');
+      if (groupNameInput) {
+        groupNameInput.value = group.groupName;
+      }
+    }
+  } else if (field === 'symbolColour') {
+    group.symbolColour = /^#[0-9a-fA-F]{6}$/.test(String(value || '')) ? value : '#111111';
+  } else if (field === 'symbol') {
+    group.symbol = ['dot', 'triangle', 'square'].includes(value) ? value : 'dot';
+  }
+}
+
+function buildPublicationMapSymbolSizeOptions(selectedSize) {
+  const sizes = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6];
+  const normalizedSelectedSize = Math.max(1, Math.min(6, parseFloat(selectedSize) || 6));
+  return sizes.map(size => (
+    `<option value="${size}"${Math.abs(size - normalizedSelectedSize) < 0.001 ? ' selected' : ''}>${size}</option>`
+  )).join('');
+}
+
+function renderPublicationMapExportGroups() {
+  const groupsBody = document.getElementById('mapExportGroupsBody');
+  if (!groupsBody) {
+    return;
+  }
+  groupsBody.innerHTML = gPublicationMapExportGroups.map((group, index) => `
+    <tr data-map-group-id="${escapeHtmlForExportDocument(group.id)}">
+      <td><input type="text" class="form-control form-control-sm" data-map-group-field="groupName" value="${escapeHtmlForExportDocument(group.groupName)}"></td>
+      <td>
+        <select class="form-select form-select-sm" data-map-group-field="symbol" style="min-width: 7.25rem;">
+          <option value="dot"${group.symbol === 'dot' ? ' selected' : ''}>Dots</option>
+          <option value="triangle"${group.symbol === 'triangle' ? ' selected' : ''}>Triangles</option>
+          <option value="square"${group.symbol === 'square' ? ' selected' : ''}>Squares</option>
+        </select>
+      </td>
+      <td>
+        <select class="form-select form-select-sm" data-map-group-field="symbolSize" style="min-width: 4.4rem;">
+          ${buildPublicationMapSymbolSizeOptions(group.symbolSize)}
+        </select>
+      </td>
+      <td><input type="color" class="form-control form-control-color form-control-sm" data-map-group-field="symbolColour" value="${escapeHtmlForExportDocument(group.symbolColour)}" title="Choose colour"></td>
+      <td>${group.inscriptions.length}</td>
+      <td><button type="button" class="btn btn-default btn-sm" data-map-group-remove="${escapeHtmlForExportDocument(group.id)}"${index === 0 && gPublicationMapExportGroups.length === 1 ? ' disabled' : ''}>Remove</button></td>
+    </tr>
+  `).join('');
+}
+
+function addJsonRulesPublicationMapGroup() {
+  const rulesInput = document.getElementById('mapExportGroupRulesJson');
+  const rawRules = rulesInput ? rulesInput.value.trim() : '';
+  if (!rawRules) {
+    showAlert('Paste search-rule JSON before adding a group.');
+    return;
+  }
+
+  try {
+    const parsedRules = JSON.parse(rawRules);
+    const rules = normalizeQueryBuilderRulesForUi(parsedRules);
+    const inscriptions = doSearch(rules, gViewModel.getAllInscriptions().values());
+    gPublicationMapExportGroups.push(createPublicationMapExportGroup({
+      name: `Group ${gPublicationMapExportGroups.length + 1}`,
+      inscriptions,
+      rules,
+      index: gPublicationMapExportGroups.length,
+    }));
+    gPublicationMapExportLocked = true;
+    if (rulesInput) {
+      rulesInput.value = '';
+    }
+    renderPublicationMapExportGroups();
+  } catch (error) {
+    console.warn('Could not add map group from JSON rules.', error);
+    showAlert(`Could not add group from JSON: ${error.message}`);
+  }
+}
+
+function getPublicationMapExportGroupsForDownload() {
+  if (gPublicationMapExportGroups.length === 0) {
+    initializePublicationMapExportGroups();
+  }
+  return gPublicationMapExportGroups.map(group => ({
+    groupName: group.groupName,
+    inscriptions: group.inscriptions,
+    symbol: group.symbol,
+    symbolSize: group.symbolSize,
+    symbolColour: group.symbolColour,
+  }));
+}
+
+function getPublicationMapExportOptions() {
+  const zoomInput = document.getElementById('mapExportZoom');
+  return {
+    groupName: getPublicationMapGroupNameFromInput(),
+    background: getCheckedRadioValue('mapExportBackground', 'carto-positron'),
+    format: getCheckedRadioValue('mapExportFormat', 'svg'),
+    zoom: zoomInput ? parseInt(zoomInput.value, 10) : 0,
+    groups: getPublicationMapExportGroupsForDownload(),
+    locationMode: $('#chkShowOriginalLocation').is(':checked') ? 'original' : 'current',
+  };
+}
+
+function getPublicationMapExportFormat(format) {
+  return ['svg', 'png'].includes(format) ? format : 'svg';
+}
+
+function getPublicationMapExportFilename(format) {
+  return `rundata-net_publication_map.${getPublicationMapExportFormat(format)}`;
+}
+
+function getPublicationMapExportMimeType(format) {
+  if (format === 'png') {
+    return 'image/png';
+  }
+  return 'image/svg+xml;charset=utf-8';
+}
+
+function imageFromObjectUrl(objectUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Could not prepare map image for download.'));
+    image.src = objectUrl;
+  });
+}
+
+function canvasToBlob(canvas, mimeType) {
+  return new Promise((resolve, reject) => {
+    if (typeof canvas.toBlob === 'function') {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('Could not create map image file.'));
+        }
+      }, mimeType, 0.95);
+      return;
+    }
+
+    fetch(canvas.toDataURL(mimeType, 0.95))
+      .then(response => response.blob())
+      .then(resolve)
+      .catch(reject);
+  });
+}
+
+async function rasterizePublicationMapSvg(svg, format, width, height) {
+  const mimeType = getPublicationMapExportMimeType(format);
+  const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl = URL.createObjectURL(svgBlob);
+
+  try {
+    const image = await imageFromObjectUrl(svgUrl);
+    const canvas = document.createElement('canvas');
+    const baseWidth = Math.max(1, Math.round(width || image.naturalWidth || 1200));
+    const baseHeight = Math.max(1, Math.round(height || image.naturalHeight || 900));
+    const scale = PUBLICATION_MAP_PNG_SCALE;
+    canvas.width = baseWidth * scale;
+    canvas.height = baseHeight * scale;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Could not prepare map image canvas.');
+    }
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvasToBlob(canvas, mimeType);
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+}
+
+async function getPublicationMapDownloadBlob(result, format) {
+  const normalizedFormat = getPublicationMapExportFormat(format);
+  if (normalizedFormat === 'svg') {
+    return new Blob([result.svg], { type: getPublicationMapExportMimeType(normalizedFormat) });
+  }
+  return rasterizePublicationMapSvg(result.svg, normalizedFormat, result.width, result.height);
+}
+
+async function exportPublicationMapSvg() {
+  if (gExportInProgress) {
+    return;
+  }
+  gExportInProgress = true;
+
+  try {
+    showLoading('Preparing publication map.');
+    const inscriptionsForExport = getVisibleResultInscriptionsForExport();
+    const options = getPublicationMapExportOptions();
+    const format = getPublicationMapExportFormat(options.format);
+    if (format === 'png') {
+      const pngResult = await buildPublicationMapPngBlob(inscriptionsForExport, options);
+      downloadExportBlob(pngResult.blob, getPublicationMapExportFilename(format));
+      bootstrap.Modal.getInstance(document.getElementById('modalMapExport'))?.hide();
+
+      if (pngResult.skippedCount > 0) {
+        showAlert(`Created map with ${pngResult.pointCount} inscriptions. Skipped ${pngResult.skippedCount} inscriptions without usable coordinates.`);
+      }
+      return;
+    }
+
+    let result = null;
+    if (options.background !== 'simple') {
+      try {
+        result = await buildPublicationMapSvgWithOsm(inscriptionsForExport, options);
+      } catch (tileError) {
+        console.warn('Could not create tile map background, falling back to backup map.', tileError);
+        showAlert('Could not fetch map tiles for export. Created a backup map instead.');
+      }
+    }
+    if (!result) {
+      result = buildPublicationMapSvg(inscriptionsForExport, options);
+    }
+    const blob = await getPublicationMapDownloadBlob(result, format);
+    downloadExportBlob(blob, getPublicationMapExportFilename(format));
+    bootstrap.Modal.getInstance(document.getElementById('modalMapExport'))?.hide();
+
+    if (result.skippedCount > 0) {
+      showAlert(`Created map with ${result.pointCount} inscriptions. Skipped ${result.skippedCount} inscriptions without usable coordinates.`);
+    }
   } catch (error) {
     onExportError(error);
   } finally {
@@ -3189,6 +3670,44 @@ document.addEventListener('DOMContentLoaded', function() {
     $(`#${inpQueryBuilder}`).queryBuilder('setRules', rules, true);
     syncMiniBuilderFromRules(rules);
   });
+  document.getElementById('modalMapExport').addEventListener('show.bs.modal', initializePublicationMapExportGroups);
+  document.getElementById('mapExportGroupName').addEventListener('change', function(event) {
+    if (gPublicationMapExportGroups.length === 1 && gPublicationMapExportGroups[0]) {
+      gPublicationMapExportGroups[0].groupName = event.target.value.trim() || 'Search results';
+      renderPublicationMapExportGroups();
+    }
+  });
+  document.getElementById('mapExportGroupsBody').addEventListener('input', function(event) {
+    const field = event.target.getAttribute('data-map-group-field');
+    const row = event.target.closest('[data-map-group-id]');
+    if (!field || !row) {
+      return;
+    }
+    updatePublicationMapGroup(row.getAttribute('data-map-group-id'), field, event.target.value);
+  });
+  document.getElementById('mapExportGroupsBody').addEventListener('change', function(event) {
+    const field = event.target.getAttribute('data-map-group-field');
+    const row = event.target.closest('[data-map-group-id]');
+    if (!field || !row) {
+      return;
+    }
+    updatePublicationMapGroup(row.getAttribute('data-map-group-id'), field, event.target.value);
+  });
+  document.getElementById('mapExportGroupsBody').addEventListener('click', function(event) {
+    const removeId = event.target.getAttribute('data-map-group-remove');
+    if (!removeId) {
+      return;
+    }
+    gPublicationMapExportGroups = gPublicationMapExportGroups.filter(group => group.id !== removeId);
+    if (gPublicationMapExportGroups.length === 0) {
+      initializePublicationMapExportGroups();
+    } else {
+      renderPublicationMapExportGroups();
+    }
+  });
+  document.getElementById('btnAddMapGroupJson').addEventListener('click', addJsonRulesPublicationMapGroup);
+  document.getElementById('btnResetMapExport').addEventListener('click', resetPublicationMapExportGroups);
+  document.getElementById('btnExportMapSvg').addEventListener('click', exportPublicationMapSvg);
   document.getElementById('btnExportHighlightedResults').addEventListener('click', exportHighlightedResultsHtml);
   // Export Excel button handler
   document.getElementById('btnExportResults').addEventListener('click', function() {
