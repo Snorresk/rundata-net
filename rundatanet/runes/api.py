@@ -2610,6 +2610,10 @@ def _cross_count_number_pattern() -> str:
     return r"\d+|" + "|".join(re.escape(word) for word in words)
 
 
+def _is_cross_object_info_noise(value: Any) -> bool:
+    return _fold_text(str(value or "")) in {"cross", "crosses", "kors", "korset", "korsen"}
+
+
 def _extract_cross_count_constraints(user_text: str) -> list[dict[str, Any]]:
     text = _fold_text(user_text or "")
     if not text:
@@ -3776,7 +3780,7 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
         _remove_rules(
             root,
             lambda rule: rule.get("id") == "num_crosses"
-            or (rule.get("id") == "objectInfo" and _fold_text(str(rule.get("value") or "")) == "kors"),
+            or (rule.get("id") == "objectInfo" and _is_cross_object_info_noise(rule.get("value"))),
         )
         for constraint in cross_count_constraints:
             root = _append_and_constraint(root, constraint)
@@ -3786,7 +3790,7 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
         _remove_rules(
             root,
             lambda rule: rule.get("id") == "cross_form"
-            or (rule.get("id") == "objectInfo" and _fold_text(str(rule.get("value") or "")) == "kors"),
+            or (rule.get("id") == "objectInfo" and _is_cross_object_info_noise(rule.get("value"))),
         )
         cross_form_noise_words = {
             "inside",
@@ -4061,7 +4065,7 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
         if not (
             cross_count_constraints
             and item["id"] == "objectInfo"
-            and _fold_text(item["value"]) == "kors"
+            and _is_cross_object_info_noise(item["value"])
         ):
             rules.append(_make_contains_rule(item["id"], item["field"], item["value"]))
 
@@ -4072,7 +4076,7 @@ def _build_rules_fallback_from_text(user_text: str) -> Optional[str]:
         rules = [
             rule
             for rule in rules
-            if not (rule.get("id") == "objectInfo" and _fold_text(str(rule.get("value") or "")) == "kors")
+            if not (rule.get("id") == "objectInfo" and _is_cross_object_info_noise(rule.get("value")))
         ]
     rules.extend(cross_form_constraints)
 
@@ -4655,7 +4659,7 @@ def _build_meta_queryset_from_text(
         qs = _apply_cross_form_constraint(qs, constraint)
 
     for item in _extract_object_info_constraints(user_text):
-        if cross_count_constraints and item["id"] == "objectInfo" and _fold_text(item["value"]) == "kors":
+        if cross_count_constraints and item["id"] == "objectInfo" and _is_cross_object_info_noise(item["value"]):
             continue
         qs = qs.filter(objectInfo__icontains=item["value"])
 
