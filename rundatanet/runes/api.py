@@ -741,6 +741,17 @@ def _extract_location_terms(user_text: str) -> list[str]:
         "som",
         "with",
         "med",
+        "on",
+        "onto",
+        "på",
+        "pa",
+        "of",
+        "made",
+        "carved",
+        "inscribed",
+        "ristad",
+        "ristade",
+        "ristat",
         "and",
         "och",
         "during",
@@ -827,6 +838,33 @@ def _extract_location_terms(user_text: str) -> list[str]:
             if cleaned.lower() not in {term.lower() for term in terms}:
                 terms.append(cleaned)
     return terms
+
+
+def _looks_like_country_material_location_noise(value: Any) -> bool:
+    folded = _fold_text(str(value or ""))
+    if not folded:
+        return False
+    if _term_maps_to_country_or_province(folded):
+        return True
+    for marker in (
+        " made ",
+        " made on ",
+        " made of ",
+        " made from ",
+        " carved ",
+        " carved on ",
+        " inscribed ",
+        " inscribed on ",
+        " ristad ",
+        " ristade ",
+        " ristat ",
+    ):
+        if marker not in folded:
+            continue
+        prefix = folded.split(marker, 1)[0].strip()
+        if prefix and _term_maps_to_country_or_province(prefix):
+            return True
+    return False
 
 
 def _extract_specific_location_constraints(user_text: str) -> list[dict[str, str]]:
@@ -1517,7 +1555,7 @@ def _extract_standalone_transliteration_rune(user_text: str) -> Optional[str]:
         "and",
     }
     patterns = (
-        rf"\b(?:runan|runa|runorna|runor|rune|runes)\s+[\"'“”]?({word})\b",
+        rf"\b(?:runan|runa|runorna|runor|runföljden|runfoljden|runföljd|runfoljd|rune|runes)\s+[\"'“”]?({word})\b",
         rf"\b(?:använder|anvander|brukar|innehåller|innehaller|har)\s+run(?:an|orna|or)\s+[\"'“”]?({word})",
         rf"\b(?:uses?|using|contains?|has)\s+(?:the\s+)?runes?\s+[\"'“”]?({word})",
     )
@@ -2324,7 +2362,7 @@ MATERIAL_INTENT_PATTERNS: tuple[tuple[str, str, frozenset[str]], ...] = (
     (r"\b(plaster|puts)\b", "plaster", frozenset({"plaster", "puts"})),
     (r"\b(wood|wooden|tra|trä|timber)\b", "wood", frozenset({"wood", "wooden", "tra", "timber"})),
     (r"\b(other|ovrigt|övrigt)\b", "other", frozenset({"other", "ovrigt"})),
-    (r"\b(metal|metall)\b", "metal", frozenset({"metal", "metall"})),
+    (r"\b(metal|metall|runbleck)\b", "metal", frozenset({"metal", "metall", "runbleck"})),
     (r"\b(unknown|okand|okänd)\b", "unknown", frozenset({"unknown", "okand"})),
 )
 
@@ -2335,6 +2373,22 @@ def _material_values_for_terms(terms: set[str]) -> set[str]:
         for _pattern, canonical, aliases in MATERIAL_INTENT_PATTERNS
         if terms.intersection(aliases)
     }
+
+
+def _is_broad_material_type_value(value: Any) -> bool:
+    folded = _fold_text(str(value or ""))
+    return bool(folded) and bool(_material_values_for_terms({folded}))
+
+
+def _broad_material_prefix_for_object_info(value: Any) -> Optional[str]:
+    folded = _fold_text(str(value or ""))
+    if not folded:
+        return None
+    for _pattern, canonical, aliases in MATERIAL_INTENT_PATTERNS:
+        for alias in sorted(aliases, key=len, reverse=True):
+            if folded == alias or folded.startswith(f"{alias} "):
+                return canonical
+    return None
 
 
 def _material_type_values_for_detailed_materials(values: set[str]) -> set[str]:
@@ -2351,6 +2405,31 @@ def _material_type_values_for_detailed_materials(values: set[str]) -> set[str]:
         if any(keyword in value for value in folded_values for keyword in keywords):
             mapped.add(material_type)
     return mapped
+
+
+DETAILED_MATERIAL_INTENT_PATTERNS: tuple[tuple[str, str], ...] = (
+    (r"\bkopparbleck\b", "copper"),
+)
+
+MATERIAL_WORD_BLOCKLIST = frozenset(
+    {
+        "metal",
+        "metall",
+        "stone",
+        "sten",
+        "wood",
+        "trä",
+        "tra",
+        "plaster",
+        "puts",
+        "bone",
+        "antler",
+        "ben",
+        "horn",
+        "copper",
+        "koppar",
+    }
+)
 
 
 def _extract_material_constraints(user_text: str) -> list[dict[str, str]]:
@@ -2398,6 +2477,8 @@ def _extract_detailed_material_constraints(user_text: str) -> list[dict[str, str
     def add_material(value: str) -> None:
         folded = _fold_text(value)
         key = _singularize_english_object_phrase(folded)
+        if _is_broad_material_type_value(folded) or _is_broad_material_type_value(key):
+            return
         if not folded or folded in translation_terms or key in translation_terms:
             return
         if any(existing != key and key in existing for existing in seen_keys):
@@ -2419,6 +2500,25 @@ def _extract_detailed_material_constraints(user_text: str) -> list[dict[str, str
             context_variants.add(phrase)
             context_variants.add(_singularize_english_object_phrase(phrase))
 
+    for pattern, canonical in DETAILED_MATERIAL_INTENT_PATTERNS:
+        if re.search(pattern, text):
+            add_material(canonical)
+
+    object_info_context_keys: set[str] = set()
+    try:
+        object_info_values = _get_object_info_values()
+    except Exception:
+        object_info_values = ()
+    for value, folded_value in object_info_values:
+        if len(folded_value) < 3:
+            continue
+        if any(
+            re.search(rf"(^|\b){re.escape(folded_value)}(\b|$)", variant)
+            for variant in context_variants
+        ):
+            object_info_context_keys.add(folded_value)
+            object_info_context_keys.add(_object_info_key(value))
+
     try:
         material_values = _get_material_values()
     except Exception:
@@ -2432,6 +2532,8 @@ def _extract_detailed_material_constraints(user_text: str) -> list[dict[str, str
             re.search(rf"(^|\b){re.escape(folded_value)}(\b|$)", variant)
             for variant in context_variants
         ):
+            if folded_value in object_info_context_keys or _object_info_key(value) in object_info_context_keys:
+                continue
             add_material(value)
 
     return constraints
@@ -2467,6 +2569,9 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
     def add_object(value: str) -> None:
         if _fold_text(value) in translation_terms:
             return
+        prefix_material = _broad_material_prefix_for_object_info(value)
+        if prefix_material and prefix_material in active_material_values:
+            return
         if _material_values_for_terms({_fold_text(value)}).intersection(active_material_values):
             return
         if name_element_folded and _fold_text(value) == name_element_folded:
@@ -2497,7 +2602,7 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
         (r"\b(baptismal font|baptismal fonts|baptism|dopfunt|dopfund)\b", "baptismal font"),
         (r"\b(bracteate|bracteates|brakteat)\b", "bracteate"),
         (r"\b(amulet|amulets|amulett|amulett?er)\b", "amulet"),
-        (r"\b(metal plate|metal plates|bleck)\b", "metal plate"),
+        (r"\b(metal plate|metal plates|bleck|runbleck|kopparbleck)\b", "plate"),
         (r"\b(plate|plates)\b", "plate"),
         (r"\b(stone cross|stone crosses|stenkors)\b", "stone cross"),
         (r"\b(cross|crosses|kors)\b", "cross"),
@@ -2507,6 +2612,7 @@ def _extract_object_info_constraints(user_text: str) -> list[dict[str, str]]:
         (r"\b(rock face|rock faces|rock carving|rock carvings|berghall|berghäll|bergvagg|bergvägg)\b", "rock face"),
         (r"\b(runic bone|runic bones|bone inscription|bone inscriptions|runben)\b", "runic bone"),
         (r"\b(runic staff|runic staffs|runic stick|runic sticks|runkavel)\b", "runic staff"),
+        (r"(?<!runic )\b(stick|sticks)\b", "stick"),
         (r"\b(wooden inscription|wooden inscriptions|trainskrift|träinskrift)\b", "wooden inscription"),
         (r"\b(plaster inscription|plaster inscriptions|putsinskrift)\b", "plaster inscription"),
         (r"\b(bell|bells|kyrkklocka)\b", "bell"),
@@ -3236,6 +3342,8 @@ def _extract_carver_constraints(user_text: str) -> list[dict[str, str]]:
         folded = _fold_text(value)
         if folded in {"alla", "all", "inscriptions", "inskrifter", "these", "dessa"}:
             return
+        if folded in MATERIAL_WORD_BLOCKLIST or _material_values_for_terms({folded}):
+            return
         if folded in seen:
             return
         seen.add(folded)
@@ -3321,11 +3429,15 @@ def _enforce_inscription_country_codes(root: dict[str, Any], codes: list[str]) -
     existing_value = target_rule.get("value")
     if isinstance(existing_value, list):
         for code in existing_value:
+            if _fold_text(code) == "sweden, whole":
+                code = "all_sweden"
             if code not in seen:
                 seen.add(code)
                 merged_codes.append(code)
     elif existing_value:
         code = str(existing_value)
+        if _fold_text(code) == "sweden, whole":
+            code = "all_sweden"
         if code not in seen:
             seen.add(code)
             merged_codes.append(code)
@@ -3737,6 +3849,11 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
     country_codes = _extract_inscription_country_codes(user_text)
     if country_codes:
         root = _enforce_inscription_country_codes(root, country_codes)
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") in {"full_address", "found_location", "current_location"}
+            and _looks_like_country_material_location_noise(rule.get("value")),
+        )
 
     specific_location_constraints = _extract_specific_location_constraints(user_text)
     if specific_location_constraints:
@@ -3765,11 +3882,48 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
         if not _has_location_value(root, (item["id"],), item["value"]):
             root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
 
-    for item in _extract_material_constraints(user_text):
+    material_constraints = _extract_material_constraints(user_text)
+    if material_constraints:
+        broad_material_values = {item["value"] for item in material_constraints}
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") == "material"
+            and _is_broad_material_type_value(rule.get("value")),
+        )
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") == "objectInfo"
+            and _fold_text(str(rule.get("value") or "")) in broad_material_values,
+        )
+    for item in material_constraints:
         if not _has_location_value(root, (item["id"],), item["value"]):
             root = _append_and_constraint(root, _make_contains_rule(item["id"], item["field"], item["value"]))
 
-    for item in _extract_object_info_constraints(user_text):
+    object_info_constraints = _extract_object_info_constraints(user_text)
+    if object_info_constraints:
+        object_info_values = {
+            _object_info_key(item["value"]) or _fold_text(item["value"])
+            for item in object_info_constraints
+        }
+        detailed_material_values = {
+            _object_info_key(item["value"]) or _fold_text(item["value"])
+            for item in detailed_material_constraints
+        }
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") == "material"
+            and (_object_info_key(rule.get("value")) or _fold_text(str(rule.get("value") or ""))) in object_info_values
+            and (_object_info_key(rule.get("value")) or _fold_text(str(rule.get("value") or ""))) not in detailed_material_values,
+        )
+        active_material_values = {item["value"] for item in material_constraints}
+        _remove_rules(
+            root,
+            lambda rule: rule.get("id") == "objectInfo"
+            and (_object_info_key(rule.get("value")) or _fold_text(str(rule.get("value") or ""))) not in object_info_values
+            and (_broad_material_prefix_for_object_info(rule.get("value")) in active_material_values),
+        )
+
+    for item in object_info_constraints:
         if _fold_text(item["value"]) in english_translation_term_keys:
             continue
         if not _has_location_value(root, (item["id"],), item["value"]):
