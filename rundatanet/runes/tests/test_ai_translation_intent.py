@@ -772,6 +772,155 @@ class EnglishTranslationIntentTests(SimpleTestCase):
     @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
     @patch(
         "rundatanet.runes.api._get_material_values",
+        return_value=(
+            ("stone", "stone"),
+            ("wood", "wood"),
+            ("metal", "metal"),
+            ("plaster", "plaster"),
+            ("bone", "bone"),
+            ("antler", "antler"),
+            ("limestone", "limestone"),
+        ),
+    )
+    def test_broad_material_terms_target_material_type_not_detailed_material(
+        self, _materials, _translations
+    ):
+        cases = {
+            "Find inscriptions on stone": "stone",
+            "Find inscriptions on wood": "wood",
+            "Find inscriptions made on metal": "metal",
+            "Find inscriptions on plaster": "plaster",
+            "Find inscriptions on bone": "bone/antler",
+            "Find inscriptions on antler": "bone/antler",
+        }
+
+        for prompt, expected in cases.items():
+            with self.subTest(prompt=prompt):
+                self.assertEqual(_extract_detailed_material_constraints(prompt), [])
+                self.assertEqual(
+                    _extract_material_constraints(prompt),
+                    [{"id": "material_type", "field": "material_type", "value": expected}],
+                )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=(("stone", "stone"),))
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("stone", "stone"),))
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_singular_stone_query_uses_material_type_without_object_or_material(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find inscriptions on stone"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [("material_type", "material_type", "stone")],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=(("stone", "stone"),))
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("stone", "stone"),))
+    def test_plural_stones_can_remain_object_information(self, _objects, _materials, _translations):
+        self.assertEqual(_extract_detailed_material_constraints("Find inscriptions on stones"), [])
+        self.assertEqual(_extract_material_constraints("Find inscriptions on stones"), [])
+        self.assertEqual(
+            _extract_object_info_constraints("Find inscriptions on stones"),
+            [{"id": "objectInfo", "field": "objectInfo", "value": "stone"}],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=(("stone", "stone"),))
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("stone", "stone"),))
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_proto_norse_sweden_made_on_stone_uses_material_type_not_location(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find proto norse inscriptions from Sweden made on stone"
+
+        self.assertEqual(_extract_location_terms(prompt), [])
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [
+                ("dating", "dating", "Proto"),
+                ("inscription_country", "signature_text", ["all_sweden"]),
+                ("material_type", "material_type", "stone"),
+            ],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=(("stone", "stone"),))
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("stone", "stone"),))
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocess_cleans_broad_material_and_location_noise(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find proto norse inscriptions from Sweden made on stone"
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "dating",
+                        "field": "dating",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "begins_with",
+                        "value": "Proto",
+                    },
+                    {
+                        "id": "inscription_country",
+                        "field": "signature_text",
+                        "type": "string",
+                        "operator": "in",
+                        "value": "Sweden, whole",
+                    },
+                    {
+                        "id": "material",
+                        "field": "material",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "stone",
+                    },
+                    {
+                        "id": "objectInfo",
+                        "field": "objectInfo",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "stone",
+                    },
+                    {
+                        "id": "full_address",
+                        "field": "full_address",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "Sweden made on stone",
+                    },
+                ],
+                "not": False,
+                "valid": True,
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(prompt, model_output))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [
+                ("dating", "dating", "Proto"),
+                ("inscription_country", "signature_text", ["all_sweden"]),
+                ("material_type", "material_type", "stone"),
+            ],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch(
+        "rundatanet.runes.api._get_material_values",
         return_value=(("limestone", "limestone"), ("lime plaster", "lime plaster"), ("copper", "copper")),
     )
     def test_detailed_material_terms_target_material_field(self, _materials, _translations):
@@ -829,6 +978,218 @@ class EnglishTranslationIntentTests(SimpleTestCase):
     ):
         prompt = "Find inscriptions on copper plates with runes iii"
 
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [
+                (
+                    "normalization_scandinavian_to_transliteration",
+                    "normalisation_scandinavian",
+                    {"normalization": "", "transliteration": "iii", "names_mode": "includeAll"},
+                ),
+                ("material", "material", "copper"),
+                ("objectInfo", "objectInfo", "plate"),
+            ],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch(
+        "rundatanet.runes.api._get_material_values",
+        return_value=(("wood", "wood"), ("stick", "stick")),
+    )
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("stick", "stick"),))
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_wood_sticks_uses_material_type_and_object_not_detailed_material(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find inscriptions made on wood sticks"
+
+        self.assertEqual(_extract_detailed_material_constraints(prompt), [])
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [
+                ("material_type", "material_type", "wood"),
+                ("objectInfo", "objectInfo", "stick"),
+            ],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch(
+        "rundatanet.runes.api._get_material_values",
+        return_value=(("wood", "wood"), ("stick", "stick")),
+    )
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=(("stick", "stick"),))
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_removes_object_word_from_material_for_wood_sticks(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find inscriptions made on wood sticks"
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "material",
+                        "field": "material",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "stick",
+                    },
+                    {
+                        "id": "material_type",
+                        "field": "material_type",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "wood",
+                    },
+                    {
+                        "id": "objectInfo",
+                        "field": "objectInfo",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "stick",
+                    },
+                ],
+                "not": False,
+                "valid": True,
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(prompt, model_output))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [
+                ("material_type", "material_type", "wood"),
+                ("objectInfo", "objectInfo", "stick"),
+            ],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=())
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_metal_plates_uses_material_type_and_plate_not_metal_plate(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find inscriptions made on metal plates"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [
+                ("material_type", "material_type", "metal"),
+                ("objectInfo", "objectInfo", "plate"),
+            ],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=())
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_postprocessor_removes_material_prefixed_object_duplicate_for_metal_plates(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Find inscriptions made on metal plates"
+        model_output = json.dumps(
+            {
+                "condition": "AND",
+                "rules": [
+                    {
+                        "id": "material_type",
+                        "field": "material_type",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "metal",
+                    },
+                    {
+                        "id": "objectInfo",
+                        "field": "objectInfo",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "metal plate",
+                    },
+                    {
+                        "id": "objectInfo",
+                        "field": "objectInfo",
+                        "type": "string",
+                        "input": "text",
+                        "operator": "contains",
+                        "value": "plate",
+                    },
+                ],
+                "not": False,
+                "valid": True,
+            }
+        )
+
+        result = json.loads(_postprocess_ai_rules(prompt, model_output))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [
+                ("material_type", "material_type", "metal"),
+                ("objectInfo", "objectInfo", "plate"),
+            ],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=())
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_swedish_runbleck_uses_metal_type_and_plate(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Hitta inskrifter på runbleck"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [
+                ("material_type", "material_type", "metal"),
+                ("objectInfo", "objectInfo", "plate"),
+            ],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=())
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_swedish_bleck_av_metall_uses_metal_type_and_plate(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Hitta inskrifter på bleck av metall"
+
+        result = json.loads(_build_rules_fallback_from_text(prompt))
+
+        self.assertEqual(
+            [(rule["id"], rule["field"], rule["value"]) for rule in result["rules"]],
+            [
+                ("material_type", "material_type", "metal"),
+                ("objectInfo", "objectInfo", "plate"),
+            ],
+        )
+
+    @patch("rundatanet.runes.api._extract_english_translation_terms", return_value=[])
+    @patch("rundatanet.runes.api._get_material_values", return_value=())
+    @patch("rundatanet.runes.api._get_object_info_values", return_value=())
+    @patch("rundatanet.runes.api._extract_style_constraints", return_value=[])
+    def test_swedish_kopparbleck_with_runfoljd_uses_copper_plate_and_transliteration(
+        self, _styles, _objects, _materials, _translations
+    ):
+        prompt = "Hitta inskrifter på kopparbleck med runföljden iii"
+
+        self.assertEqual(_extract_standalone_transliteration_rune(prompt), "iii")
         result = json.loads(_build_rules_fallback_from_text(prompt))
 
         self.assertEqual(
