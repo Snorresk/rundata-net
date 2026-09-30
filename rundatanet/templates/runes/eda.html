@@ -5,8 +5,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Explore and analyze Scandinavian runic inscription data with the Rundata.info EDA tool. Visualize patterns and gain insights from the runic text database.">
-  <title>Rundata-net: EDA</title>
+  <meta name="description" content="Explore and analyze Scandinavian runic inscription data with the Lexicon of Runic Inscriptions (LoRI). Visualize patterns and gain insights from the runic text database.">
+  <title>Lexicon of Runic Inscriptions (LoRI) | Rundata-net</title>
   {% get_from_settings 'USE_GA' as use_ga %}
   {% if use_ga %}
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-6M319VSZGS"></script>
@@ -43,6 +43,18 @@
     }
     .inscription-section {
       border-bottom: 2px solid #999;
+    }
+    .search-direction-controls .btn {
+      min-width: 10rem;
+    }
+    .query-field-label {
+      justify-content: flex-start;
+      min-width: 11rem;
+    }
+    .query-clear-button {
+      font-size: 1.4rem;
+      line-height: 1;
+      width: 3rem;
     }
 
     /*body {
@@ -105,100 +117,110 @@
   </nav>
 
   <main class="my-3 mx-5">
-    <h1>Exploratory Data Analysis Tool</h1>
-    <div class="">
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="searchDirection" value="norseToTransliteration" id="norseToTransliterationInput" checked>
-        <label class="form-check-label" for="norseToTransliterationInput">Normalisation Norse to Transliteration</label>
-      </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="searchDirection" value="scandinavianToTransliteration" id="scandinavianToTransliterationInput">
-        <label class="form-check-label" for="scandinavianToTransliterationInput">Normalisation Scandinavian to Transliteration</label>
-      </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="searchDirection" value="transliterationToNorse" id="transliterationToNorseInput">
-        <label class="form-check-label" for="transliterationToNorseInput">Transliteration to Normalisation Norse</label>
-      </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="searchDirection" value="transliterationToScandinavian" id="transliterationToScandinavianInput">
-        <label class="form-check-label" for="transliterationToScandinavianInput">Transliteration to Normalisation Scandinavian</label>
-      </div>
+    <h1>Lexicon of Runic Inscriptions (LoRI)</h1>
+    <div class="search-direction-controls row g-3 align-items-start my-2">
+      <fieldset class="col-12 col-xl-6">
+        <legend class="fs-6 fw-semibold mb-2">Normalization</legend>
+        <div class="btn-group" role="group" aria-label="Normalization">
+          <input class="btn-check" type="radio" name="normalizationTradition" value="norse" id="oldWestNorseInput" autocomplete="off" checked>
+          <label class="btn btn-outline-primary" for="oldWestNorseInput">Old West Norse</label>
+
+          <input class="btn-check" type="radio" name="normalizationTradition" value="scandinavian" id="oldScandinavianInput" autocomplete="off">
+          <label class="btn btn-outline-primary" for="oldScandinavianInput">Old Scandinavian</label>
+        </div>
+        <p class="form-text mt-2 mb-0">
+          Old West Norse normalization is available throughout the database. Old Scandinavian normalization is available only for runic inscriptions from Sweden and Denmark. Search results and word counts may therefore differ between the two systems.
+        </p>
+      </fieldset>
+
+      <fieldset class="col-12 col-xl-6">
+        <legend class="fs-6 fw-semibold mb-2">Group results by</legend>
+        <div class="btn-group" role="group" aria-label="Group results by">
+          <input class="btn-check" type="radio" name="groupResultsBy" value="normalizedForm" id="groupByNormalizedFormInput" autocomplete="off" checked>
+          <label class="btn btn-outline-primary" for="groupByNormalizedFormInput">Normalized form</label>
+
+          <input class="btn-check" type="radio" name="groupResultsBy" value="transliteration" id="groupByTransliterationInput" autocomplete="off">
+          <label class="btn btn-outline-primary" for="groupByTransliterationInput">Transliteration</label>
+        </div>
+        <p class="form-text mt-2 mb-0">
+          Choose <strong>Normalized form</strong> to collect the different transliterated forms associated with a normalized word form. Choose <strong>Transliteration</strong> to examine which normalized forms correspond to a particular reading in the inscriptions.
+        </p>
+      </fieldset>
     </div>
 
-    <div class="input-group mb-3 pt-2">
-      <span class="input-group-text" id="normalisation-input-span">Normalisation</span>
-      <input type="text" id="normalisationInput" class="form-control" placeholder="" aria-label="Normalisation" aria-describedby="normalisation-input-span">
-    </div>
+    <section class="border rounded p-3 my-3" aria-labelledby="word-search-heading">
+      <h2 class="fs-5 mb-3" id="word-search-heading">Word search</h2>
+      <div class="row g-2 align-items-center">
+        <div class="col-12 col-lg-2 d-flex align-items-center">
+          <label class="visually-hidden" for="searchModeSelect">Match method</label>
+          <select class="form-select" id="searchModeSelect" aria-label="Match method">
+            <option value="contains" selected>Contains</option>
+            <option value="beginsWith">Begins with</option>
+            <option value="endsWith">Ends with</option>
+            <option value="exact">Matches exactly</option>
+          </select>
+        </div>
 
-    <div class="input-group">
-      <span class="input-group-text" id="transliteration-input-span">Transliteration</span>
-      <input type="text" id="transliterationInput" class="form-control" placeholder="" aria-label="Transliteration" aria-describedby="transliteration-input-span">
-    </div>
+        <div class="col-12 col-lg">
+          <div class="input-group mb-2">
+            <span class="input-group-text query-field-label" id="normalisation-input-span">Normalisation</span>
+            <input type="text" id="normalisationInput" class="form-control" placeholder="" aria-label="Normalisation" aria-describedby="normalisation-input-span">
+            <button class="btn btn-outline-secondary query-clear-button" type="button" data-clear-target="normalisationInput" aria-label="Clear normalisation">&times;</button>
+          </div>
 
-    <div class="pt-2">
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="searchMode" value="contains" id="containsInput" checked>
-        <label class="form-check-label" for="containsInput">contains</label>
-      </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="searchMode" value="exact" id="exactInput">
-        <label class="form-check-label" for="exactInput">matches exactly</label>
-      </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="searchMode" value="beginsWith" id="beginsWithInput">
-        <label class="form-check-label" for="beginsWithInput">begins with</label>
-      </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="searchMode" value="endsWith" id="endsWithInput">
-        <label class="form-check-label" for="endsWithInput">ends with</label>
-      </div>
-      <!--<div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="searchMode" value="regex" id="regexInput">
-        <label class="form-check-label" for="regexInput">matches regular expression</label>
-      </div>-->
-    </div>
+          <div class="input-group">
+            <span class="input-group-text query-field-label" id="transliteration-input-span">Transliteration</span>
+            <input type="text" id="transliterationInput" class="form-control" placeholder="" aria-label="Transliteration" aria-describedby="transliteration-input-span">
+            <button class="btn btn-outline-secondary query-clear-button" type="button" data-clear-target="transliterationInput" aria-label="Clear transliteration">&times;</button>
+          </div>
 
-    <div class="pt-2">
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="caseSensitivity" value="matchCase" id="matchCaseInput" checked>
-        <label class="form-check-label" for="matchCaseInput">Match case</label>
-      </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="caseSensitivity" value="ignoreCase" id="ignoreCaseInput">
-        <label class="form-check-label" for="ignoreCaseInput">Ignore case</label>
-      </div>
-    </div>
+          <div class="d-flex flex-wrap align-items-center gap-3 mt-2">
+            <fieldset class="d-flex flex-wrap gap-3 m-0">
+              <legend class="visually-hidden">Personal names</legend>
+              <div class="form-check m-0">
+                <input class="form-check-input" type="radio" name="personalNamesMode" value="includeAll" id="includeNamesInput" checked>
+                <label class="form-check-label" for="includeNamesInput">Include names</label>
+              </div>
+              <div class="form-check m-0">
+                <input class="form-check-input" type="radio" name="personalNamesMode" value="excludeNames" id="excludeNamesInput">
+                <label class="form-check-label" for="excludeNamesInput">Exclude names</label>
+              </div>
+              <div class="form-check m-0">
+                <input class="form-check-input" type="radio" name="personalNamesMode" value="namesOnly" id="namesOnlyInput">
+                <label class="form-check-label" for="namesOnlyInput">Only names</label>
+              </div>
+            </fieldset>
 
-    <div class="pt-2">
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="specialSymbolsMode" value="ignoreSpecialSymbols" id="ignoreSpecialSymbolsInput" checked>
-        <label class="form-check-label" for="ignoreSpecialSymbolsInput">Ignore editorial symbols</label>
-      </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="specialSymbolsMode" value="includeSpecialSymbols" id="includeSpecialSymbolsInput">
-        <label class="form-check-label" for="includeSpecialSymbolsInput">Include editorial symbols</label>
-      </div>
-    </div>
+            <div class="form-check m-0">
+              <input class="form-check-input" type="checkbox" id="matchCaseInput" checked>
+              <label class="form-check-label" for="matchCaseInput">Match case</label>
+            </div>
 
-    <div class="mb-3 pt-2">
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="personalNamesMode" value="includeAll" id="includeAddInput" checked>
-        <label class="form-check-label" for="includeAddInput">Include personal names</label>
-      </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="personalNamesMode" value="excludeNames" id="excludeNamesInput">
-        <label class="form-check-label" for="excludeNamesInput">Exclude personal names</label>
-      </div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="personalNamesMode" value="namesOnly" id="namesOnlyInput">
-        <label class="form-check-label" for="namesOnlyInput">Personal names only</label>
-      </div>
-    </div>
+            <div class="form-check m-0">
+              <input class="form-check-input" type="checkbox" id="includeEditorialSymbolsInput">
+              <label class="form-check-label" for="includeEditorialSymbolsInput">Include editorial symbols</label>
+            </div>
+          </div>
+        </div>
 
-    <div id="navigation" class="bg-info-subtle my-3">
-      <h2 class="mt-3">Results Navigation</h2>
-      <a href="#wordRelations">Jump to Word Relations</a></li>
-      <div class="mt-4">Jump to signatures:</div>
+        <div class="col-12 col-lg-auto d-flex justify-content-end align-items-center">
+          <button class="btn btn-outline-danger" type="button" id="clearSearchQueryButton" aria-label="Clear search query" title="Clear search query">
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18"></path>
+              <path d="M8 6V4h8v2"></path>
+              <path d="M19 6l-1 14H6L5 6"></path>
+              <path d="M10 11v5"></path>
+              <path d="M14 11v5"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <div id="navigation" class="bg-info-subtle rounded p-3 my-3">
+      <h2 class="fs-5">Results navigation</h2>
+      <p class="mb-0">Your search results will be shown in three sections: <a href="#searchSummary">Summary</a>, <a href="#wordRelations">Word relations</a>, and <a href="#textExamples">Text examples</a>.</p>
+      <div class="mt-4">Jump to inscription signatures:</div>
       <div class="container-fluid">
         <div class="row">
           <div class="col-md-auto" id="signaturesCol1"></div>
@@ -208,13 +230,24 @@
     </div>
 
     <div id="resultsContainer" class="my-3">
-      <div id="searchStatisticsDiv" class="mt-3">
-        <div class=""><strong>Number of signatures found:</strong> <span id="outNumSignaturesFound">0</span></div>
-        <div class=""><strong>Number of words found:</strong> <span id="outNumWords">0</span></div>
-        <div class=""><strong>Number of personal names:</strong> <span id="outNumFoundNames">0</span></div>
-      </div>
-      <div class="results mt-3" id="searchResults"></div>
-      <div class="word-relations mt-3" id="wordRelations"></div>
+      <section id="searchSummary" class="mt-3">
+        <h2>Summary</h2>
+        <div id="searchStatisticsDiv">
+          <div><strong>Number of signatures found:</strong> <span id="outNumSignaturesFound">0</span></div>
+          <div><strong>Number of words found:</strong> <span id="outNumWords">0</span></div>
+          <div><strong>Number of personal names:</strong> <span id="outNumFoundNames">0</span></div>
+        </div>
+      </section>
+
+      <section id="wordRelations" class="word-relations mt-4">
+        <h2>Word relations</h2>
+        <div id="wordRelationsContent"></div>
+      </section>
+
+      <section id="textExamples" class="results mt-4">
+        <h2>Text examples</h2>
+        <div id="searchResults"></div>
+      </section>
     </div>
   </main>
 
@@ -231,19 +264,40 @@ let dbAsJson = null;
 const normalisationInput = document.getElementById('normalisationInput');
 const transliterationInput = document.getElementById('transliterationInput');
 const searchResultsDiv = document.getElementById('searchResults');
-const wordRelationsDiv = document.getElementById('wordRelations');
+const wordRelationsDiv = document.getElementById('wordRelationsContent');
 const outNumSignaturesFoundSpan = document.getElementById('outNumSignaturesFound');
 const outNumWordsSpan = document.getElementById('outNumWords');
 const outNumFoundNamesSpan = document.getElementById('outNumFoundNames');
 
+function getSelectedSearchDirection() {
+  const normalizationTradition = document.querySelector('input[name="normalizationTradition"]:checked').value;
+  const groupResultsBy = document.querySelector('input[name="groupResultsBy"]:checked').value;
+
+  if (groupResultsBy === 'normalizedForm') {
+    return normalizationTradition === 'norse'
+      ? 'norseToTransliteration'
+      : 'scandinavianToTransliteration';
+  }
+
+  return normalizationTradition === 'norse'
+    ? 'transliterationToNorse'
+    : 'transliterationToScandinavian';
+}
+
+function getEdaWordSearchFunction(searchMode, { ignoreCase }) {
+  return getWordSearchFunction(searchMode, {
+    ignoreCase,
+    includeSpecialSymbols: false,
+  });
+}
+
 function performSearch() {
   const normalisationQuery = normalisationInput.value.trim();
   const transliterationQuery = transliterationInput.value.trim();
-  const searchDirection = document.querySelector('input[name="searchDirection"]:checked').value;
-  const searchMode = document.querySelector('input[name="searchMode"]:checked').value;
-  const ignoreCase = document.querySelector('input[name="caseSensitivity"]:checked').value === 'ignoreCase';
-  const includeSpecialSymbols = document.querySelector('input[name="specialSymbolsMode"]:checked').value === 'includeSpecialSymbols';
-  const isAHit = getWordSearchFunction(searchMode, { ignoreCase, includeSpecialSymbols });
+  const searchDirection = getSelectedSearchDirection();
+  const searchMode = document.getElementById('searchModeSelect').value;
+  const ignoreCase = !document.getElementById('matchCaseInput').checked;
+  const isAHit = getEdaWordSearchFunction(searchMode, { ignoreCase });
   const namesMode = document.querySelector('input[name="personalNamesMode"]:checked').value;
   const searchDirectionConfig = getSearchDirectionConfig(searchDirection);
 
@@ -434,7 +488,7 @@ function displayResults(results) {
     } else {
       paragraph = `<article signature="${signatureName}" id="${signatureName}" data-rundata-id="${signatureId}" class="inscription-section my-2 py-2">`;
     }
-    paragraph += `<h3>${signatureName}</h3>`;
+    paragraph += `<h3 id="text-example-${signatureId}">${signatureName}</h3>`;
 
     for (let j = 0; j < userSelectedDisplay.length; j++) {
       const field = userSelectedDisplay[j];
@@ -446,7 +500,11 @@ function displayResults(results) {
       let entryWordBoundaries = entry[`${field}_word_boundaries`];
       const matchedWords = entry.matchedWords;
       const matchedWordBoundaries = entryWordBoundaries.filter((_, i) => matchedWords.includes(i));
-      const highlightedText = highlightWordsFromWordBoundaries(text, matchedWordBoundaries);
+      let highlightedText = highlightWordsFromWordBoundaries(text, matchedWordBoundaries);
+      if (!document.getElementById('includeEditorialSymbolsInput').checked) {
+        highlightedText = concealEditorialSymbols(highlightedText);
+      }
+      highlightedText = concealNameAnnotation(highlightedText);
 
       if (~highlightedText.indexOf(paragraphSymbol)) {
         const parts = highlightedText.split(paragraphSymbol);
@@ -473,12 +531,40 @@ function displayResults(results) {
   searchResultsDiv.innerHTML = html;
 }
 
+function concealNameAnnotation(value) {
+  if (value == null) {
+    return '';
+  }
+
+  return String(value).replace(/&quot;/g, '');
+}
+
+function concealEditorialSymbols(value) {
+  if (value == null) {
+    return '';
+  }
+
+  return String(value).replace(/[()[\]]/g, '');
+}
+
+function stripOuterGroupingPunctuation(word) {
+  if (word == null) {
+    return '';
+  }
+
+  return String(word)
+    .trim()
+    .replace(/^[,:!?;.]+|[,:!?;.]+$/g, '')
+    .trim();
+}
+
 // Displays the word relations table
 function displayWordRelations(results) {
   const wordMap = {};
+  const includeEditorialSymbols = document.getElementById('includeEditorialSymbolsInput').checked;
 
   // determine search direction and first and second column names of word relations table
-  const searchDirection = document.querySelector('input[name="searchDirection"]:checked').value;
+  const searchDirection = getSelectedSearchDirection();
   const searchDirectionConfig = getSearchDirectionConfig(searchDirection);
   if (!searchDirectionConfig) {
     wordRelationsDiv.innerHTML = '';
@@ -497,17 +583,27 @@ function displayWordRelations(results) {
     const signature = entry.signature_text;
     for (let i = 0; i < matchedWords.length; i++) {
       // get word text from 'fromField' of the entity
-      const fromWordText = fromWords[matchedWords[i]];
-      const toWordText = toWords[matchedWords[i]];
+      let fromWordText = concealNameAnnotation(fromWords[matchedWords[i]]);
+      let toWordText = concealNameAnnotation(toWords[matchedWords[i]]);
+      if (!includeEditorialSymbols) {
+        fromWordText = concealEditorialSymbols(fromWordText);
+        toWordText = concealEditorialSymbols(toWordText);
+      }
+      fromWordText = stripOuterGroupingPunctuation(fromWordText);
+      toWordText = stripOuterGroupingPunctuation(toWordText);
+
+      if (!fromWordText || !toWordText) {
+        continue;
+      }
 
       if (!wordMap[fromWordText]) {
         wordMap[fromWordText] = {};
       }
       if (!wordMap[fromWordText][toWordText]) {
-        wordMap[fromWordText][toWordText] = { frequency: 0, signatures: new Set() };
+        wordMap[fromWordText][toWordText] = { frequency: 0, signatures: new Map() };
       }
       wordMap[fromWordText][toWordText].frequency += 1;
-      wordMap[fromWordText][toWordText].signatures.add(signature);
+      wordMap[fromWordText][toWordText].signatures.set(entry.signature_id, signature);
     }
   });
 
@@ -516,8 +612,10 @@ function displayWordRelations(results) {
 
 // Generates the word relations table HTML
 function generateWordRelationsTable(wordMap, fromField, toField) {
-  let html = '<h2>Word Relations</h2>';
-  html += '<table class="table">';
+  const getWordFormCssClass = field => field === 'transliteration' ? 'transliteration' : 'normalization';
+  const fromWordCssClass = getWordFormCssClass(fromField);
+  const toWordCssClass = getWordFormCssClass(toField);
+  let html = '<table class="table">';
   html += `<tr><th>${getFieldDisplayName(fromField)} Word</th><th>Corresponding ${getFieldDisplayName(toField)} Words</th></tr>`;
 
   for (const [fromWord, toWordsObj] of Object.entries(wordMap)) {
@@ -530,16 +628,18 @@ function generateWordRelationsTable(wordMap, fromField, toField) {
     let firstRow = true;
     for (const [toWord, info] of Object.entries(toWordsObj)) {
       const freq = info.frequency;
-      const signatures = Array.from(info.signatures).join(', ');
+      const signatures = Array.from(info.signatures, ([signatureId, signature]) =>
+        `<a href="#text-example-${signatureId}">${escapeHtml(signature)}</a>`
+      ).join(', ');
 
       if (firstRow) {
-        html += `<tr><td rowspan="${rowSpan}">${fromWord} (${totalFrequency})</td>`;
+        html += `<tr><td rowspan="${rowSpan}"><span class="${fromWordCssClass}">${fromWord}</span> (${totalFrequency})</td>`;
         firstRow = false;
       } else {
         html += '<tr>';
       }
 
-      html += `<td>${toWord} (Frequency: ${freq}, Signatures: ${signatures})</td></tr>`;
+      html += `<td><span class="${toWordCssClass}">${toWord}</span> (Frequency: ${freq}, Signatures: ${signatures})</td></tr>`;
     }
   }
 
@@ -761,20 +861,31 @@ document.addEventListener('DOMContentLoaded', function() {
   // Event listeners for input fields
   normalisationInput.addEventListener('input', debouncedPerformSearch);
   transliterationInput.addEventListener('input', debouncedPerformSearch);
-  document.getElementsByName('searchDirection').forEach(radio => {
+  document.getElementsByName('normalizationTradition').forEach(radio => {
     radio.addEventListener('change', performSearch);
   });
-  document.getElementsByName('searchMode').forEach(radio => {
+  document.getElementsByName('groupResultsBy').forEach(radio => {
     radio.addEventListener('change', performSearch);
   });
-  document.getElementsByName('caseSensitivity').forEach(radio => {
-    radio.addEventListener('change', performSearch);
-  });
-  document.getElementsByName('specialSymbolsMode').forEach(radio => {
-    radio.addEventListener('change', performSearch);
-  });
+  document.getElementById('searchModeSelect').addEventListener('change', performSearch);
+  document.getElementById('matchCaseInput').addEventListener('change', performSearch);
+  document.getElementById('includeEditorialSymbolsInput').addEventListener('change', performSearch);
   document.getElementsByName('personalNamesMode').forEach(radio => {
     radio.addEventListener('change', performSearch);
+  });
+  document.querySelectorAll('[data-clear-target]').forEach(button => {
+    button.addEventListener('click', function() {
+      const input = document.getElementById(button.dataset.clearTarget);
+      input.value = '';
+      input.focus();
+      performSearch();
+    });
+  });
+  document.getElementById('clearSearchQueryButton').addEventListener('click', function() {
+    normalisationInput.value = '';
+    transliterationInput.value = '';
+    normalisationInput.focus();
+    performSearch();
   });
 
 });
