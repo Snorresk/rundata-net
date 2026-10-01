@@ -44,7 +44,8 @@
     .inscription-section {
       border-bottom: 2px solid #999;
     }
-    .search-direction-controls .btn {
+    .search-filter-group .form-check {
+      margin-bottom: 0;
       min-width: 10rem;
     }
     .query-field-label {
@@ -118,64 +119,41 @@
 
   <main class="my-3 mx-5">
     <h1>Lexicon of Runic Inscriptions (LoRI)</h1>
-    <div class="search-direction-controls row g-3 align-items-start my-2">
-      <fieldset class="col-12 col-xl-6">
-        <legend class="fs-6 fw-semibold mb-2">Normalization</legend>
-        <div class="btn-group" role="group" aria-label="Normalization">
-          <input class="btn-check" type="radio" name="normalizationTradition" value="norse" id="oldWestNorseInput" autocomplete="off" checked>
-          <label class="btn btn-outline-primary" for="oldWestNorseInput">Old West Norse</label>
 
-          <input class="btn-check" type="radio" name="normalizationTradition" value="scandinavian" id="oldScandinavianInput" autocomplete="off">
-          <label class="btn btn-outline-primary" for="oldScandinavianInput">Old Scandinavian</label>
-        </div>
-        <p class="form-text mt-2 mb-0">
-          Old West Norse normalization is available throughout the database. Old Scandinavian normalization is available only for runic inscriptions from Sweden and Denmark. Search results and word counts may therefore differ between the two systems.
-        </p>
-      </fieldset>
-
-      <fieldset class="col-12 col-xl-6">
-        <legend class="fs-6 fw-semibold mb-2">Group results by</legend>
-        <div class="btn-group" role="group" aria-label="Group results by">
-          <input class="btn-check" type="radio" name="groupResultsBy" value="normalizedForm" id="groupByNormalizedFormInput" autocomplete="off" checked>
-          <label class="btn btn-outline-primary" for="groupByNormalizedFormInput">Normalized form</label>
-
-          <input class="btn-check" type="radio" name="groupResultsBy" value="transliteration" id="groupByTransliterationInput" autocomplete="off">
-          <label class="btn btn-outline-primary" for="groupByTransliterationInput">Transliteration</label>
-        </div>
-        <p class="form-text mt-2 mb-0">
-          Choose <strong>Normalized form</strong> to collect the different transliterated forms associated with a normalized word form. Choose <strong>Transliteration</strong> to examine which normalized forms correspond to a particular reading in the inscriptions.
-        </p>
-      </fieldset>
-    </div>
-
-    <section class="border rounded p-3 my-3" aria-labelledby="word-search-heading">
+    <section class="border rounded p-3 my-3 bg-primary-subtle" aria-labelledby="word-search-heading">
       <h2 class="fs-5 mb-3" id="word-search-heading">Word search</h2>
-      <div class="row g-2 align-items-center">
-        <div class="col-12 col-lg-2 d-flex align-items-center">
+      <div class="row g-2 align-items-start">
+        <div class="col-12 col-lg-2">
           <label class="visually-hidden" for="searchModeSelect">Match method</label>
           <select class="form-select" id="searchModeSelect" aria-label="Match method">
             <option value="contains" selected>Contains</option>
             <option value="beginsWith">Begins with</option>
             <option value="endsWith">Ends with</option>
             <option value="exact">Matches exactly</option>
+            <option value="lemma">Lemma</option>
           </select>
         </div>
 
         <div class="col-12 col-lg">
-          <div class="input-group mb-2">
+          <div class="input-group mb-2" id="normalisationInputGroup">
             <span class="input-group-text query-field-label" id="normalisation-input-span">Normalisation</span>
             <input type="text" id="normalisationInput" class="form-control" placeholder="" aria-label="Normalisation" aria-describedby="normalisation-input-span">
             <button class="btn btn-outline-secondary query-clear-button" type="button" data-clear-target="normalisationInput" aria-label="Clear normalisation">&times;</button>
+            <datalist id="lemmaOptions">
+              <option value="faðir"></option>
+              <option value="móðir"></option>
+              <option value="bróðir"></option>
+            </datalist>
           </div>
 
-          <div class="input-group">
+          <div class="input-group" id="transliterationInputGroup">
             <span class="input-group-text query-field-label" id="transliteration-input-span">Transliteration</span>
             <input type="text" id="transliterationInput" class="form-control" placeholder="" aria-label="Transliteration" aria-describedby="transliteration-input-span">
             <button class="btn btn-outline-secondary query-clear-button" type="button" data-clear-target="transliterationInput" aria-label="Clear transliteration">&times;</button>
           </div>
 
           <div class="d-flex flex-wrap align-items-center gap-3 mt-2">
-            <fieldset class="d-flex flex-wrap gap-3 m-0">
+            <fieldset class="d-flex flex-wrap gap-3 m-0" id="personalNamesControls">
               <legend class="visually-hidden">Personal names</legend>
               <div class="form-check m-0">
                 <input class="form-check-input" type="radio" name="personalNamesMode" value="includeAll" id="includeNamesInput" checked>
@@ -191,40 +169,85 @@
               </div>
             </fieldset>
 
-            <div class="form-check m-0">
+            <div class="form-check m-0" id="matchCaseControl">
               <input class="form-check-input" type="checkbox" id="matchCaseInput" checked>
               <label class="form-check-label" for="matchCaseInput">Match case</label>
             </div>
 
-            <div class="form-check m-0">
+            <div class="form-check m-0" id="editorialSymbolsControl">
               <input class="form-check-input" type="checkbox" id="includeEditorialSymbolsInput">
               <label class="form-check-label" for="includeEditorialSymbolsInput">Include editorial symbols</label>
             </div>
           </div>
         </div>
 
-        <div class="col-12 col-lg-auto d-flex justify-content-end align-items-center">
-          <button class="btn btn-outline-danger" type="button" id="clearSearchQueryButton" aria-label="Clear search query" title="Clear search query">
-            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 6h18"></path>
-              <path d="M8 6V4h8v2"></path>
-              <path d="M19 6l-1 14H6L5 6"></path>
-              <path d="M10 11v5"></path>
-              <path d="M14 11v5"></path>
-            </svg>
-          </button>
-        </div>
       </div>
     </section>
 
-    <div id="navigation" class="bg-info-subtle rounded p-3 my-3">
-      <h2 class="fs-5">Results navigation</h2>
-      <p class="mb-0">Your search results will be shown in three sections: <a href="#searchSummary">Summary</a>, <a href="#wordRelations">Word relations</a>, and <a href="#textExamples">Text examples</a>.</p>
-      <div class="mt-4">Jump to inscription signatures:</div>
-      <div class="container-fluid">
-        <div class="row">
-          <div class="col-md-auto" id="signaturesCol1"></div>
-          <div class="col-md-auto" id="signaturesCol2"></div>
+    <div class="row g-3 align-items-stretch my-3">
+      <div class="col-12 col-xl-6">
+        <section class="bg-warning-subtle rounded p-3 h-100" aria-labelledby="other-filters-heading">
+          <h2 class="fs-5 mb-3" id="other-filters-heading">Other filters</h2>
+          <fieldset>
+            <legend class="fs-6 mb-2">Choose between Old West Norse and Old Scandinavian normalisations</legend>
+            <div class="search-filter-group d-flex flex-wrap gap-3" aria-label="Normalisation">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="normalizationTradition" value="norse" id="oldWestNorseInput" checked>
+                <label class="form-check-label" for="oldWestNorseInput">Old West Norse</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="normalizationTradition" value="scandinavian" id="oldScandinavianInput">
+                <label class="form-check-label" for="oldScandinavianInput">Old Scandinavian</label>
+              </div>
+            </div>
+            <p class="form-text mt-2 mb-0">
+              Old West Norse normalisation is available throughout the database. Old Scandinavian normalisation is available only for runic inscriptions from Sweden and Denmark. Search results and word counts may therefore differ between the two systems.
+            </p>
+          </fieldset>
+          <fieldset class="mt-3">
+            <legend class="fs-6 mb-2">Choose time period</legend>
+            <div class="search-filter-group d-flex flex-wrap gap-3" aria-label="Time period">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="timePeriod" value="all" id="allPeriodsInput" checked>
+                <label class="form-check-label" for="allPeriodsInput">All periods</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="timePeriod" value="protoNorse" id="protoNorseInput">
+                <label class="form-check-label" for="protoNorseInput">Proto-Norse</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="timePeriod" value="vikingAge" id="vikingAgeInput">
+                <label class="form-check-label" for="vikingAgeInput">Viking Age</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="timePeriod" value="medieval" id="medievalInput">
+                <label class="form-check-label" for="medievalInput">Medieval</label>
+              </div>
+            </div>
+          </fieldset>
+        </section>
+      </div>
+
+      <div class="col-12 col-xl-6">
+        <div id="navigation" class="bg-info-subtle rounded p-3 h-100">
+          <h2 class="fs-5">Results navigation</h2>
+          <p class="mb-0">Your search results will be shown in three sections: <a href="#searchSummary">Summary</a>, <a href="#wordRelations">Word relations</a>, and <a href="#textExamples">Text examples</a>.</p>
+          <fieldset class="mt-3">
+            <legend class="fs-6 mb-2">Group results by</legend>
+            <div class="search-filter-group d-flex flex-wrap gap-3" aria-label="Group results by">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="groupResultsBy" value="normalizedForm" id="groupByNormalizedFormInput" checked>
+                <label class="form-check-label" for="groupByNormalizedFormInput">Normalised form</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="groupResultsBy" value="transliteration" id="groupByTransliterationInput">
+                <label class="form-check-label" for="groupByTransliterationInput">Transliteration</label>
+              </div>
+            </div>
+            <p class="form-text mt-2 mb-0">
+              Choose <strong>Normalised form</strong> to collect the different transliterated forms associated with a normalised word form. Choose <strong>Transliteration</strong> to examine which normalised forms correspond to a particular reading in the inscriptions.
+            </p>
+          </fieldset>
         </div>
       </div>
     </div>
@@ -232,10 +255,19 @@
     <div id="resultsContainer" class="my-3">
       <section id="searchSummary" class="mt-3">
         <h2>Summary</h2>
-        <div id="searchStatisticsDiv">
-          <div><strong>Number of signatures found:</strong> <span id="outNumSignaturesFound">0</span></div>
-          <div><strong>Number of words found:</strong> <span id="outNumWords">0</span></div>
-          <div><strong>Number of personal names:</strong> <span id="outNumFoundNames">0</span></div>
+        <div id="searchSummaryContent" hidden>
+          <div id="searchStatisticsDiv">
+            <div><strong>Number of signatures found:</strong> <span id="outNumSignaturesFound">0</span></div>
+            <div><strong id="wordCountLabel">Number of words found:</strong> <span id="outNumWords">0</span></div>
+            <div><strong>Number of personal names:</strong> <span id="outNumFoundNames">0</span></div>
+          </div>
+          <div class="mt-4">Show examples grouped geographically:</div>
+          <div class="container-fluid">
+            <div class="row">
+              <div class="col-md-auto" id="signaturesCol1"></div>
+              <div class="col-md-auto" id="signaturesCol2"></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -251,7 +283,7 @@
     </div>
   </main>
 
-<script src="{% static 'runes/eda.min.js' %}"></script>
+<script src="{% static 'runes/eda.min.js' %}?v=lori-layout-7"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.9.0/sql-wasm.min.js" integrity="sha512-KMs6GZJsWI3DXBlu2QMbVdaHJbFrzVDYeccH/Ipuvtg3IOHnABXwUZbIhr5ybFSNYL6Bde1dCQ37xtszsBZcSg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 
@@ -259,12 +291,14 @@
 // Globals
 let db = null;
 let dbAsJson = null;
+let lemmaIndex = [];
 
 // references to HTML elements
 const normalisationInput = document.getElementById('normalisationInput');
 const transliterationInput = document.getElementById('transliterationInput');
 const searchResultsDiv = document.getElementById('searchResults');
 const wordRelationsDiv = document.getElementById('wordRelationsContent');
+const searchSummaryContent = document.getElementById('searchSummaryContent');
 const outNumSignaturesFoundSpan = document.getElementById('outNumSignaturesFound');
 const outNumWordsSpan = document.getElementById('outNumWords');
 const outNumFoundNamesSpan = document.getElementById('outNumFoundNames');
@@ -291,11 +325,60 @@ function getEdaWordSearchFunction(searchMode, { ignoreCase }) {
   });
 }
 
+function getSelectedTimePeriod() {
+  return document.querySelector('input[name="timePeriod"]:checked').value;
+}
+
+function isInSelectedTimePeriod(entry) {
+  const selectedPeriod = getSelectedTimePeriod();
+  if (selectedPeriod === 'all') {
+    return true;
+  }
+
+  const dating = String(entry.dating ?? '').toLowerCase();
+  const isProtoNorse = dating.includes('proto-norse') || dating.startsWith('p');
+  const isVikingAge = dating.includes('viking age') || dating.startsWith('v');
+  const isMedieval = dating.includes('middle ages') || dating.includes('medieval') || dating.startsWith('m');
+
+  if (selectedPeriod === 'protoNorse') {
+    return isProtoNorse;
+  }
+  if (selectedPeriod === 'vikingAge') {
+    return isVikingAge;
+  }
+  if (selectedPeriod === 'medieval') {
+    return isMedieval;
+  }
+
+  return true;
+}
+
 function performSearch() {
+  if (!dbAsJson) {
+    return;
+  }
+
   const normalisationQuery = normalisationInput.value.trim();
   const transliterationQuery = transliterationInput.value.trim();
-  const searchDirection = getSelectedSearchDirection();
   const searchMode = document.getElementById('searchModeSelect').value;
+  const hasSearchQuery = searchMode === 'lemma'
+    ? normalisationQuery.length > 0
+    : normalisationQuery.length > 0 || transliterationQuery.length > 0;
+
+  setSearchOutputVisible(hasSearchQuery);
+  if (!hasSearchQuery) {
+    searchResultsDiv.innerHTML = '';
+    wordRelationsDiv.innerHTML = '';
+    displaySignaturesNavigation([]);
+    return;
+  }
+
+  if (searchMode === 'lemma') {
+    performLemmaSearch(normalisationQuery);
+    return;
+  }
+
+  const searchDirection = getSelectedSearchDirection();
   const ignoreCase = !document.getElementById('matchCaseInput').checked;
   const isAHit = getEdaWordSearchFunction(searchMode, { ignoreCase });
   const namesMode = document.querySelector('input[name="personalNamesMode"]:checked').value;
@@ -316,7 +399,7 @@ function performSearch() {
 
   // do the search and return signatures with one additional field 'matchedWords'
   // which contains the indices of the words that matched the search query
-  const results = dbAsJson.map(entry => {
+  const results = dbAsJson.filter(isInSelectedTimePeriod).map(entry => {
     const normalWords = entry[`${normalisationField}_words`];
     const transliterationWords = entry['transliteration_words'];
 
@@ -399,13 +482,38 @@ function performSearch() {
   displayWordRelations(results);
 }
 
+function performLemmaSearch(lemmaQuery) {
+  searchResultsDiv.innerHTML = '';
+  wordRelationsDiv.innerHTML = '';
+
+  const lemmaId = resolveLemmaQuery(lemmaQuery);
+  if (!lemmaId) {
+    outputStatistics([]);
+    displaySignaturesNavigation([]);
+    return;
+  }
+
+  const results = getLemmaSearchResults(dbAsJson.filter(isInSelectedTimePeriod), lemmaIndex, lemmaId);
+  outputStatistics(results);
+  displaySignaturesNavigation(results);
+  displayResults(results);
+  displayWordRelations(results);
+}
+
+function setSearchOutputVisible(visible) {
+  searchSummaryContent.hidden = !visible;
+  wordRelationsDiv.hidden = !visible;
+}
+
 function outputStatistics(results) {
   let totalSignatures = results.length;
   let totalWordMatches = 0;
   let totalPersonalNames = 0;
 
   results.forEach(entry => {
-    totalWordMatches += entry.matchedWords.length;
+    totalWordMatches += entry.lemmaMatches
+      ? countLemmaAttestations(entry.lemmaMatches)
+      : entry.matchedWords.length;
     totalPersonalNames += entry.numFoundNames;
   });
   outNumSignaturesFoundSpan.textContent = totalSignatures;
@@ -467,11 +575,11 @@ function displayResults(results) {
       css: 'transliteration',
     },
     normalisation_norse: {
-      displayName: 'Normalization to Old West Norse',
+      displayName: 'Normalisation to Old West Norse',
       css: 'normalization',
     },
     normalisation_scandinavian: {
-      displayName: 'Normalization to Old Scandinavian',
+      displayName: 'Normalisation to Old Scandinavian',
       css: 'normalization',
     },
   };
@@ -489,6 +597,9 @@ function displayResults(results) {
       paragraph = `<article signature="${signatureName}" id="${signatureName}" data-rundata-id="${signatureId}" class="inscription-section my-2 py-2">`;
     }
     paragraph += `<h3 id="text-example-${signatureId}">${signatureName}</h3>`;
+    if (entry.lemmaMatches?.some(row => row.lemma_certainty === 'probable')) {
+      paragraph += '<span class="badge text-bg-secondary mb-2">Probable lemma</span>';
+    }
 
     for (let j = 0; j < userSelectedDisplay.length; j++) {
       const field = userSelectedDisplay[j];
@@ -560,6 +671,16 @@ function stripOuterGroupingPunctuation(word) {
 
 // Displays the word relations table
 function displayWordRelations(results) {
+  if (results.length === 0) {
+    wordRelationsDiv.innerHTML = '';
+    return;
+  }
+
+  if (document.getElementById('searchModeSelect').value === 'lemma') {
+    displayLemmaWordRelations(results);
+    return;
+  }
+
   const wordMap = {};
   const includeEditorialSymbols = document.getElementById('includeEditorialSymbolsInput').checked;
 
@@ -610,8 +731,86 @@ function displayWordRelations(results) {
   generateWordRelationsTable(wordMap, fromField, toField);
 }
 
+function displayLemmaWordRelations(results) {
+  const lemmaRows = results.flatMap(entry => entry.lemmaMatches ?? []);
+  const relationRows = buildLemmaRelationRows(lemmaRows);
+
+  if (relationRows.length === 0) {
+    wordRelationsDiv.innerHTML = '';
+    return;
+  }
+
+  let html = '<div class="table-responsive"><table class="table align-middle">';
+  html += '<thead><tr><th>Lemma</th><th>Form</th><th>Analysis</th><th>Transliteration variants</th><th>Attestations</th><th>Rows</th></tr></thead><tbody>';
+  const formGroupsPerLemma = relationRows.reduce((counts, row) => {
+    counts.set(row.lemmaId, (counts.get(row.lemmaId) ?? 0) + 1);
+    return counts;
+  }, new Map());
+  const displayedLemmas = new Set();
+
+  relationRows.forEach(row => {
+    const transliterations = row.transliterations
+      .map(item => `<span class="transliteration">${escapeHtml(item.value)}</span> (${item.count})`)
+      .join(', ');
+    const analysis = [row.grammaticalCase, row.number, row.gender]
+      .filter(Boolean)
+      .map(escapeHtml)
+      .join(' ');
+    const probableBadge = row.includesProbable
+      ? '<div><span class="badge text-bg-warning mt-1">Includes probable</span></div>'
+      : '';
+    const certaintySummary = row.certaintyCounts
+      .map(item => `${item.count} ${escapeHtml(item.certainty)}`)
+      .join(', ');
+    const detailRows = [...row.matches]
+      .sort((left, right) => left.signature.localeCompare(right.signature)
+        || String(left.reading_variant).localeCompare(String(right.reading_variant))
+        || Number(left.word_index) - Number(right.word_index))
+      .map(match => {
+        const signatureLabel = [match.signature, match.reading_variant].filter(Boolean).join(' ');
+        return '<tr>'
+          + `<td><a href="#text-example-${match.signature_id}">${escapeHtml(signatureLabel)}</a></td>`
+          + `<td><span class="transliteration">${escapeHtml(match.transliteration)}</span></td>`
+          + `<td>${escapeHtml(match.lemma_certainty || 'not specified')}</td>`
+          + `<td>${escapeHtml(match.accepted_case)}</td>`
+          + '</tr>';
+      }).join('');
+    const groupedVariantNote = row.hasGroupedReadingVariants
+      ? '<p class="small text-body-secondary mb-2">These reading variants are counted once.</p>'
+      : '';
+
+    html += '<tr>';
+    if (!displayedLemmas.has(row.lemmaId)) {
+      const lemmaRowSpan = formGroupsPerLemma.get(row.lemmaId) * 2;
+      html += `<th scope="rowgroup" rowspan="${lemmaRowSpan}" class="text-center align-middle border-end"><span class="normalization">${escapeHtml(row.lemma)}</span></th>`;
+      displayedLemmas.add(row.lemmaId);
+    }
+    html += `<td><span class="normalization">${escapeHtml(row.form)}</span></td>`;
+    html += `<td>${analysis}${probableBadge}</td>`;
+    html += `<td>${transliterations}</td>`;
+    html += `<td>${row.attestations}</td>`;
+    html += `<td>${row.rows}</td>`;
+    html += '</tr>';
+    html += '<tr><td colspan="5" class="pt-0">';
+    html += `<details><summary class="text-center py-1">Show examples in inscriptions (${row.rows})</summary><div class="text-start">`;
+    html += `<div class="small mt-2 mb-1"><strong>Lemma certainty:</strong> ${certaintySummary}</div>`;
+    html += groupedVariantNote;
+    html += '<div class="table-responsive"><table class="table table-sm mb-2">';
+    html += '<thead><tr><th>Signature</th><th>Transliteration</th><th>Lemma certainty</th><th>Case</th></tr></thead>';
+    html += `<tbody>${detailRows}</tbody></table></div></div></details></td></tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  wordRelationsDiv.innerHTML = html;
+}
+
 // Generates the word relations table HTML
 function generateWordRelationsTable(wordMap, fromField, toField) {
+  if (Object.keys(wordMap).length === 0) {
+    wordRelationsDiv.innerHTML = '';
+    return;
+  }
+
   const getWordFormCssClass = field => field === 'transliteration' ? 'transliteration' : 'normalization';
   const fromWordCssClass = getWordFormCssClass(fromField);
   const toWordCssClass = getWordFormCssClass(toField);
@@ -649,7 +848,7 @@ function generateWordRelationsTable(wordMap, fromField, toField) {
 
 // Initialize database and pre-process data
 function onDbLoaded() {
-  const results = db.exec("SELECT signature_id, signature_text, transliteration, search_transliteration, normalisation_norse, normalisation_scandinavian FROM all_data");
+  const results = db.exec("SELECT signature_id, signature_text, dating, transliteration, search_transliteration, normalisation_norse, normalisation_scandinavian FROM all_data");
   const columnNames = results[0].columns;
   const values = results[0].values;
 
@@ -834,11 +1033,74 @@ function onDbLoaded() {
   console.log('Info:', info);*/
 }
 
+function updateSearchModeUi() {
+  const lemmaMode = document.getElementById('searchModeSelect').value === 'lemma';
+  const normalisationGroup = document.getElementById('normalisationInputGroup');
+  const normalisationLabel = document.getElementById('normalisation-input-span');
+  const normalisationClearButton = document.querySelector('[data-clear-target="normalisationInput"]');
+  const transliterationGroup = document.getElementById('transliterationInputGroup');
+  const oldWestNorseInput = document.getElementById('oldWestNorseInput');
+  const oldScandinavianInput = document.getElementById('oldScandinavianInput');
+
+  normalisationGroup.classList.toggle('mb-2', !lemmaMode);
+  normalisationGroup.classList.toggle('mb-0', lemmaMode);
+  normalisationLabel.hidden = lemmaMode;
+  normalisationLabel.textContent = 'Normalisation';
+  normalisationInput.setAttribute('aria-label', lemmaMode ? 'Lemma' : 'Normalisation');
+  normalisationInput.placeholder = lemmaMode ? 'faðir, móðir, bróðir, or lemma ID' : '';
+  normalisationClearButton.setAttribute('aria-label', lemmaMode ? 'Clear lemma' : 'Clear normalisation');
+  if (lemmaMode) {
+    normalisationInput.removeAttribute('aria-describedby');
+  } else {
+    normalisationInput.setAttribute('aria-describedby', 'normalisation-input-span');
+  }
+  transliterationGroup.classList.toggle('d-none', lemmaMode);
+  transliterationInput.disabled = lemmaMode;
+  document.getElementById('personalNamesControls').classList.toggle('d-none', lemmaMode);
+  document.getElementById('matchCaseControl').classList.toggle('d-none', lemmaMode);
+  document.getElementById('editorialSymbolsControl').classList.toggle('d-none', lemmaMode);
+  document.getElementById('wordCountLabel').textContent = lemmaMode
+    ? 'Number of attestations:'
+    : 'Number of words found:';
+
+  if (lemmaMode) {
+    oldWestNorseInput.checked = true;
+    oldScandinavianInput.checked = false;
+    normalisationInput.setAttribute('list', 'lemmaOptions');
+  } else {
+    normalisationInput.removeAttribute('list');
+  }
+}
+
+function keepOneCheckboxSelected(groupName, changedInput) {
+  const inputs = Array.from(document.getElementsByName(groupName));
+  if (changedInput.checked) {
+    inputs.forEach(input => {
+      input.checked = input === changedInput;
+    });
+  } else if (!inputs.some(input => input.checked)) {
+    changedInput.checked = true;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   const sqlConfig = {
     locateFile: () => 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.9.0/sql-wasm.wasm'
   };
-  initSqlJs(sqlConfig).then(function(SQL) {
+  const lemmaIndexPromise = fetch("{% static 'runes/lemma_index.json' %}?v=lori-lemma-3")
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Lemma index request failed with status ${response.status}`);
+      }
+      return response.json();
+    })
+    .catch(reason => {
+      console.error(`Failed to load lemma index: ${reason}`);
+      return [];
+    });
+
+  Promise.all([initSqlJs(sqlConfig), lemmaIndexPromise]).then(function([SQL, loadedLemmaIndex]) {
+    lemmaIndex = loadedLemmaIndex;
     var xhr = new XMLHttpRequest();
     xhr.open('GET', "{% static 'runes/runes.sqlite3' %}", true);
     xhr.responseType = 'arraybuffer';
@@ -861,13 +1123,28 @@ document.addEventListener('DOMContentLoaded', function() {
   // Event listeners for input fields
   normalisationInput.addEventListener('input', debouncedPerformSearch);
   transliterationInput.addEventListener('input', debouncedPerformSearch);
-  document.getElementsByName('normalizationTradition').forEach(radio => {
-    radio.addEventListener('change', performSearch);
+  document.getElementsByName('normalizationTradition').forEach(input => {
+    input.addEventListener('change', function() {
+      keepOneCheckboxSelected('normalizationTradition', input);
+      performSearch();
+    });
   });
-  document.getElementsByName('groupResultsBy').forEach(radio => {
-    radio.addEventListener('change', performSearch);
+  document.getElementsByName('groupResultsBy').forEach(input => {
+    input.addEventListener('change', function() {
+      keepOneCheckboxSelected('groupResultsBy', input);
+      performSearch();
+    });
   });
-  document.getElementById('searchModeSelect').addEventListener('change', performSearch);
+  document.getElementsByName('timePeriod').forEach(input => {
+    input.addEventListener('change', function() {
+      keepOneCheckboxSelected('timePeriod', input);
+      performSearch();
+    });
+  });
+  document.getElementById('searchModeSelect').addEventListener('change', function() {
+    updateSearchModeUi();
+    performSearch();
+  });
   document.getElementById('matchCaseInput').addEventListener('change', performSearch);
   document.getElementById('includeEditorialSymbolsInput').addEventListener('change', performSearch);
   document.getElementsByName('personalNamesMode').forEach(radio => {
@@ -881,12 +1158,7 @@ document.addEventListener('DOMContentLoaded', function() {
       performSearch();
     });
   });
-  document.getElementById('clearSearchQueryButton').addEventListener('click', function() {
-    normalisationInput.value = '';
-    transliterationInput.value = '';
-    normalisationInput.focus();
-    performSearch();
-  });
+  updateSearchModeUi();
 
 });
 
