@@ -126,11 +126,11 @@
         <div class="col-12 col-lg-2">
           <label class="visually-hidden" for="searchModeSelect">Match method</label>
           <select class="form-select" id="searchModeSelect" aria-label="Match method">
+            <option value="lemma">Lemma</option>
+            <option value="exact">Matches exactly</option>
             <option value="contains" selected>Contains</option>
             <option value="beginsWith">Begins with</option>
             <option value="endsWith">Ends with</option>
-            <option value="exact">Matches exactly</option>
-            <option value="lemma">Lemma</option>
           </select>
         </div>
 
@@ -1087,7 +1087,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const sqlConfig = {
     locateFile: () => 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.9.0/sql-wasm.wasm'
   };
-  const lemmaIndexPromise = fetch("{% static 'runes/lemma_index.json' %}?v=lori-lemma-3")
+  const lemmaIndexPromise = fetch("{% static 'runes/lemma_index.json' %}?v=lori-lemma-4")
     .then(response => {
       if (!response.ok) {
         throw new Error(`Lemma index request failed with status ${response.status}`);

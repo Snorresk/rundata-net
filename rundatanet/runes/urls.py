@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.contrib.sitemaps.views import sitemap
 from django.urls import path, register_converter
-from django.views.generic import TemplateView
+from django.views.generic import RedirectView, TemplateView
 
 from . import views
 from .sitemaps import AboutPageSitemap, InscriptionSitemap, MainPageSitemap, StaticViewSitemap
@@ -40,7 +40,8 @@ urlpatterns = [
     # path('master', views.master),
     path("about/", TemplateView.as_view(template_name="runes/about.html"), name="about"),
     path("references/", TemplateView.as_view(template_name="runes/references.html"), name="references"),
-    path("eda/", TemplateView.as_view(template_name="runes/eda.html"), name="eda"),
+    path("lori/", TemplateView.as_view(template_name="runes/eda.html"), name="lori"),
+    path("eda/", RedirectView.as_view(pattern_name="runes:lori", permanent=True), name="eda"),
     path("pdf/sveriges-runinskrifter/<path:filename>", views.sri_pdf_redirect, name="sri_pdf_redirect"),
     path("pdf/sveriges_runinskrifter/<path:filename>", views.sri_pdf_redirect, name="sri_pdf_redirect_legacy"),
     path("inscription/<sig:slug>/", views.inscription_detail, name="inscription_detail"),
