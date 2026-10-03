@@ -104,6 +104,23 @@ test('lemma relation rows sort singular before plural within a case', () => {
   );
 });
 
+test('lemma relation transliteration variants ignore editorial symbols but preserve example rows', () => {
+  const fixture = [
+    {
+      candidate_id: 'editorial', lemma_id: 'KIN002', lemma_norse: 'móðir',
+      accepted_form_id: 'singular', accepted_form: 'móðir', accepted_case: 'nominative',
+      accepted_number: 'singular', accepted_gender: 'femininum', signature_id: '1',
+      signature: 'Test 1', normalisation_norse: 'móðir', normalisation_scandinavian: 'moðir',
+      transliteration: '(m)u[þ]i¶R', lemma_certainty: 'certain',
+    },
+  ];
+
+  const relation = buildLemmaRelationRows(fixture)[0];
+
+  assert.equal(relation.transliterations, [{ value: 'muþiR', count: 1 }]);
+  assert.is(relation.matches[0].transliteration, '(m)u[þ]i¶R');
+});
+
 test('ordinary contains and exact word searches retain existing behavior', () => {
   const contains = getWordSearchFunction('contains');
   const exact = getWordSearchFunction('exact');
@@ -120,6 +137,18 @@ test('EDA offers Lemma and defaults to Old West Norse', () => {
   assert.match(template, /id="oldWestNorseInput"[^>]*checked/);
   assert.ok(template.includes('scope="rowgroup"'));
   assert.ok(template.includes('Show examples in inscriptions'));
+});
+
+test('text examples keep editorial symbols visible', () => {
+  const template = readFileSync('rundatanet/templates/runes/eda.html', 'utf8');
+
+  assert.not.ok(template.includes('highlightedText = concealEditorialSymbols(highlightedText);'));
+});
+
+test('word relation editorial-symbol grouping ignores paragraph marks', () => {
+  const template = readFileSync('rundatanet/templates/runes/eda.html', 'utf8');
+
+  assert.ok(template.includes('replace(/[()[\\]¶]/g'));
 });
 
 test.run();

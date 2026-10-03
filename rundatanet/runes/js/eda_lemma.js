@@ -77,6 +77,10 @@ function cleanIndexedToken(value) {
     .trim();
 }
 
+function cleanLemmaRelationTransliteration(value) {
+  return cleanIndexedToken(value).replace(/[()[\]¶]/g, '').trim();
+}
+
 function incrementVariantCounts(counts, values) {
   const rowValues = new Set(values.map(cleanIndexedToken).filter(Boolean));
   rowValues.forEach(value => counts.set(value, (counts.get(value) ?? 0) + 1));
@@ -127,7 +131,9 @@ export function buildLemmaRelationRows(rows) {
     if (row.accepted_form_layer === 'norse') {
       incrementVariantCounts(group.norseAcceptedForms, [row.accepted_form]);
     }
-    incrementVariantCounts(group.transliterations, [row.transliteration]);
+    incrementVariantCounts(group.transliterations, [
+      cleanLemmaRelationTransliteration(row.transliteration),
+    ]);
     const readingVariant = cleanIndexedToken(row.reading_variant);
     if (readingVariant) {
       group.readingVariants.add(readingVariant);

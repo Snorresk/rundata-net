@@ -283,7 +283,7 @@
     </div>
   </main>
 
-<script src="{% static 'runes/eda.min.js' %}?v=lori-layout-7"></script>
+<script src="{% static 'runes/eda.min.js' %}?v=lori-word-rel-clean-translit-1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.9.0/sql-wasm.min.js" integrity="sha512-KMs6GZJsWI3DXBlu2QMbVdaHJbFrzVDYeccH/Ipuvtg3IOHnABXwUZbIhr5ybFSNYL6Bde1dCQ37xtszsBZcSg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 
@@ -612,9 +612,6 @@ function displayResults(results) {
       const matchedWords = entry.matchedWords;
       const matchedWordBoundaries = entryWordBoundaries.filter((_, i) => matchedWords.includes(i));
       let highlightedText = highlightWordsFromWordBoundaries(text, matchedWordBoundaries);
-      if (!document.getElementById('includeEditorialSymbolsInput').checked) {
-        highlightedText = concealEditorialSymbols(highlightedText);
-      }
       highlightedText = concealNameAnnotation(highlightedText);
 
       if (~highlightedText.indexOf(paragraphSymbol)) {
@@ -655,7 +652,7 @@ function concealEditorialSymbols(value) {
     return '';
   }
 
-  return String(value).replace(/[()[\]]/g, '');
+  return String(value).replace(/[()[\]¶]/g, '');
 }
 
 function stripOuterGroupingPunctuation(word) {
@@ -1087,7 +1084,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const sqlConfig = {
     locateFile: () => 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.9.0/sql-wasm.wasm'
   };
-  const lemmaIndexPromise = fetch("{% static 'runes/lemma_index.json' %}?v=lori-lemma-4")
+  const lemmaIndexPromise = fetch("{% static 'runes/lemma_index.json' %}?v=lori-lemma-6")
     .then(response => {
       if (!response.ok) {
         throw new Error(`Lemma index request failed with status ${response.status}`);
