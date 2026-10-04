@@ -4,7 +4,14 @@ from django.template import Context, Template
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from rundatanet.runes.models import MetaInformation, Reference, Signature
+from rundatanet.runes.models import (
+    MetaInformation,
+    NormalisationNorse,
+    Reference,
+    Signature,
+    TransliteratedText,
+    TranslationEnglish,
+)
 from rundatanet.runes.normalization import SlugIndex, normalize_signature
 
 
@@ -176,6 +183,78 @@ class TestInscriptionDetailView(TestCase):
         content = response.content.decode()
         assert "Sö Alt145" in content
 
+    def test_location_fields_render_in_requested_order(self):
+        self.meta.current_location = "Museum storehouse"
+        self.meta.parish = "Test parish"
+        self.meta.district = "Test district"
+        self.meta.municipality = "Test municipality"
+        self.meta.save(using="runes_db")
+
+        url = reverse("runes:inscription_detail", kwargs={"slug": "so-145"})
+        response = self.client.get(url)
+        content = response.content.decode()
+
+        expected = [
+            "Found location",
+            "Current location",
+            "Parish",
+            "District",
+            "Municipality",
+            "Province and country",
+        ]
+        positions = [content.index(label) for label in expected]
+        assert positions == sorted(positions)
+        assert "Södermanland, Sweden" in content
+
+    def test_dating_renders_under_style_in_classification(self):
+        self.meta.style = "Pr 2"
+        self.meta.dating = "Viking age"
+        self.meta.save(using="runes_db")
+
+        url = reverse("runes:inscription_detail", kwargs={"slug": "so-145"})
+        response = self.client.get(url)
+        content = response.content.decode()
+
+        classification_pos = content.index("Classification")
+        style_pos = content.index("Style", classification_pos)
+        dating_pos = content.index("Dating", classification_pos)
+
+        assert style_pos < dating_pos
+        assert "Viking age" in content
+
+    def test_texts_render_after_map_with_transliteration_first(self):
+        self.meta.latitude = 59.123456
+        self.meta.longitude = 17.654321
+        self.meta.save(using="runes_db")
+        TransliteratedText.objects.using("runes_db").create(
+            signature=self.sig,
+            value="transliterated text",
+            search_value="transliterated text",
+        )
+        NormalisationNorse.objects.using("runes_db").create(
+            signature=self.sig,
+            value="normalised text",
+            search_value="normalised text",
+        )
+        TranslationEnglish.objects.using("runes_db").create(
+            signature=self.sig,
+            value="translated text",
+            search_value="translated text",
+        )
+
+        url = reverse("runes:inscription_detail", kwargs={"slug": "so-145"})
+        response = self.client.get(url)
+        content = response.content.decode()
+
+        map_pos = content.index('id="detailMap"')
+        texts_pos = content.index("Texts")
+        location_pos = content.index("Location")
+        transliteration_pos = content.index("Transliteration", texts_pos)
+        normalisation_pos = content.index("Normalisation (Old Norse)", texts_pos)
+
+        assert map_pos < texts_pos < location_pos
+        assert transliteration_pos < normalisation_pos
+
     def test_map_is_hidden_without_coordinates(self):
         url = reverse("runes:inscription_detail", kwargs={"slug": "so-145"})
         response = self.client.get(url)
@@ -199,7 +278,7 @@ class TestInscriptionDetailView(TestCase):
         content = response.content.decode()
 
         assert 'id="detailMap"' in content
-        assert "Coordinations" in content
+        assert "Coordinations" not in content
         assert "Oldest known latitude and longitude" in content
         assert "Current latitude and longitude" in content
         assert "Original or found location" in content
@@ -219,7 +298,7 @@ class TestInscriptionDetailView(TestCase):
         content = response.content.decode()
 
         assert 'id="detailMap"' in content
-        assert "Coordinations" in content
+        assert "Coordinations" not in content
         assert "Current latitude and longitude" in content
         assert "58.765432, 16.234567" in content
         assert "Regional museum" in content

@@ -199,6 +199,14 @@ p {
 	margin: 0.8em 0 0.4em 0;
 }
 
+body.about-page main {
+	line-height: 1.6;
+}
+
+body.about-page main p {
+	margin: 0.95em 0;
+}
+
 p.signum {
 	margin-top: 0px;
 	font-size: 12pt;
