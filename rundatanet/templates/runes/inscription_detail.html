@@ -561,7 +561,7 @@
     <div class="page">
       <div class="top-nav">
         <nav class="breadcrumb" aria-label="Back navigation">
-          <a href="{% url 'runes:index' %}">Main Page</a>
+          <a href="{% url 'runes:index' %}">Back to the Database</a>
         </nav>
         <div class="search-container">
           <label for="signatureSearch">Search by inscription ID:</label>
@@ -597,12 +597,6 @@
           <dd>{% if meta.materialType %}{{ meta.materialType }}{% endif %}{% if meta.materialType and meta.material %}, {% endif %}{% if meta.material %}{{ meta.material }}{% endif %}</dd>
         </div>
         {% endif %}
-        {% if meta.dating %}
-        <div class="meta-item">
-          <dt>Dating</dt>
-          <dd>{{ meta.dating }}</dd>
-        </div>
-        {% endif %}
       </dl>
 
       <main>
@@ -620,64 +614,6 @@
               {% endif %}
             </div>
           </div>
-        </section>
-        {% endif %}
-
-        {# ── Location & Classification side-by-side ── #}
-        <div class="two-col">
-          <section class="section">
-            <h2 class="section-title">Location</h2>
-            <dl class="def-list">
-              {% if meta.found_location %}
-              <div class="def-row"><dt class="def-term">Found location</dt><dd class="def-detail">{{ meta.found_location }}</dd></div>
-              {% endif %}
-              {% if meta.parish %}
-              <div class="def-row"><dt class="def-term">Parish</dt><dd class="def-detail">{{ meta.parish }}</dd></div>
-              {% endif %}
-              {% if meta.district %}
-              <div class="def-row"><dt class="def-term">District</dt><dd class="def-detail">{{ meta.district }}</dd></div>
-              {% endif %}
-              {% if meta.municipality %}
-              <div class="def-row"><dt class="def-term">Municipality</dt><dd class="def-detail">{{ meta.municipality }}</dd></div>
-              {% endif %}
-              {% if meta.current_location %}
-              <div class="def-row"><dt class="def-term">Current location</dt><dd class="def-detail">{{ meta.current_location }}</dd></div>
-              {% endif %}
-              {% if meta.original_site %}
-              <div class="def-row"><dt class="def-term">Original site</dt><dd class="def-detail">{{ meta.original_site }}</dd></div>
-              {% endif %}
-            </dl>
-          </section>
-
-          <section class="section">
-            <h2 class="section-title">Classification</h2>
-            <dl class="def-list">
-              <div class="def-row"><dt class="def-term">Carver</dt><dd class="def-detail">{% if meta.carver %}{{ meta.carver }}{% else %}—{% endif %}</dd></div>
-              <div class="def-row"><dt class="def-term">Number of crosses</dt><dd class="def-detail">{{ meta.crosses.count }}</dd></div>
-              <div class="def-row"><dt class="def-term">Cross form</dt><dd class="def-detail">{% if data.crosses %}{{ data.crosses }}{% else %}—{% endif %}</dd></div>
-              <div class="def-row"><dt class="def-term">Rune type</dt><dd class="def-detail">{% if meta.rune_type %}{{ meta.rune_type }}{% else %}—{% endif %}</dd></div>
-              <div class="def-row"><dt class="def-term">Style</dt><dd class="def-detail">{% if meta.style %}{{ meta.style }}{% else %}—{% endif %}</dd></div>
-            </dl>
-          </section>
-        </div>
-
-        {% if meta.latitude and meta.longitude and meta.latitude != 0 and meta.longitude != 0 or meta.present_latitude and meta.present_longitude and meta.present_latitude != 0 and meta.present_longitude != 0 %}
-        <section class="section">
-          <h2 class="section-title">Coordinations</h2>
-          <dl class="def-list">
-            {% if meta.latitude and meta.longitude and meta.latitude != 0 and meta.longitude != 0 %}
-            <div class="def-row">
-              <dt class="def-term">Oldest known latitude and longitude</dt>
-              <dd class="def-detail">{{ meta.latitude }}, {{ meta.longitude }}</dd>
-            </div>
-            {% endif %}
-            {% if meta.present_latitude and meta.present_longitude and meta.present_latitude != 0 and meta.present_longitude != 0 %}
-            <div class="def-row">
-              <dt class="def-term">Current latitude and longitude</dt>
-              <dd class="def-detail">{{ meta.present_latitude }}, {{ meta.present_longitude }}</dd>
-            </div>
-            {% endif %}
-          </dl>
         </section>
         {% endif %}
 
@@ -701,6 +637,54 @@
           {% endfor %}
         </section>
         {% endif %}
+
+        {# ── Location & Classification side-by-side ── #}
+        <div class="two-col">
+          <section class="section">
+            <h2 class="section-title">Location</h2>
+            <dl class="def-list">
+              {% if meta.found_location %}
+              <div class="def-row"><dt class="def-term">Found location</dt><dd class="def-detail">{{ meta.found_location }}</dd></div>
+              {% endif %}
+              {% if meta.current_location %}
+              <div class="def-row"><dt class="def-term">Current location</dt><dd class="def-detail">{{ meta.current_location }}</dd></div>
+              {% endif %}
+              {% if meta.parish %}
+              <div class="def-row"><dt class="def-term">Parish</dt><dd class="def-detail">{{ meta.parish }}</dd></div>
+              {% endif %}
+              {% if meta.district %}
+              <div class="def-row"><dt class="def-term">District</dt><dd class="def-detail">{{ meta.district }}</dd></div>
+              {% endif %}
+              {% if meta.municipality %}
+              <div class="def-row"><dt class="def-term">Municipality</dt><dd class="def-detail">{{ meta.municipality }}</dd></div>
+              {% endif %}
+              {% if province_country %}
+              <div class="def-row"><dt class="def-term">Province and country</dt><dd class="def-detail">{{ province_country }}</dd></div>
+              {% endif %}
+              {% if meta.original_site %}
+              <div class="def-row"><dt class="def-term">Original site</dt><dd class="def-detail">{{ meta.original_site }}</dd></div>
+              {% endif %}
+              {% if meta.latitude and meta.longitude and meta.latitude != 0 and meta.longitude != 0 %}
+              <div class="def-row"><dt class="def-term">Oldest known latitude and longitude</dt><dd class="def-detail">{{ meta.latitude }}, {{ meta.longitude }}</dd></div>
+              {% endif %}
+              {% if meta.present_latitude and meta.present_longitude and meta.present_latitude != 0 and meta.present_longitude != 0 %}
+              <div class="def-row"><dt class="def-term">Current latitude and longitude</dt><dd class="def-detail">{{ meta.present_latitude }}, {{ meta.present_longitude }}</dd></div>
+              {% endif %}
+            </dl>
+          </section>
+
+          <section class="section">
+            <h2 class="section-title">Classification</h2>
+            <dl class="def-list">
+              <div class="def-row"><dt class="def-term">Carver</dt><dd class="def-detail">{% if meta.carver %}{{ meta.carver }}{% else %}—{% endif %}</dd></div>
+              <div class="def-row"><dt class="def-term">Number of crosses</dt><dd class="def-detail">{{ meta.crosses.count }}</dd></div>
+              <div class="def-row"><dt class="def-term">Cross form</dt><dd class="def-detail">{% if data.crosses %}{{ data.crosses }}{% else %}—{% endif %}</dd></div>
+              <div class="def-row"><dt class="def-term">Rune type</dt><dd class="def-detail">{% if meta.rune_type %}{{ meta.rune_type }}{% else %}—{% endif %}</dd></div>
+              <div class="def-row"><dt class="def-term">Style</dt><dd class="def-detail">{% if meta.style %}{{ meta.style }}{% else %}—{% endif %}</dd></div>
+              <div class="def-row"><dt class="def-term">Dating</dt><dd class="def-detail">{% if meta.dating %}{{ meta.dating }}{% else %}—{% endif %}</dd></div>
+            </dl>
+          </section>
+        </div>
 
         {# ── Additional ── #}
         {% if meta.additional %}

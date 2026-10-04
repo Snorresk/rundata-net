@@ -11,6 +11,38 @@ from .serializers import MetaInformationSerializer
 
 DEFAULT_AZURE_PDF_STORAGE_BASE_URL = "https://rundatapdfssk.blob.core.windows.net/rundatapdfs"
 
+SWEDISH_PROVINCES = {
+    "Öl": "Öland",
+    "Ög": "Östergötland",
+    "Sö": "Södermanland",
+    "Sm": "Småland",
+    "Vg": "Västergötland",
+    "U": "Uppland",
+    "Vs": "Västmanland",
+    "Nä": "Närke",
+    "Vr": "Värmland",
+    "Gs": "Gästrikland",
+    "Hs": "Hälsingland",
+    "M": "Medelpad",
+    "Ån": "Ångermanland",
+    "D": "Dalarna",
+    "Hr": "Härjedalen",
+    "J": "Jämtland",
+    "Lp": "Lappland",
+    "Ds": "Dalsland",
+    "Bo": "Bohuslän",
+    "G": "Gotland",
+    "SE": "Sweden, other",
+}
+
+
+def _province_country_for_signature(signature_text: str) -> str:
+    code = signature_text.split(maxsplit=1)[0]
+    province = SWEDISH_PROVINCES.get(code)
+    if not province:
+        return ""
+    return f"{province}, Sweden"
+
 
 def sri_pdf_redirect(request, filename: str):
     """Redirect stable Rundata PDF links to the current storage backend.
@@ -81,5 +113,6 @@ def inscription_detail(request, slug: str):
         "aliases": aliases,
         "meta": meta,
         "data": data,
+        "province_country": _province_country_for_signature(signature.signature_text),
     }
     return render(request, "runes/inscription_detail.html", context)

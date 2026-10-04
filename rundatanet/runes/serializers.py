@@ -87,6 +87,12 @@ class MetaInformationSerializer(serializers.ModelSerializer):
         result = []
         try:
             try:
+                transliterated_text = TransliteratedText.objects.get(signature=obj.signature)
+                result.append({"value": transliterated_text.value, "language_code": "run"})
+            except:
+                pass
+
+            try:
                 normalization_norse = NormalisationNorse.objects.get(signature=obj.signature)
                 result.append({"value": normalization_norse.value, "language_code": "fvn"})
             except:
@@ -95,12 +101,6 @@ class MetaInformationSerializer(serializers.ModelSerializer):
             try:
                 normalization_scandinavian = NormalisationScandinavian.objects.get(signature=obj.signature)
                 result.append({"value": normalization_scandinavian.value, "language_code": "rsv"})
-            except:
-                pass
-
-            try:
-                transliterated_text = TransliteratedText.objects.get(signature=obj.signature)
-                result.append({"value": transliterated_text.value, "language_code": "run"})
             except:
                 pass
 
