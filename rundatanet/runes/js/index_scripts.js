@@ -555,9 +555,11 @@ export function convertDbToKeyMap(db) {
     // fill in images
     if (allDbImages.hasOwnProperty(metaId)) {
       const imagesMarkup = makeImagesMarkup(allDbImages[metaId]);
+      objSignature["imageLinks"] = allDbImages[metaId].links;
       objSignature["directImages"] = imagesMarkup.directImages;
       objSignature["indirectImages"] = imagesMarkup.indirectImages;
     } else {
+      objSignature["imageLinks"] = [];
       objSignature["directImages"] = "";
       objSignature["indirectImages"] = "";
     }
@@ -621,30 +623,36 @@ function resolveUrlOrBlob(urlOrBlob) {
 export function fetchAllImages(db) {
   let content = [];
   try {
-    content = db.exec("SELECT meta_id, link_url, direct_url, info FROM runes_imagelink");
+    content = db.exec("SELECT id, meta_id, link_url, direct_url, info FROM runes_imagelink");
   } catch (e) {
     // Backwards compatibility with DB snapshots where `info` column is absent.
-    content = db.exec("SELECT meta_id, link_url, direct_url FROM runes_imagelink");
+    content = db.exec("SELECT id, meta_id, link_url, direct_url FROM runes_imagelink");
   }
   if (!content || content.length === 0) {
     return {};
   }
   const allRows = content[0].values;
-  const hasInfoColumn = content[0].columns.includes("info");
+  const columns = content[0].columns;
+  const idColumn = columns.indexOf("id");
+  const metaColumn = columns.indexOf("meta_id");
+  const linkColumn = columns.indexOf("link_url");
+  const directColumn = columns.indexOf("direct_url");
+  const infoColumn = columns.indexOf("info");
 
   let allImages = {};
 
   for (let i = 0; i < allRows.length; i++) {
     const row = allRows[i];
-    const indirect = row[1] || "";
-    const direct = row[2] || "";
-    const info = hasInfoColumn ? (row[3] || "") : "";
+    const id = row[idColumn];
+    const indirect = row[linkColumn] || "";
+    const direct = row[directColumn] || "";
+    const info = infoColumn >= 0 ? (row[infoColumn] || "") : "";
 
-    const metaId = row[0];
+    const metaId = row[metaColumn];
     if (!allImages.hasOwnProperty(metaId)) {
       allImages[metaId] = {links: []};
     }
-    allImages[metaId].links.push({indirect, direct, info});
+    allImages[metaId].links.push({id, indirect, direct, info});
   }
   return allImages;
 }

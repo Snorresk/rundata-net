@@ -42,6 +42,8 @@ urlpatterns = [
     path("references/", TemplateView.as_view(template_name="runes/references.html"), name="references"),
     path("lori/", TemplateView.as_view(template_name="runes/eda.html"), name="lori"),
     path("eda/", RedirectView.as_view(pattern_name="runes:lori", permanent=True), name="eda"),
+    path("api/images/<int:image_id>/resolve/", views.resolve_image_download, name="resolve_image_download"),
+    path("api/images/export-raa-zip/", views.export_raa_images_zip, name="export_raa_images_zip"),
     path("pdf/sveriges-runinskrifter/<path:filename>", views.sri_pdf_redirect, name="sri_pdf_redirect"),
     path("pdf/sveriges_runinskrifter/<path:filename>", views.sri_pdf_redirect, name="sri_pdf_redirect_legacy"),
     path("inscription/<sig:slug>/", views.inscription_detail, name="inscription_detail"),
