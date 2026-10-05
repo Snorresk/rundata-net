@@ -1753,6 +1753,7 @@ html:not(.db-desktop-layout) .query-builder .rule-container .rule-value-containe
         <button type="button" class="btn btn-default" id="btnOpenSearchParameters" data-bs-toggle="modal" data-bs-target="#containerRuleIo">JSON rules</button>
         <button type="button" class="btn btn-default" id="btnOpenExportResults" data-bs-toggle="modal" data-bs-target="#modalResultsIo" data-results-mode="export">Export search</button>
         <button type="button" class="btn btn-default" id="btnOpenExportMap" data-bs-toggle="modal" data-bs-target="#modalMapExport">Export map</button>
+        <button type="button" class="btn btn-default" id="btnOpenExportImages" data-bs-toggle="modal" data-bs-target="#modalImageExport">Export images</button>
       </div>
     </div>
 
@@ -1991,6 +1992,48 @@ html:not(.db-desktop-layout) .query-builder .rule-container .rule-value-containe
 
         <div class="modal-footer">
           <button type="button" class="btn btn-primary" id="btnExportMapSvg">Download map</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalImageExport" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalImageExportLabel">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalImageExportLabel">Export images</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <p>Download available images for the current search results when a supported image source can be resolved.</p>
+
+          <fieldset class="mb-3" id="imageExportModeOptions">
+            <legend class="col-form-label pt-0">Choose export mode</legend>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="imageExportMode" id="imageExportModeAuto" value="auto" checked>
+              <label class="form-check-label" for="imageExportModeAuto">Auto selection: up to 5 first images per inscription</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="imageExportMode" id="imageExportModeManual" value="manual">
+              <label class="form-check-label" for="imageExportModeManual">Manual selection: choose images from thumbnails</label>
+            </div>
+          </fieldset>
+
+          <div class="alert alert-info mb-3" id="imageExportSizeNotice">
+            Manual selection will be available for searches with up to 150 inscriptions. Larger searches will use auto selection.
+          </div>
+
+          <div id="imageExportManualSelection" class="d-none">
+            <div class="mb-2 fw-bold">Images to include</div>
+            <div id="imageExportThumbnailList" class="row g-2"></div>
+          </div>
+
+          <p class="mb-0">Users must check image licences and reuse conditions with the original source before publishing or sharing downloaded images.</p>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" id="btnDownloadImageExport">Download images</button>
         </div>
       </div>
     </div>
@@ -2695,6 +2738,96 @@ function downloadExportBlob(blob, filename) {
   link.click();
   document.body.removeChild(link);
   setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function isRaaImageLink(link) {
+  return Boolean(
+    link
+    && (
+      String(link.indirect || '').includes('pub.raa.se/')
+      || String(link.direct || '').includes('pub.raa.se/')
+      || String(link.indirect || '').includes('sokisamlingar.sormlandsmuseum.se/objects/')
+      || String(link.indirect || '').includes('digitaltmuseum.')
+    )
+  );
+}
+
+function getImageExportSignature(inscription) {
+  return String(
+    inscription?.signature_text
+    || inscription?.signature_display
+    || inscription?.signature_header
+    || inscription?.signature
+    || ''
+  ).trim();
+}
+
+function getAutoRaaImageExportPayload() {
+  const inscriptions = getVisibleResultInscriptionsForExport();
+  return {
+    mode: 'auto',
+    provider: 'raa',
+    inscriptions: inscriptions
+      .map(inscription => {
+        const imageIds = (inscription.imageLinks || [])
+          .filter(isRaaImageLink)
+          .slice(0, 5)
+          .map(link => link.id)
+          .filter(id => Number.isInteger(id));
+        return {
+          signature: getImageExportSignature(inscription),
+          image_ids: imageIds,
+        };
+      })
+      .filter(item => item.image_ids.length > 0),
+  };
+}
+
+async function exportAutoRaaImagesZip() {
+  const button = document.getElementById('btnDownloadImageExport');
+  const payload = getAutoRaaImageExportPayload();
+  const imageCount = payload.inscriptions.reduce((sum, item) => sum + item.image_ids.length, 0);
+
+  if (imageCount === 0) {
+    showAlert('No supported images are available in the current search results.');
+    return;
+  }
+
+  const previousText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Preparing images...';
+  showLoading(`Preparing ${imageCount} image${imageCount === 1 ? '' : 's'} for download.`);
+  try {
+    const response = await fetch("{% url 'runes:export_raa_images_zip' %}", {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      let errorMessage = 'Could not export images.';
+      try {
+        const errorPayload = await response.json();
+        if (errorPayload.error) {
+          errorMessage = errorPayload.error;
+        }
+      } catch (error) {}
+      throw new Error(errorMessage);
+    }
+    const blob = await response.blob();
+    downloadExportBlob(blob, 'rundata-images.zip');
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modalImageExport'));
+    if (modal) {
+      modal.hide();
+    }
+  } catch (error) {
+    showAlert(error.message || 'Could not export images.');
+  } finally {
+    hideLoading();
+    button.disabled = false;
+    button.textContent = previousText;
+  }
 }
 
 function getHighlightedExportSignature(inscription) {
@@ -4393,6 +4526,7 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('btnAddMapGroupJson').addEventListener('click', addJsonRulesPublicationMapGroup);
   document.getElementById('btnResetMapExport').addEventListener('click', resetPublicationMapExportGroups);
   document.getElementById('btnExportMapSvg').addEventListener('click', exportPublicationMapSvg);
+  document.getElementById('btnDownloadImageExport').addEventListener('click', exportAutoRaaImagesZip);
   document.getElementById('btnExportRtfResults').addEventListener('click', () => exportHighlightedResults('rtf'));
   document.getElementById('btnExportWordResults').addEventListener('click', () => exportHighlightedResults('word'));
   document.getElementById('btnExportHtmlResults').addEventListener('click', () => exportHighlightedResults('html'));
