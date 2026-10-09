@@ -18,6 +18,7 @@ from .serializers import MetaInformationSerializer
 DEFAULT_AZURE_PDF_STORAGE_BASE_URL = "https://rundatapdfssk.blob.core.windows.net/rundatapdfs"
 MAX_AUTO_IMAGES_PER_INSCRIPTION = 5
 MAX_IMAGE_EXPORT_FILES = 750
+NAME_MARKERS = str.maketrans("", "", '"“”')
 
 SWEDISH_PROVINCES = {
     "Öl": "Öland",
@@ -50,6 +51,16 @@ def _province_country_for_signature(signature_text: str) -> str:
     if not province:
         return ""
     return f"{province}, Sweden"
+
+
+def _strip_detail_name_markers(runic_texts: list[dict]) -> list[dict]:
+    """Hide name marker quote signs on public inscription detail pages."""
+    cleaned_texts = []
+    for text in runic_texts:
+        if text.get("language_code") in {"fvn", "rsv"}:
+            text = {**text, "value": str(text.get("value", "")).translate(NAME_MARKERS)}
+        cleaned_texts.append(text)
+    return cleaned_texts
 
 
 def sri_pdf_redirect(request, filename: str):
@@ -274,6 +285,7 @@ def inscription_detail(request, slug: str):
 
     serializer = MetaInformationSerializer(meta)
     data = serializer.data
+    data["runic_texts"] = _strip_detail_name_markers(data.get("runic_texts", []))
 
     # Build display signature with † and $ decorators
     display_signature = signature.signature_text
