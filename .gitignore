@@ -218,6 +218,18 @@ Temporary Items
 *.tmPreferences.cache
 *.stTheme.cache
 
+# Local database backups and link-audit working reports
+*.bak
+local-notes/
+RAÄ/backups/
+RAÄ/raa_cluster_*.csv
+RAÄ/raa_ff9950b4_removed_*.csv
+RAÄ/raa_shared_cluster_links_removed_*.csv
+RAÄ/raa_shared_cluster_rebuild_*_20261005-*.csv
+RAÄ/raa_shared_cluster_rebuild_*_20261009-173833.csv
+RAÄ/raa_shared_cluster_rebuild_*_20261009-174119.csv
+SHM/
+
 # Workspace files are user-specific
 *.sublime-workspace
 
