@@ -16,9 +16,9 @@ Branch: `codex/db-work`
 
 Important reports:
 
-- `raa_shared_cluster_signa_20261005-214113.csv`
+- `RAÄ/raa_shared_cluster_signa_20261005-214113.csv`
   - The `352` signa that were affected and need RAÄ rebuild.
-- `raa_shared_cluster_links_removed_20261005-214113.csv`
+- `RAÄ/raa_shared_cluster_links_removed_20261005-214113.csv`
   - Every removed image row: `image_id`, `signature`, `link_url`.
 
 Important backup:
@@ -36,13 +36,13 @@ An attempted rebuild used RAÄ advanced search by `runsignum`. The first scripts
 Use:
 
 ```bash
-python utility/rebuild_raa_links_for_shared_clusters.py --signa-csv raa_shared_cluster_signa_20261005-214113.csv
+python utility/rebuild_raa_links_for_shared_clusters.py --signa-csv RAÄ/raa_shared_cluster_signa_20261005-214113.csv
 ```
 
 Recommended first smoke test:
 
 ```bash
-python utility/rebuild_raa_links_for_shared_clusters.py --signa-csv raa_shared_cluster_signa_20261005-214113.csv --limit 10 --timeout 6
+python utility/rebuild_raa_links_for_shared_clusters.py --signa-csv RAÄ/raa_shared_cluster_signa_20261005-214113.csv --limit 10 --timeout 6
 ```
 
 If that works, run the full command. The script:

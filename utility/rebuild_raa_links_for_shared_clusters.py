@@ -3,7 +3,7 @@
 
 Usage:
     python utility/rebuild_raa_links_for_shared_clusters.py \
-        --signa-csv raa_shared_cluster_signa_20261005-214113.csv
+        --signa-csv RAÄ/raa_shared_cluster_signa_20261005-214113.csv
 
 The script searches RAÄ Arkivsök advanced search by runsignum and inserts exact
 metadata hits into runes_imagelink. It writes found/no-match/error reports.
@@ -77,6 +77,12 @@ def main() -> None:
     parser.add_argument("--timeout", default=8.0, type=float)
     parser.add_argument("--sleep", default=0.03, type=float)
     parser.add_argument("--limit", default=0, type=int, help="Optional max number of signa to process.")
+    parser.add_argument(
+        "--max-links-per-signature",
+        default=5,
+        type=int,
+        help="Only insert this many exact RAÄ hits per signature. Uses RAÄ result order.",
+    )
     args = parser.parse_args()
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -100,6 +106,7 @@ def main() -> None:
     error_rows: list[list[str]] = []
     inserted = 0
     existing = 0
+    skipped_over_limit = 0
 
     for index, signature in enumerate(signa, 1):
         try:
@@ -110,6 +117,8 @@ def main() -> None:
 
         exact_hits: list[tuple[str, str, str]] = []
         for hit in hits:
+            if hit.get("genreFormStrikt") == "Arkivvolym":
+                continue
             text = json.dumps(hit, ensure_ascii=False)
             if signature not in text:
                 continue
@@ -131,7 +140,10 @@ def main() -> None:
             no_match_rows.append([signature])
             continue
 
-        for uuid, title, description in deduped:
+        limited_hits = deduped[: args.max_links_per_signature]
+        skipped_over_limit += max(0, len(deduped) - len(limited_hits))
+
+        for uuid, title, description in limited_hits:
             doc_uri = f"https://pub.raa.se/dokumentation/{uuid}"
             link_url = "https://arkivsok.raa.se/document?uri=" + urllib.parse.quote(doc_uri, safe="")
             found_rows.append([signature, uuid, link_url, title, description])
@@ -174,6 +186,7 @@ def main() -> None:
     print(f"found_links {len(found_rows)}")
     print(f"inserted {inserted}")
     print(f"existing {existing}")
+    print(f"skipped_over_limit {skipped_over_limit}")
     print(f"no_match {len(no_match_rows)}")
     print(f"errors {len(error_rows)}")
     print(f"found_csv {found_csv}")
