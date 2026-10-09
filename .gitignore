@@ -220,6 +220,7 @@ Temporary Items
 
 # Local database backups and link-audit working reports
 *.bak
+local-notes/
 RAÄ/backups/
 RAÄ/raa_cluster_*.csv
 RAÄ/raa_ff9950b4_removed_*.csv
