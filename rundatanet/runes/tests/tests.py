@@ -10,6 +10,8 @@ from ..models import CrossForm
 class CrossFormTests(TestCase):
     """This class defines the test suite for CrossForm model."""
 
+    databases = {"default", "runes_db"}
+
     def setUp(self):
         self.crossForm_name = "A1"
         self.crossForm_group = 1
