@@ -1,0 +1,20 @@
+{
+  "scoped_signa": 1254,
+  "candidate_pairs": 2377,
+  "unique_commons_files": 2262,
+  "excluded": 1137,
+  "retained": 1240,
+  "needs_review": 0,
+  "decisions": {
+    "retain_candidate": 1240,
+    "exclude_same_archive": 1134,
+    "exclude_already_in_db": 2,
+    "exclude_same_photographer": 1
+  },
+  "archive_exclusions": {
+    "Nationalmuseet i Danmark / Runer KU": 11,
+    "RAÄ": 1098,
+    "SHM": 17,
+    "Sörmlands museum": 179
+  }
+}

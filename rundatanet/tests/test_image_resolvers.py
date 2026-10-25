@@ -3,12 +3,13 @@ import json
 import zipfile
 from io import BytesIO, StringIO
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from rundatanet.runes.image_resolvers import (
-    ImageResolveError, extract_raa_document_uuid, is_supported_image_source, resolve_image_link,
+    ImageResolveError, extract_commons_file_title, extract_raa_document_uuid, is_supported_image_source, resolve_image_link,
 )
 from rundatanet.runes.models import ImageLink, MetaInformation, Signature
 
@@ -40,6 +41,21 @@ SHM_OBJECT_HTML = f"""
 <meta property="og:image" content="https://media.samlingar.shm.se/item/{SHM_OTHER_ID}/large">
 <a download href="{SHM_DOWNLOAD_URL}">Ladda ner media</a>
 """.encode()
+COMMONS_SOURCE_URL = "https://commons.wikimedia.org/wiki/File:G_157.jpg"
+COMMONS_ORIGINAL_URL = "https://upload.wikimedia.org/wikipedia/commons/0/06/G_157.jpg"
+COMMONS_THUMBNAIL_URL = "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/06/G_157.jpg/330px-G_157.jpg"
+
+
+def commons_document():
+    return {"query": {"pages": [{"ns": 6, "title": "File:G 157.jpg", "imageinfo": [{
+        "url": COMMONS_ORIGINAL_URL, "thumburl": COMMONS_THUMBNAIL_URL,
+        "mime": "image/jpeg", "size": 212240,
+        "extmetadata": {
+            "Artist": {"value": '<a href="/wiki/User:Photographer">Anna &amp; Erik</a>'},
+            "LicenseShortName": {"value": "CC BY-SA 4.0"},
+            "LicenseUrl": {"value": "//creativecommons.org/licenses/by-sa/4.0/"},
+        },
+    }]}]}}
 
 
 def shm_media_html(license_slug="cc-by-4_0", media_type="image/jpeg"):
@@ -147,6 +163,81 @@ class FakeDigitaltMuseumUrlopenResponse:
           </body>
         </html>
         """.encode("utf-8")
+
+
+class TestCommonsImageResolver(SimpleTestCase):
+    def test_extracts_encoded_titles_and_index_urls(self):
+        assert extract_commons_file_title("https://commons.wikimedia.org/wiki/File:S%C3%B6_1_%28a%29.jpg") == "File:Sö 1 (a).jpg"
+        assert extract_commons_file_title("https://commons.wikimedia.org/w/index.php?title=File%3AS%C3%B6_1.jpg&oldid=123") == "File:Sö 1.jpg"
+        for url in ("https://commons.wikimedia.org.example.org/wiki/File:G_157.jpg",
+                    "https://example.org/commons.wikimedia.org/wiki/File:G_157.jpg",
+                    "https://commons.wikimedia.org/wiki/Category:Runestones",
+                    "https://commons.wikimedia.org/wiki/File:A.jpg%7CFile:B.jpg",
+                    "https://commons.wikimedia.org/wiki/File:"):
+            assert not is_supported_image_source(url)
+
+    @patch("rundatanet.runes.image_resolvers.fetch_url_bytes")
+    def test_uses_api_original_instead_of_saved_thumbnail(self, mocked_fetch):
+        mocked_fetch.return_value = json.dumps(commons_document()).encode()
+        resolved = resolve_image_link(COMMONS_SOURCE_URL, "https://example.org/wrong-thumbnail.jpg", timeout=9)
+        assert resolved.provider == "Wikimedia Commons"
+        assert resolved.source_url == COMMONS_SOURCE_URL
+        assert resolved.download_url == COMMONS_ORIGINAL_URL
+        assert resolved.thumbnail_url == COMMONS_THUMBNAIL_URL
+        assert resolved.file_name == "G 157.jpg"
+        assert resolved.file_size == 212240
+        assert resolved.creator == "Anna & Erik"
+        assert resolved.license_name == "CC BY-SA 4.0"
+        assert resolved.license_url == "https://creativecommons.org/licenses/by-sa/4.0/"
+        request_url = mocked_fetch.call_args.args[0]
+        assert urlparse(request_url).hostname == "commons.wikimedia.org"
+        params = parse_qs(urlparse(request_url).query)
+        assert params["titles"] == ["File:G 157.jpg"]
+        assert params["redirects"] == ["1"]
+        assert mocked_fetch.call_args.kwargs["timeout"] == 9
+
+    @patch("rundatanet.runes.image_resolvers.fetch_url_bytes")
+    def test_preserves_redirected_filename_and_original_format(self, mocked_fetch):
+        document = commons_document()
+        page = document["query"]["pages"][0]
+        page["title"] = "File:Renamed stone.svg"
+        image = page["imageinfo"][0]
+        image.update(url=COMMONS_ORIGINAL_URL.replace(".jpg", ".svg"), mime="image/svg+xml")
+        mocked_fetch.return_value = json.dumps(document).encode()
+        resolved = resolve_image_link(COMMONS_SOURCE_URL)
+        assert resolved.file_name == "Renamed stone.svg"
+        assert resolved.media_type == "image/svg+xml"
+        assert resolved.download_url.endswith(".svg")
+
+    @patch("rundatanet.runes.image_resolvers.fetch_url_bytes")
+    def test_missing_license_is_not_inferred_and_artist_is_not_uploader(self, mocked_fetch):
+        document = commons_document()
+        image = document["query"]["pages"][0]["imageinfo"][0]
+        image.update(extmetadata={}, user="Upload bot")
+        del image["thumburl"]
+        mocked_fetch.return_value = json.dumps(document).encode()
+        resolved = resolve_image_link(COMMONS_SOURCE_URL)
+        assert resolved.creator == resolved.license_name == resolved.license_url == ""
+        assert resolved.thumbnail_url == COMMONS_ORIGINAL_URL
+
+    @patch("rundatanet.runes.image_resolvers.fetch_url_bytes")
+    def test_handles_missing_files_api_errors_and_invalid_json(self, mocked_fetch):
+        for payload in (b'{"query":{"pages":[{"ns":6,"missing":true}]}}',
+                        b'{"error":{"code":"ratelimited"}}', b'not json', b'[]'):
+            mocked_fetch.return_value = payload
+            with self.assertRaises(ImageResolveError):
+                resolve_image_link(COMMONS_SOURCE_URL)
+
+    @patch("rundatanet.runes.image_resolvers.fetch_url_bytes")
+    def test_rejects_non_image_originals_and_external_download_urls(self, mocked_fetch):
+        for field, value in (("mime", "application/pdf"),
+                             ("url", "https://example.org/image.jpg"),
+                             ("url", "https://upload.wikimedia.org/wikipedia/en/a/a0/image.jpg")):
+            document = commons_document()
+            document["query"]["pages"][0]["imageinfo"][0][field] = value
+            mocked_fetch.return_value = json.dumps(document).encode()
+            with self.assertRaises(ImageResolveError):
+                resolve_image_link(COMMONS_SOURCE_URL)
 
 
 class TestShmImageResolver(SimpleTestCase):
@@ -418,6 +509,28 @@ class TestResolveImageDownloadView(TestCase):
             assert metadata[0]["creator"] == "Huber, John-Björn"
             assert metadata[0]["license_name"] == "CC BY 4.0"
         mocked_image.assert_called_once_with(SHM_DOWNLOAD_URL)
+
+    @patch("rundatanet.runes.views.fetch_url_bytes", return_value=b"commons-original-image")
+    @patch("rundatanet.runes.image_resolvers.fetch_url_bytes")
+    def test_export_commons_zip_includes_original_license_and_artist(self, mocked_metadata, mocked_image):
+        mocked_metadata.return_value = json.dumps(commons_document()).encode()
+        self.image.link_url = COMMONS_SOURCE_URL
+        self.image.direct_url = COMMONS_THUMBNAIL_URL
+        self.image.save(using="runes_db")
+        response = self.client.post(
+            reverse("runes:export_raa_images_zip"),
+            data=json.dumps({"inscriptions": [{"signature": "Öl 26", "image_ids": [self.image.id]}]}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        with zipfile.ZipFile(BytesIO(response.content)) as archive:
+            assert archive.read("images/0001-ol-26.jpg") == b"commons-original-image"
+            rows = list(csv.DictReader(StringIO(archive.read("metadata.csv").decode("utf-8-sig"))))
+            assert rows[0]["provider"] == "Wikimedia Commons"
+            assert rows[0]["creator"] == "Anna & Erik"
+            assert rows[0]["license_name"] == "CC BY-SA 4.0"
+            assert rows[0]["download_url"] == COMMONS_ORIGINAL_URL
+        mocked_image.assert_called_once_with(COMMONS_ORIGINAL_URL)
 
     @patch("rundatanet.runes.image_resolvers.urlopen", return_value=FakeUrlopenResponse())
     def test_export_raa_images_zip_returns_archive_with_metadata(self, mocked_urlopen):

@@ -1,0 +1,32 @@
+{
+  "raw_candidate_rows": 2610,
+  "raw_100_rows": 2466,
+  "raw_90_99_rows": 144,
+  "matched_signature_labels": 1404,
+  "canonical_signa": 1316,
+  "with_images": 1254,
+  "without_images": 62,
+  "distinct_canonical_signum_image_pairs": 2460,
+  "unique_score_groups": {
+    "100": {
+      "signa": 1208,
+      "without_images": 48
+    },
+    "90-99": {
+      "signa": 108,
+      "without_images": 14
+    }
+  },
+  "without_images_by_prefix": {
+    "G": 29,
+    "Hs": 1,
+    "M": 1,
+    "N": 3,
+    "Sm": 1,
+    "Sö": 9,
+    "U": 11,
+    "Vg": 3,
+    "Ög": 4
+  },
+  "database_image_rows": 31036
+}

@@ -2753,6 +2753,7 @@ function isRaaImageLink(link) {
       || /^https?:\/\/(?:www\.)?arild-hauge\.com\//i.test(String(link.indirect || ''))
       || /^https?:\/\/(?:www\.)?arild-hauge\.com\//i.test(String(link.direct || ''))
       || /^https?:\/\/samlingar\.shm\.se\/(?:object|media)\/[0-9a-f-]+(?:[/?#]|$)/i.test(String(link.indirect || ''))
+      || /^https?:\/\/commons\.wikimedia\.org\/(?:wiki\/File:|w\/index\.php\?)/i.test(String(link.indirect || ''))
     )
   );
 }
@@ -4214,7 +4215,8 @@ document.addEventListener('DOMContentLoaded', function() {
   };
   initSqlJs(sqlConfig).then(function(SQL) {
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', "{% static 'runes/runes.sqlite3' %}?v=20261017-runes-graphtypes", true);
+    xhr.open('GET', "{% static 'runes/runes.sqlite3' %}?v=20261025-commons-reviewed-import", true);
+    xhr.setRequestHeader('Cache-Control', 'no-cache');
     xhr.responseType = 'arraybuffer';
     xhr.addEventListener("load", function() {
       console.log('we got sql data from server');

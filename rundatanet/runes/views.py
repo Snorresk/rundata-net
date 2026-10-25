@@ -193,7 +193,7 @@ def export_raa_images_zip(request):
         archive.writestr(
             "README.txt",
             "Images exported from Rundata-net search results.\n\n"
-            "This image export version supports RAÄ, Sörmlands museum, Digitalt museum, Runer KU, Arild Hauge, and SHM image sources.\n"
+            "This image export version supports RAÄ, Sörmlands museum, Digitalt museum, Runer KU, Arild Hauge, SHM, and Wikimedia Commons image sources.\n"
             "Users must check image licences and reuse conditions with the original source before publishing or sharing downloaded images.\n",
         )
 

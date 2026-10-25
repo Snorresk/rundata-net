@@ -1,0 +1,70 @@
+# Signum med Commons-förslag under 90 som saknar bildlänkar
+
+Kontroll mot lokal DB den 24 oktober 2026. 64 huvudsignum. Poängen kommer från Commons-underlaget den 10 juli 2026.
+
+| Signum | Högsta poäng under 90 | Antal Commons-bilder under 90 | Bildlänkar i DB | Har även förslag med 90–100 | Exempel |
+|---|---:|---:|---:|---|---|
+| DR ATA322-1227-2007 | 68 | 4 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Runinskriften_i_Hardeberga_kyrka,_detalj_2.JPG) |
+| G 1 | 55 | 10 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Coins_13_-_24_obverse_(FindID_385459).jpg) |
+| G 3 | 55 | 10 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Coins_1_-12_reverse_(FindID_385459).jpg) |
+| G 4 | 55 | 9 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Coins_1_-_12_obverse_(FindID_385459).jpg) |
+| G 11 | 85 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Norway_Einangsteinen_1995-05-G-11-150.jpg) |
+| G 12 | 85 | 2 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Norway_Einangsteinen_1995-05-G-12-150.jpg) |
+| G 28 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Fide_kyrka_-_KMB_-_16000200017692.jpg) |
+| G 50 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Eke_kyrka_-_KMB_-_16000200016283.jpg) |
+| G 66 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Sproge_kyrka_-_KMB_-_16000200026835.jpg) |
+| G 67 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Sproge_kyrka_-_KMB_-_16000200026835.jpg) |
+| G 75 | 58 | 2 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Levide_kyrka_-_KMB_-_16000200023433.jpg) |
+| G 76 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Levide_kyrka_-_KMB_-_16000200023440.jpg) |
+| G 81 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Linde_kyrka_-_KMB_-_16000200023692.jpg) |
+| G 158 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Gothems_kyrka_-_KMB_-_16000200020287.jpg) |
+| G 213 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Bj%C3%B6rke_kyrka_-_KMB_-_16000200014582.jpg) |
+| G 241 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Hejnums_kyrka_-_KMB_-_16000200021857.jpg) |
+| G 306 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Hangvars_kyrka_-_KMB_-_16000200021181.jpg) |
+| G 307 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Hangvars_kyrka_-_KMB_-_16000200021179.jpg) |
+| G 308 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Hangvars_kyrka_-_KMB_-_16000200021178.jpg) |
+| G 325 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Runsten_Bunge_museum_Gotland.jpg) |
+| G 374 | 58 | 1 | 0 | Ja | [Commons](https://commons.wikimedia.org/wiki/File:Sproge_kyrka_-_KMB_-_16000300040909.jpg) |
+| G 394 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Ekeby_kyrka_-_KMB_-_16000300040846.jpg) |
+| Gs 16 | 88 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:G%C3%A4striklands_runinskrifter_16_b.png) |
+| J Fv1959;99 | 58 | 2 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Runristning_Hack%C3%A5s_kyrka.jpg) |
+| N 67 | 45 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:John.wolleyn_riimukivi.jpg) |
+| N 243 | 50 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Drawing_of_Helland_II_in_1902_by_Tor_Helliesen.jpg) |
+| N 245 | 50 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Drawing_of_Helland_II_in_1902_by_Tor_Helliesen.jpg) |
+| N 251 | 43 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Runesteinen_fra_Mariakirken.JPG) |
+| N 263 | 45 | 1 | 0 | Ja | [Commons](https://commons.wikimedia.org/wiki/File:The_arts_in_early_England_(1903)_(14784365222).jpg) |
+| N 266 | 45 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Avaldsnes_Marias_syn%C3%A5l.jpg) |
+| N 267 | 45 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Avaldsnes_Marias_syn%C3%A5l.jpg) |
+| N 285 | 45 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:The_arts_in_early_England_(1903)_(14804572513).jpg) |
+| N 462 | 53 | 7 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Skrivarberget_Tingstua_(1823)_(9524238852).jpg) |
+| N 559 | 45 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:The_arts_in_early_England_(1903)_(14782421474).jpg) |
+| N A97 | 43 | 5 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Gomolkyrkja.runor1.jpg) |
+| N A98 | 43 | 5 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Gomolkyrkja.runor1.jpg) |
+| N A99 | 43 | 5 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Gomolkyrkja.runor1.jpg) |
+| N A101 | 43 | 5 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Gomolkyrkja.runor1.jpg) |
+| N A102 | 43 | 5 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Gomolkyrkja.runor1.jpg) |
+| N A105 | 43 | 5 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Gomolkyrkja.runor1.jpg) |
+| N A106 | 43 | 5 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Gomolkyrkja.runor1.jpg) |
+| N KJ57 | 58 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Elgesem_runestone.jpg) |
+| Sm 20 | 85 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Bautil_1007_-_Sm_20.png) |
+| Sö 4 | 85 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Bautil_1145_-_S%C3%B6_4.png) |
+| Sö 5 | 85 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Bautil_1148_-_S%C3%B6_5.png) |
+| Sö 87 | 85 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:S%C3%B6_87.jpg) |
+| Sö 310 | 85 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Bautil_830_-_S%C3%B6_310.png) |
+| Sö Sb1965;22 | 43 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Runsten_K%C3%B6lsta.jpg) |
+| U 281B | 53 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:U_281.jpg) |
+| U 830 | 55 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Fr%C3%B6s%C3%B6stenen.jpg) |
+| U ATA322-4042-2009 | 53 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Upplands_runinskrifter_Fv2009_-.jpg) |
+| U ATA6263/56 | 70 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Skederids_kyrka_int16.jpg) |
+| U Fv1974;212 | 85 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:U_Fv1974;212.jpg) |
+| U Fv2009;312 | 43 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Upplands_runinskrifter_Fv2009;312.jpg) |
+| Ög 92 | 85 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:%C3%96g92.jpg) |
+| Ög 215 | 85 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Bautil_1043_-_%C3%96g_215.png) |
+| Ög Fv1975;174 | 43 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Harstad_%C3%B6dekyrkog%C3%A5rd_-_KMB_-_16001000164024.jpg) |
+| Ög N262A | 43 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:OstergotlandN262A.JPG) |
+| Ög N262B | 43 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:OstergotlandN262A.JPG) |
+| Ög N262C | 43 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:OstergotlandN262A.JPG) |
+| Ög N263 | 43 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:OstergotlandN263.JPG) |
+| Ög N272 | 45 | 2 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:OstergotlandN272.JPG) |
+| Ög SvK43L3;175 | 88 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:Ostergotlandr.JPG) |
+| Öl Köping49 | 68 | 1 | 0 | Nej | [Commons](https://commons.wikimedia.org/wiki/File:%C3%96l_K%C3%B6pingsvik_kyrka_(flera_objekt)_-_KMB_-_16000300014042.jpg) |

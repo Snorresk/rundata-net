@@ -5,7 +5,7 @@ from html import unescape
 from html.parser import HTMLParser
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import quote, unquote, urljoin, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlencode, urljoin, urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -87,6 +87,8 @@ def resolve_image_link(link_url: str, direct_url: str = "", timeout: int = 15) -
         return resolve_arild_hauge_image(link_url, direct_url)
     if is_shm_url(link_url):
         return resolve_shm_image(link_url, direct_url, timeout=timeout)
+    if extract_commons_file_title(link_url):
+        return resolve_commons_image(link_url, timeout=timeout)
     raise ImageResolveError("No resolver is available for this image source.")
 
 
@@ -97,8 +99,86 @@ def is_supported_image_source(*urls: str) -> bool:
             is_sormlandsmuseum_url(url) or is_digitaltmuseum_url(url)
             or is_runer_ku_url(url) or is_arild_hauge_url(url)
             or is_shm_url(url)
+            or bool(extract_commons_file_title(url))
             for url in urls
         )
+    )
+
+
+def extract_commons_file_title(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or parsed.hostname != "commons.wikimedia.org":
+        return ""
+    if parsed.path.startswith("/wiki/"):
+        title = unquote(parsed.path[len("/wiki/"):])
+    elif parsed.path == "/w/index.php":
+        title = parse_qs(parsed.query).get("title", [""])[0]
+    else:
+        return ""
+    if not title.startswith("File:") or not title[5:].strip() or re.search(r"[|#\[\]{}\r\n]", title):
+        return ""
+    return title.replace("_", " ")
+
+
+def _commons_image_url(url: str, thumbnail: bool = False) -> str:
+    parsed = urlparse(url)
+    hosts = {"upload.wikimedia.org", "thumb.wikimedia.org"} if thumbnail else {"upload.wikimedia.org"}
+    if parsed.scheme not in {"https", "http"} or parsed.hostname not in hosts or not parsed.path.startswith("/wikipedia/commons/"):
+        return ""
+    return quote(url, safe=":/?&=%+#")
+
+
+def _plain_metadata(value: str) -> str:
+    return " ".join(unescape(re.sub(r"<[^>]*>", " ", value)).split())
+
+
+def resolve_commons_image(link_url: str, timeout: int = 15) -> ResolvedImage:
+    title = extract_commons_file_title(link_url)
+    params = urlencode({
+        "action": "query", "format": "json", "formatversion": 2,
+        "prop": "imageinfo", "titles": title, "redirects": 1,
+        "iiprop": "url|size|mime|extmetadata", "iiurlwidth": 320,
+        "iiextmetadatafilter": "Artist|Attribution|LicenseShortName|LicenseUrl|UsageTerms",
+        "maxlag": 5,
+    })
+    document = _fetch_json(f"https://commons.wikimedia.org/w/api.php?{params}", timeout=timeout)
+    if not isinstance(document, dict) or document.get("error"):
+        raise ImageResolveError("Wikimedia Commons image metadata is temporarily unavailable.")
+    pages = (document.get("query") or {}).get("pages") or []
+    if isinstance(pages, dict):
+        pages = list(pages.values())
+    if not isinstance(pages, list) or len(pages) != 1 or not isinstance(pages[0], dict):
+        raise ImageResolveError("No Wikimedia Commons image resource was found.")
+    if "missing" in pages[0] or pages[0].get("ns") != 6 or not pages[0].get("imageinfo"):
+        raise ImageResolveError("No Wikimedia Commons image resource was found.")
+    page = pages[0]
+    image = page["imageinfo"][0]
+    media_type = image.get("mime", "")
+    download_url = _commons_image_url(image.get("url", ""))
+    if not download_url or not media_type.startswith("image/"):
+        raise ImageResolveError("No downloadable Wikimedia Commons image resource was found.")
+    metadata = image.get("extmetadata") or {}
+
+    def value(key):
+        return _plain_metadata(str((metadata.get(key) or {}).get("value") or ""))
+
+    license_url = value("LicenseUrl")
+    if license_url.startswith("//"):
+        license_url = "https:" + license_url
+    if urlparse(license_url).scheme not in {"http", "https"}:
+        license_url = ""
+    size = image.get("size")
+    return ResolvedImage(
+        provider="Wikimedia Commons",
+        source_url=link_url,
+        download_url=download_url,
+        thumbnail_url=_commons_image_url(image.get("thumburl", ""), thumbnail=True) or download_url,
+        file_name=(page.get("title") or title).removeprefix("File:"),
+        media_type=media_type,
+        file_size=size if isinstance(size, int) and size >= 0 else None,
+        license_url=license_url,
+        license_name=value("LicenseShortName") or value("UsageTerms"),
+        creator=value("Artist") or value("Attribution"),
     )
 
 
@@ -403,7 +483,7 @@ def _fetch_json(url: str, timeout: int = 15) -> dict[str, Any]:
 
 
 def fetch_url_bytes(url: str, timeout: int = 30) -> bytes:
-    request = Request(url, headers={"User-Agent": "Rundata-net image export"})
+    request = Request(url, headers={"User-Agent": "Rundata-net image export (https://rundata.info/)"})
     ssl_context = ssl.create_default_context(cafile=certifi.where() if certifi else None)
     try:
         with urlopen(request, timeout=timeout, context=ssl_context) as response:

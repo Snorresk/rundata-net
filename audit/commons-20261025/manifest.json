@@ -1,0 +1,462 @@
+[
+  {
+    "path": "HANDOFF.md",
+    "bytes": 7035,
+    "sha256": "27dae0d2eff4f3d9fdf42f2756f7aadd9c50a948cbf38a2d219ff5e9e74670aa"
+  },
+  {
+    "path": "commons-api-metadata-20261025.tar.gz",
+    "bytes": 766482,
+    "sha256": "a24661252f4cb918b2827e61cf4849115f1cca0414e68e37a5bbdddcbfaadacf"
+  },
+  {
+    "path": "commons-coverage-20261024/README.md",
+    "bytes": 2747,
+    "sha256": "e6ee7b96f9eb3b3094ffc5cb688d7074140291b4bdbe53c9976c065567bbe35e"
+  },
+  {
+    "path": "commons-coverage-20261024/alla-signum-90-100.csv",
+    "bytes": 145842,
+    "sha256": "88a6ea4ebcbfc1b88dc9a1eb5dbc33ade4bd4fce0bf5e2a7ad167dc2223c586a"
+  },
+  {
+    "path": "commons-coverage-20261024/alla-signum-90-100.md",
+    "bytes": 146989,
+    "sha256": "f8e64b4ed44edb3f85a834d894d9274bf4d75595e86e75e5caf5e6ea62314164"
+  },
+  {
+    "path": "commons-coverage-20261024/alla-signum-under-90.csv",
+    "bytes": 140978,
+    "sha256": "1fc468499c89a9aa710ec5348784066c08d01b9e8e2c62ae304b34e1f5722a48"
+  },
+  {
+    "path": "commons-coverage-20261024/alla-signum-under-90.md",
+    "bytes": 149114,
+    "sha256": "5f94a2978f9af4716794d3848719a0ac2edf5d44af3101d6d6675df671138065"
+  },
+  {
+    "path": "commons-coverage-20261024/commons-kandidater-90-100.csv",
+    "bytes": 787894,
+    "sha256": "ff50ed3dd026f14432ead381c81727b61bed409a90f82610930e418b3e946f6c"
+  },
+  {
+    "path": "commons-coverage-20261024/commons-kandidater-under-90.csv",
+    "bytes": 1784091,
+    "sha256": "eb79eecabe1d5e08c0d280392d955afe0205cfcb20f5fc83c4c4d222a82a5c98"
+  },
+  {
+    "path": "commons-coverage-20261024/enbart-under-90-utan-bildlankar.csv",
+    "bytes": 6980,
+    "sha256": "036041bbc1a13099b5fc36b29101d48ce727d15949fcb73407f97c7a21710c0a"
+  },
+  {
+    "path": "commons-coverage-20261024/enbart-under-90-utan-bildlankar.md",
+    "bytes": 7619,
+    "sha256": "a348672bb67b5159cd08b1a8ef55940833690c04b17d82d81283cb2f182a2530"
+  },
+  {
+    "path": "commons-coverage-20261024/signum-under-90-utan-bildlankar.csv",
+    "bytes": 7219,
+    "sha256": "72651616e74f2a1e86a9370e890420b87ca865a875e57976700fd8a363684a36"
+  },
+  {
+    "path": "commons-coverage-20261024/signum-under-90-utan-bildlankar.md",
+    "bytes": 7871,
+    "sha256": "dfb40824dc368f38585e1dbbfe97f013fe03b82a2cfc6768f11b5b11b9ddb3e2"
+  },
+  {
+    "path": "commons-coverage-20261024/signum-utan-bildlankar.csv",
+    "bytes": 7053,
+    "sha256": "bc2e53764d2e6e8433b02ea0a436b48ca17eb624ee072f3de816b3b01b496a00"
+  },
+  {
+    "path": "commons-coverage-20261024/signum-utan-bildlankar.md",
+    "bytes": 7228,
+    "sha256": "633d43a0d9e67123ba9b18f8cad962f5edd7b2c69a24cfe226576991d0a6b58c"
+  },
+  {
+    "path": "commons-coverage-20261024/summary-under-90.json",
+    "bytes": 300,
+    "sha256": "95d9114c936de9fd812a1ba1bacbbd24de6287fe3506d4eef89d89e6c6d39e0a"
+  },
+  {
+    "path": "commons-coverage-20261024/summary.json",
+    "bytes": 594,
+    "sha256": "b4370a6797f0487e54e440f9cb98d43af268d510818084f993e688226581d3d2"
+  },
+  {
+    "path": "commons-existing-source-review-20261025/.gitignore",
+    "bytes": 7,
+    "sha256": "695426e943174af72f2a2391c3f48ed02c52873628e79be9fbf1a117f9ab3d9d"
+  },
+  {
+    "path": "commons-existing-source-review-20261025/README.md",
+    "bytes": 1769,
+    "sha256": "8a1e12ea5927254919d6c7992a996437f194fc89cbe7da0c78ae2cb6a7731d05"
+  },
+  {
+    "path": "commons-existing-source-review-20261025/all-candidates.csv",
+    "bytes": 3714010,
+    "sha256": "d02c3c5820be18a015607f2c62566d06c5d4a8ca5572fa39bb1d911629f1e0e7"
+  },
+  {
+    "path": "commons-existing-source-review-20261025/excluded.csv",
+    "bytes": 2728179,
+    "sha256": "88c6576658db00ea0571bce8f5a6812321bc263fc1844a3c6b3cf7d14913619a"
+  },
+  {
+    "path": "commons-existing-source-review-20261025/needs-review.csv",
+    "bytes": 201,
+    "sha256": "53e5012080f30021b4830c9e7d122bf38a7cce7bb99f85e2f8b0127ff42a648b"
+  },
+  {
+    "path": "commons-existing-source-review-20261025/retained-candidates.csv",
+    "bytes": 986032,
+    "sha256": "aa83c8f62a223abd81172d0f21ae809b87392b06c5ab7b917c97fa368302afd0"
+  },
+  {
+    "path": "commons-existing-source-review-20261025/summary.json",
+    "bytes": 440,
+    "sha256": "b9e62798eb2e13c9aca618f59c5c1303cf236b57bb53bce2c0987500d3f6d135"
+  },
+  {
+    "path": "commons-import-20261025/.gitignore",
+    "bytes": 18,
+    "sha256": "05eb390bf0027a95c6b78b82fe1b2ea812ac281585b70e0757dc317a74ac92be"
+  },
+  {
+    "path": "commons-import-20261025/README.md",
+    "bytes": 3476,
+    "sha256": "5cf5cd22ddbb720867c644232231452e4702af13b9cf558febdd0323f94d8b54"
+  },
+  {
+    "path": "commons-import-20261025/errors.csv",
+    "bytes": 42,
+    "sha256": "80e9996628f7966a8fb8914873883254a44266d091617f40cb53c8205cacbbcb"
+  },
+  {
+    "path": "commons-import-20261025/inserted.csv",
+    "bytes": 100152,
+    "sha256": "5243a07eb477bd641eb6d8c524dfb562b5992258885f62efdd8c48dcde95f7ff"
+  },
+  {
+    "path": "commons-import-20261025/per-signum.csv",
+    "bytes": 1441,
+    "sha256": "a0fdf36994130952ed8257993942453453f796f47c603218d7c25d1bb33624f4"
+  },
+  {
+    "path": "commons-import-20261025/proposed.csv",
+    "bytes": 99645,
+    "sha256": "a0d9163f7009a74c9033fe2ab5052663bebf64e4d7a81c56fcb8672cdd9652aa"
+  },
+  {
+    "path": "commons-import-20261025/summary.json",
+    "bytes": 193,
+    "sha256": "3d7285e6ebd5f7808f3babe9f93959836477df756e2eebb1a0dd1b9472123cc7"
+  },
+  {
+    "path": "commons-import-20261025/targets-before.csv",
+    "bytes": 7050,
+    "sha256": "172f6572be655975f50ac42acb3b27e5d604ee2de0b124fc8967179d30ac8508"
+  },
+  {
+    "path": "commons-reviewed-import-20261025/.gitignore",
+    "bytes": 10,
+    "sha256": "e13ac9d4d71d2c4ac83ad89d773f0ce818c8c77bbeed086daaa3af1aa36348c8"
+  },
+  {
+    "path": "commons-reviewed-import-20261025/README.md",
+    "bytes": 1211,
+    "sha256": "6af0d9cc6ea08623d4ee2107c476c392a8c6f3004d390b4ac497a9ccff282482"
+  },
+  {
+    "path": "commons-reviewed-import-20261025/already-present.csv",
+    "bytes": 201,
+    "sha256": "53e5012080f30021b4830c9e7d122bf38a7cce7bb99f85e2f8b0127ff42a648b"
+  },
+  {
+    "path": "commons-reviewed-import-20261025/inserted.csv",
+    "bytes": 1411462,
+    "sha256": "a4ead891fadbb8a962a2bad601ebc76be5409695dfa5abf3864115281ed5aa79"
+  },
+  {
+    "path": "commons-reviewed-import-20261025/summary.json",
+    "bytes": 186,
+    "sha256": "2dcd74072887de31e169e688e238d404bc27b7eb7554a587ea7e4130a91b4fa8"
+  },
+  {
+    "path": "scripts/audit_commons_existing_sources.py",
+    "bytes": 9235,
+    "sha256": "040922b368f533097db34c596354d7e0b557d3093239ad1704ae03ba74b104bc"
+  },
+  {
+    "path": "scripts/import_commons_missing_images.py",
+    "bytes": 8658,
+    "sha256": "ceeac9bcb6553059cc0f7bfc0571afeafe350abe394109100bc83ed367fabbc3"
+  },
+  {
+    "path": "scripts/import_commons_reviewed_images.py",
+    "bytes": 4845,
+    "sha256": "114a3d4fa140ed1458535d4dfcd247c208289853456f44b3ba4c8980cca3bf40"
+  },
+  {
+    "path": "scripts/test_import_commons_missing_images.py",
+    "bytes": 715,
+    "sha256": "a4e94305337c00082b3368a2fb9b44e53c93f241a17d625e5aa5e8eefbfc5c60"
+  },
+  {
+    "path": "source-20260710/HANDOFF_WIKIMEDIA_COMMONS_LINKS.md",
+    "bytes": 4193,
+    "sha256": "7b92c0aebb0d7dedbe0a9b38be0c8d79756f4601cc9b2fdbc81edd4793618dab"
+  },
+  {
+    "path": "source-20260710/export_wikimedia_commons_links.py",
+    "bytes": 26476,
+    "sha256": "febabfaf1a96460089595d269fb4275c1e94a366e2b734f46a829350eeb6cc2a"
+  },
+  {
+    "path": "source-20260710/filter_wikimedia_commons_review.py",
+    "bytes": 6376,
+    "sha256": "fca584f32f3bd928960d24df35339bc522fb7df4ae49e779db3e6efab2a584d6"
+  },
+  {
+    "path": "source-20260710/rundata_commons_angermanland_filtered.csv",
+    "bytes": 222,
+    "sha256": "e010360ce9301b20496d48f79e740a08f6bd9368d99b938a84e5728708ff88d4"
+  },
+  {
+    "path": "source-20260710/rundata_commons_angermanland_review.csv",
+    "bytes": 210,
+    "sha256": "eb6cdcb5de844881bcce104c3fd90188d3783b9cef3abb9509fb40e7a5a9143b"
+  },
+  {
+    "path": "source-20260710/rundata_commons_bohuslan_filtered.csv",
+    "bytes": 15707,
+    "sha256": "54874b35be5b4836d42a3be64926d4533d2b60d699210317b8c7a8865b24f08d"
+  },
+  {
+    "path": "source-20260710/rundata_commons_bohuslan_review.csv",
+    "bytes": 16040,
+    "sha256": "cf33f4b6b62cd60839c07fd3f3557c172e0a2a3f0be4334d1e57064d24e87950"
+  },
+  {
+    "path": "source-20260710/rundata_commons_dalarna_filtered.csv",
+    "bytes": 222,
+    "sha256": "e010360ce9301b20496d48f79e740a08f6bd9368d99b938a84e5728708ff88d4"
+  },
+  {
+    "path": "source-20260710/rundata_commons_dalarna_review.csv",
+    "bytes": 210,
+    "sha256": "eb6cdcb5de844881bcce104c3fd90188d3783b9cef3abb9509fb40e7a5a9143b"
+  },
+  {
+    "path": "source-20260710/rundata_commons_dalsland_filtered.csv",
+    "bytes": 222,
+    "sha256": "e010360ce9301b20496d48f79e740a08f6bd9368d99b938a84e5728708ff88d4"
+  },
+  {
+    "path": "source-20260710/rundata_commons_dalsland_review.csv",
+    "bytes": 210,
+    "sha256": "eb6cdcb5de844881bcce104c3fd90188d3783b9cef3abb9509fb40e7a5a9143b"
+  },
+  {
+    "path": "source-20260710/rundata_commons_denmark_dk_filtered.csv",
+    "bytes": 313002,
+    "sha256": "ba0a9737cbfd97cd41bf2cebe0407a0fee5e43045121ad1809f85c9993d3decd"
+  },
+  {
+    "path": "source-20260710/rundata_commons_denmark_dk_review.csv",
+    "bytes": 379065,
+    "sha256": "428d2ac30316af00e34861e64c7c5cd00d80bd7f17f03978162ecf8bc7fba01d"
+  },
+  {
+    "path": "source-20260710/rundata_commons_denmark_dr_filtered.csv",
+    "bytes": 334368,
+    "sha256": "4eb15a866e5b1f7a578322b68b3b8ecfb6be68266650894bed0a874e00ccbe93"
+  },
+  {
+    "path": "source-20260710/rundata_commons_denmark_dr_review.csv",
+    "bytes": 408765,
+    "sha256": "3256c27df0bc4b3b94dc03483abd4cda398596cd919501a1f7925fefa2894f6b"
+  },
+  {
+    "path": "source-20260710/rundata_commons_filtered_summary.csv",
+    "bytes": 2427,
+    "sha256": "1c411d9102b5c6230137e598147de74437d2c7fe87367a8f416455b9210442e4"
+  },
+  {
+    "path": "source-20260710/rundata_commons_gastrikland_filtered.csv",
+    "bytes": 27713,
+    "sha256": "5d8f8514caed630874e1f44ac2127f58c6e6e8a2f0654ef09acfe7b52143af9c"
+  },
+  {
+    "path": "source-20260710/rundata_commons_gastrikland_review.csv",
+    "bytes": 26242,
+    "sha256": "06e6db7b59b2ad705b1a5475cae9c6b7974a3f1e376aabf880650b1072cf7149"
+  },
+  {
+    "path": "source-20260710/rundata_commons_gotland_filtered.csv",
+    "bytes": 185199,
+    "sha256": "eaf7546531577c0c21aa0953203e1d86184ababa88ee6d18c65e3e86d9d5f9b8"
+  },
+  {
+    "path": "source-20260710/rundata_commons_gotland_review.csv",
+    "bytes": 213013,
+    "sha256": "d76dd1941dab481de0801d88c2ba56343459e433604586588c3fbfe1b48ff346"
+  },
+  {
+    "path": "source-20260710/rundata_commons_halsingland_filtered.csv",
+    "bytes": 22074,
+    "sha256": "3605b6604df4ab633c262a3abe7c0aeba7712c8826d43c800b5444c258901ad7"
+  },
+  {
+    "path": "source-20260710/rundata_commons_halsingland_review.csv",
+    "bytes": 22021,
+    "sha256": "390b31dc2585683211e090939d3df60163eb2788f32d5757c6c4b98b4c51cd46"
+  },
+  {
+    "path": "source-20260710/rundata_commons_harjedalen_filtered.csv",
+    "bytes": 222,
+    "sha256": "e010360ce9301b20496d48f79e740a08f6bd9368d99b938a84e5728708ff88d4"
+  },
+  {
+    "path": "source-20260710/rundata_commons_harjedalen_review.csv",
+    "bytes": 210,
+    "sha256": "eb6cdcb5de844881bcce104c3fd90188d3783b9cef3abb9509fb40e7a5a9143b"
+  },
+  {
+    "path": "source-20260710/rundata_commons_jamtland_filtered.csv",
+    "bytes": 11180,
+    "sha256": "c6d9483f3b4122a81ad64cf8aebd8c305f49e3538aa1bb58737d7c1472ff7a2c"
+  },
+  {
+    "path": "source-20260710/rundata_commons_jamtland_review.csv",
+    "bytes": 20761,
+    "sha256": "cb62bd2a4f6aa9e4dec6f2ef92bf848afad9cd73e2a13c476af9ce58dd4bd881"
+  },
+  {
+    "path": "source-20260710/rundata_commons_lappland_filtered.csv",
+    "bytes": 222,
+    "sha256": "e010360ce9301b20496d48f79e740a08f6bd9368d99b938a84e5728708ff88d4"
+  },
+  {
+    "path": "source-20260710/rundata_commons_lappland_review.csv",
+    "bytes": 210,
+    "sha256": "eb6cdcb5de844881bcce104c3fd90188d3783b9cef3abb9509fb40e7a5a9143b"
+  },
+  {
+    "path": "source-20260710/rundata_commons_manual_check.csv",
+    "bytes": 419872,
+    "sha256": "4e004e928f5258b4af91cfbf47b37b361c5f359ece47eda78a4e2c37f7c8a079"
+  },
+  {
+    "path": "source-20260710/rundata_commons_medelpad_filtered.csv",
+    "bytes": 16931,
+    "sha256": "441dbb5b0a1d44ecbbd29a7861755fd89c2d3e4f0ee24e8c3c626304a52471da"
+  },
+  {
+    "path": "source-20260710/rundata_commons_medelpad_review.csv",
+    "bytes": 24415,
+    "sha256": "5f99aeed50d654c125e6be9d2bf200d42dd97df34c6c201b482a12a516de6f56"
+  },
+  {
+    "path": "source-20260710/rundata_commons_narke_filtered.csv",
+    "bytes": 9412,
+    "sha256": "8fae76a509f39ad6a718ee422d4be91e5a68d14c8730ec3f8864cd3a7a65d8d0"
+  },
+  {
+    "path": "source-20260710/rundata_commons_narke_review.csv",
+    "bytes": 9380,
+    "sha256": "4c6a7b54cb35e3dbfae269c32f684817504e1775de23aa559e649c5c21b6167e"
+  },
+  {
+    "path": "source-20260710/rundata_commons_norway_n_filtered.csv",
+    "bytes": 6082365,
+    "sha256": "8c88c91476b924d718e91e4a707c38bd02a0caed2e9edea2fb2b41967de0b14c"
+  },
+  {
+    "path": "source-20260710/rundata_commons_norway_n_review.csv",
+    "bytes": 6072746,
+    "sha256": "b86aa4b41f26cf6311018cef4ddc15fd9e9099c44b32ba15c049cf6cef45bb25"
+  },
+  {
+    "path": "source-20260710/rundata_commons_oland_filtered.csv",
+    "bytes": 85968,
+    "sha256": "1f047dc78aba1a36e70dab7eab7c2a6b33a35b3a4405cccbb931502f786cf676"
+  },
+  {
+    "path": "source-20260710/rundata_commons_oland_review.csv",
+    "bytes": 84326,
+    "sha256": "379769f3f0ee3af8eaa27d3f5cd0ba14f634988c5c78bd576edb40e5e83039f6"
+  },
+  {
+    "path": "source-20260710/rundata_commons_ostergotland_filtered.csv",
+    "bytes": 203586,
+    "sha256": "ed1a042717e116f0900fa824cc791bcd303bd8c5a2f5ccb3ce42340ecde7f03e"
+  },
+  {
+    "path": "source-20260710/rundata_commons_ostergotland_review.csv",
+    "bytes": 217492,
+    "sha256": "6f4db41267ec14859c60b415799019d914ac26f1947e0558a885f273f36316ea"
+  },
+  {
+    "path": "source-20260710/rundata_commons_smaland_filtered.csv",
+    "bytes": 98694,
+    "sha256": "44739586c1c0b8f22e091b99f43cb43b2d3f24ecf67da01f478ececfcd15e656"
+  },
+  {
+    "path": "source-20260710/rundata_commons_smaland_review.csv",
+    "bytes": 102533,
+    "sha256": "dce41ae30ec5d7a261122465725dae4e5a7f0365859582c283ce848ade02db04"
+  },
+  {
+    "path": "source-20260710/rundata_commons_sodermanland_filtered.csv",
+    "bytes": 639384,
+    "sha256": "70a3ccc1acb1001ed9ea43ff8066cfe00114b699bbb48d3df6d0eef2bb326ec0"
+  },
+  {
+    "path": "source-20260710/rundata_commons_sodermanland_review.csv",
+    "bytes": 713607,
+    "sha256": "112f29a794b497d3400f954341165ca02ef08ac2969b5519ab891afbb2ca758f"
+  },
+  {
+    "path": "source-20260710/rundata_commons_uppland_filtered.csv",
+    "bytes": 982422,
+    "sha256": "c761b9366c0a0d21a53b06f0e802835b6be75e04dd8fe52cae4cad7966e3c2c6"
+  },
+  {
+    "path": "source-20260710/rundata_commons_uppland_review.csv",
+    "bytes": 1046851,
+    "sha256": "0ea4684c6a3d60937fb205f7ffb4d5bed84985be8b8d4755dbbde356c76b1fdf"
+  },
+  {
+    "path": "source-20260710/rundata_commons_varmland_filtered.csv",
+    "bytes": 3111,
+    "sha256": "4d427bf981a0bdc6132a7bd43cc174ae57cffcc6ffa086f06179bfadde167a3c"
+  },
+  {
+    "path": "source-20260710/rundata_commons_varmland_review.csv",
+    "bytes": 2784,
+    "sha256": "ca2b2dbb6a603e74314ec9cac8dec5ab04a7a46c821e8f1f5777b1c9a9cf9b8e"
+  },
+  {
+    "path": "source-20260710/rundata_commons_vastergotland_filtered.csv",
+    "bytes": 234835,
+    "sha256": "f06241c4f7de81100672f8fbc08b8d74b6822a0e5de9bb5064d83e56ad272fd7"
+  },
+  {
+    "path": "source-20260710/rundata_commons_vastergotland_review.csv",
+    "bytes": 253556,
+    "sha256": "f6b5b02c8001ae344875a34404d095a18c9ce20a2ba5cad2674521ea5a5c6ccb"
+  },
+  {
+    "path": "source-20260710/rundata_commons_vastmanland_filtered.csv",
+    "bytes": 34463,
+    "sha256": "a94e7ac16868f7395738cf54ad50a60e826ad436ee2927dc2563f36c2103bbe1"
+  },
+  {
+    "path": "source-20260710/rundata_commons_vastmanland_review.csv",
+    "bytes": 37042,
+    "sha256": "a2e0e652be4d41c883f27bfc937dd15d46356689378b6cb3fc5eff7988cd0fc3"
+  }
+]
