@@ -1,0 +1,12 @@
+{
+  "raw_candidate_rows": 5507,
+  "matched_signature_labels": 1154,
+  "canonical_signa": 1060,
+  "without_images": 64,
+  "with_images": 996,
+  "also_has_90_100": 32,
+  "only_below_90": 1028,
+  "only_below_90_without_images": 62,
+  "overlap_without_images": 2,
+  "distinct_signum_image_pairs": 5289
+}

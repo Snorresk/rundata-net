@@ -759,7 +759,19 @@ export function makeImagesMarkup(signatureImageLinks) {
     const directUrl = escapeHtml(v.direct);
     const sourceLabel = escapeHtml(imageSourceLabel(v.indirect));
     const infoText = (v.info || "").toString().trim();
-    const caption = infoText.length > 0
+    const isRaaImage = [v.indirect, v.direct].some(url => {
+      try {
+        return ['pub.raa.se', 'arkivsok.raa.se'].includes(new URL(url).hostname);
+      } catch {
+        return false;
+      }
+    });
+    const raaSourceCaption = `<a href="${indirectUrl}" contentEditable="false" target="_blank">Image from RAÄ archives</a>`;
+    const hasRaaDescription = infoText.length > 0
+      && !/^Riksantikvarieämbetet,?\s*Arkivsök\.?$/i.test(infoText);
+    const caption = isRaaImage
+      ? raaSourceCaption + (hasRaaDescription ? `<br>${escapeHtml(infoText)}` : '')
+      : infoText.length > 0
       ? escapeHtml(infoText)
       : `source: <a href="${indirectUrl}" contentEditable="false" target="_blank">${sourceLabel}</a>`;
     const imageContent = (!isMobileViewport || directUrl)

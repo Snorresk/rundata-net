@@ -21,13 +21,18 @@ test('fetchAllImages() function', async () => {
   const expectedDirectUrl = "https://pub.raa.se/dokumentation/00c46e71-67aa-4893-b5a2-de89615a4de9/visning/1/miniatyr";
   const expectedLinkUrl = "https://pub.raa.se/visa/dokumentation/00c46e71-67aa-4893-b5a2-de89615a4de9";
 
-  // images of the first inscription
+  // Compare against the current database so new image imports remain valid.
   const images = result['1'];
+  const expectedRows = mockDb.exec('SELECT id FROM runes_imagelink WHERE meta_id = 1')[0].values;
+  const expectedIds = expectedRows.map(([id]) => id).sort((a, b) => a - b);
+  const actualIds = images.links.map(image => image.id).sort((a, b) => a - b);
 
-  assert.is(images.links.length, 41, `The first inscription should have 41 images`);
-
-  assert.is(images.links[0].direct, expectedDirectUrl, `The first inscription should have a direct link to: ${expectedDirectUrl}`);
-  assert.is(images.links[0].indirect, expectedLinkUrl, `The first inscription should have a link to: ${expectedLinkUrl}`);
+  assert.ok(expectedIds.length > 0, 'The inscription should have images in the database');
+  assert.equal(actualIds, expectedIds, 'All images for the inscription should be returned exactly once');
+  assert.ok(
+    images.links.some(image => image.direct === expectedDirectUrl && image.indirect === expectedLinkUrl),
+    'The known RAÄ image should keep its matching direct and source URLs'
+  );
 });
 
 test('makeImagesMarkup() function', async () => {

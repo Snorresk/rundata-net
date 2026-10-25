@@ -1,0 +1,12 @@
+{
+  "mixed_raa_thumbnails_corrected": 2,
+  "mixed_unavailable_image_removed": 1,
+  "removed": 714,
+  "inserted": 211,
+  "inscriptions": 180,
+  "unique_objects": 209,
+  "new_object_signature_pairs": 5,
+  "image_failures": 0,
+  "integrity_check": "ok",
+  "other_image_rows_unchanged": true
+}

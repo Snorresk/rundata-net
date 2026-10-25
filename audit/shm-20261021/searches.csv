@@ -1,0 +1,18 @@
+query,offset,total,returned
+runsten,0,350,100
+runsten,100,350,100
+runsten,200,350,100
+runsten,300,350,50
+runristning,0,11,11
+runbleck,0,22,22
+runinskrift,0,53,53
+runben,0,7,7
+runor,0,414,100
+runor,100,414,100
+runor,200,414,100
+runor,300,414,100
+runor,400,414,14
+runhäll,0,5,5
+runfragment,0,0,0
+brakteat runinskrift,0,7,7
+brakteat runor,0,19,19
