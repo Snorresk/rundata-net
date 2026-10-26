@@ -50,6 +50,42 @@ test('makeImagesMarkup() function', async () => {
   assert.is(results.indirectImages, '', `The indirect images markup should be empty when no indirect-only images exist`);
 });
 
+test('desktop keeps ten initial images and shows remaining thumbnails in the disclosure', () => {
+  const originalWindow = global.window;
+  try {
+    global.window = {localStorage: {getItem: () => 'desktop'}};
+  const links = Array.from({length: 14}, (_, i) => ({direct: `https://example.org/${i}.jpg`, indirect: `https://example.org/item/${i}`, info: i === 10 ? '<caption>' : ''}));
+  links[13].direct = '';
+  const result = makeImagesMarkup({links});
+  assert.is((result.directImages.match(/class="rundata-image-item"/g) || []).length, 10);
+  assert.is((result.indirectImages.match(/class="rundata-more-image-card"/g) || []).length, 4);
+  assert.ok(result.indirectImages.includes('Find more image links here'));
+  assert.ok(result.indirectImages.includes('loading="lazy"'));
+  assert.ok(result.indirectImages.includes('https://example.org/item/10'));
+  assert.ok(result.indirectImages.includes('&lt;caption&gt;'));
+  assert.ok(result.indirectImages.includes('Open image link'));
+  assert.not.ok(result.indirectImages.includes('src=""'));
+  } finally {
+    if (originalWindow === undefined) delete global.window;
+    else global.window = originalWindow;
+  }
+});
+
+test('mobile still shows all images in the existing gallery without a disclosure', () => {
+  const originalWindow = global.window;
+  try {
+    global.window = {localStorage: {getItem: () => 'mobile'}};
+    const links = Array.from({length: 14}, (_, i) => ({direct: `https://example.org/${i}.jpg`, indirect: `https://example.org/item/${i}`}));
+    const result = makeImagesMarkup({links});
+    assert.is((result.directImages.match(/class="rundata-image-item"/g) || []).length, 14);
+    assert.is(result.indirectImages, '');
+    assert.not.ok(result.directImages.includes('rundata-more-image-grid'));
+  } finally {
+    if (originalWindow === undefined) delete global.window;
+    else global.window = originalWindow;
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Tests for highlightSubstringRanges
 // ---------------------------------------------------------------------------

@@ -89,6 +89,12 @@ def resolve_image_link(link_url: str, direct_url: str = "", timeout: int = 15) -
         return resolve_shm_image(link_url, direct_url, timeout=timeout)
     if extract_commons_file_title(link_url):
         return resolve_commons_image(link_url, timeout=timeout)
+    if is_blekinge_museum_url(link_url):
+        return resolve_blekinge_museum_image(link_url, direct_url, timeout=timeout)
+    if is_jamtland_museum_url(link_url):
+        return resolve_jamtland_museum_image(link_url, direct_url, timeout=timeout)
+    if is_shfa_url(link_url):
+        return resolve_shfa_image(link_url, direct_url, timeout=timeout)
     raise ImageResolveError("No resolver is available for this image source.")
 
 
@@ -100,8 +106,156 @@ def is_supported_image_source(*urls: str) -> bool:
             or is_runer_ku_url(url) or is_arild_hauge_url(url)
             or is_shm_url(url)
             or bool(extract_commons_file_title(url))
+            or is_blekinge_museum_url(url)
+            or is_jamtland_museum_url(url)
+            or is_shfa_url(url)
             for url in urls
         )
+    )
+
+
+def is_shfa_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return (
+        parsed.scheme in {"http", "https"}
+        and parsed.hostname == "shfa.dh.gu.se"
+        and bool(re.fullmatch(r"/image/\d+/?", parsed.path))
+    )
+
+
+def _shfa_file_name(url: str, legacy: bool = False) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or parsed.hostname != "data.dh.gu.se":
+        return ""
+    prefix = r"/(?:shfa|diana)/static/shfa/original/" if legacy else r"/shfa/static/shfa/original/"
+    match = re.fullmatch(prefix + r"(\d+\.(?:jpe?g|png|tiff?))", parsed.path, re.I)
+    return match[1] if match and not parsed.query and not parsed.fragment else ""
+
+
+def resolve_shfa_image(link_url: str, direct_url: str = "", timeout: int = 15) -> ResolvedImage:
+    image_id = int(urlparse(link_url).path.strip("/").split("/")[-1])
+    document = _fetch_json(f"https://shfa.dh.gu.se/api/image/?id={image_id}&depth=1", timeout=timeout)
+    results = document.get("results") if isinstance(document, dict) else None
+    if not isinstance(results, list) or len(results) != 1 or not isinstance(results[0], dict):
+        raise ImageResolveError("No SHFA image resource was found.")
+    image = results[0]
+    if image.get("id") != image_id or image.get("published") is not True:
+        raise ImageResolveError("No matching published SHFA image resource was found.")
+    download_url = image.get("file")
+    filename = _shfa_file_name(download_url) if isinstance(download_url, str) else ""
+    if not filename:
+        raise ImageResolveError("No downloadable SHFA original image was found.")
+    if direct_url and _shfa_file_name(direct_url, legacy=True) != filename:
+        raise ImageResolveError("The selected SHFA image does not match the source image.")
+    people = image.get("people")
+    names = [person["name"].strip() for person in people
+             if isinstance(person, dict) and isinstance(person.get("name"), str) and person["name"].strip()] if isinstance(people, list) else []
+    author = image.get("author")
+    if not names and isinstance(author, dict) and isinstance(author.get("name"), str):
+        names = [author["name"].strip()]
+    # SHFA's /about page explicitly licenses the archive's images under CC BY 4.0.
+    return ResolvedImage(
+        provider="SHFA", source_url=link_url, download_url=download_url,
+        thumbnail_url=download_url, file_name=filename,
+        media_type=_media_type_from_filename(filename), file_size=None,
+        license_url="https://creativecommons.org/licenses/by/4.0/",
+        license_name="CC BY 4.0", creator="; ".join(dict.fromkeys(names)),
+    )
+
+
+def is_blekinge_museum_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return (
+        parsed.scheme in {"https", "http"}
+        and parsed.hostname == "blm.kulturhotell.se"
+        and bool(re.fullmatch(r"/objects/c32-\d+/?", parsed.path))
+    )
+
+
+def _blekinge_image_url(url: str, fullsize: bool = False) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    prefix = "/c32/files/" if parsed.hostname == "cust.kulturhotell.se" else "/files/"
+    if parsed.hostname not in {"blm.kulturhotell.se", "cust.kulturhotell.se"}:
+        return False
+    sizes = "(?:fullsize|original)" if fullsize else "(?:fullsize|original|thumbnails|square_thumbnails)"
+    return bool(re.fullmatch(re.escape(prefix) + sizes + r"/[^/]+\.(?:jpe?g|png|gif|tiff?)", parsed.path, re.I))
+
+
+def is_jamtland_museum_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return (
+        parsed.scheme in {"http", "https"}
+        and parsed.hostname == "jlm.kulturhotell.se"
+        and bool(re.fullmatch(r"/items/show/\d+/?", parsed.path))
+    )
+
+
+def _jamtland_image_url(url: str, fullsize: bool = False) -> bool:
+    parsed = urlparse(url)
+    sizes = "(?:fullsize|original)" if fullsize else "(?:fullsize|original|thumbnails|square_thumbnails)"
+    return (
+        parsed.scheme in {"http", "https"}
+        and parsed.hostname == "jlm.kulturhotell.se"
+        and bool(re.fullmatch(r"/files/" + sizes + r"/[^/]+\.(?:jpe?g|png|gif|tiff?)", parsed.path, re.I))
+    )
+
+
+class _KulturhotellPageParser(HTMLParser):
+    def __init__(self, source_url, image_url_check):
+        super().__init__()
+        self.source_url = source_url
+        self.image_url_check = image_url_check
+        self.images = []
+        self.license_url = ""
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        value = attrs.get("href") if tag == "a" else attrs.get("src") if tag == "img" else (
+            attrs.get("content") if tag == "meta" and attrs.get("property") == "og:image" else ""
+        )
+        url = urljoin(self.source_url, value or "")
+        if self.image_url_check(url, fullsize=True) and url not in self.images:
+            self.images.append(url)
+        if tag == "a" and urlparse(url).hostname == "creativecommons.org":
+            self.license_url = url
+
+
+def resolve_blekinge_museum_image(link_url: str, direct_url: str = "", timeout: int = 15) -> ResolvedImage:
+    return _resolve_kulturhotell_image(link_url, direct_url, "Blekinge museum", _blekinge_image_url, timeout)
+
+
+def resolve_jamtland_museum_image(link_url: str, direct_url: str = "", timeout: int = 15) -> ResolvedImage:
+    return _resolve_kulturhotell_image(link_url, direct_url, "Jämtlands läns museum", _jamtland_image_url, timeout)
+
+
+def _resolve_kulturhotell_image(link_url, direct_url, provider, image_url_check, timeout):
+    # Never guess a fullsize URL from a thumbnail, or substitute another photo.
+    page = _KulturhotellPageParser(link_url, image_url_check)
+    page.feed(fetch_url_bytes(link_url, timeout=timeout).decode("utf-8", errors="replace"))
+    if image_url_check(direct_url):
+        selected_name = unquote(_filename_from_url(direct_url))
+        candidates = [url for url in page.images if unquote(_filename_from_url(url)) == selected_name]
+    elif direct_url:
+        candidates = []
+    else:
+        candidates = page.images if len(page.images) == 1 else []
+    if not candidates:
+        raise ImageResolveError(f"No verified fullsize {provider} image was found for the selected image.")
+    image_url = candidates[0]
+    license_url = page.license_url
+    license_match = re.fullmatch(r"/licenses/([a-z-]+)/([0-9.]+)/?(?:deed\.[a-z-]+)?", urlparse(license_url).path)
+    license_name = (
+        f"CC {license_match[1].upper()} {license_match[2]}" if license_match
+        else _license_name_from_url(license_url)
+    )
+    return ResolvedImage(
+        provider=provider, source_url=link_url,
+        download_url=image_url, thumbnail_url=direct_url or image_url,
+        file_name=_filename_from_url(image_url),
+        media_type=_media_type_from_filename(_filename_from_url(image_url)),
+        file_size=None, license_url=license_url, license_name=license_name,
     )
 
 
