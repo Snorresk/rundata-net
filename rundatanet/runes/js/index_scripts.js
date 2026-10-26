@@ -782,12 +782,18 @@ export function makeImagesMarkup(signatureImageLinks) {
   directImages += '</div>';
 
   if (!isMobileViewport && hiddenLinks.length > 0) {
-    indirectImages = '<details class="rundata-more-image-links"><summary><span class="text-primary text-decoration-underline">Find more image links here</span></summary><ul>';
+    indirectImages = '<details class="rundata-more-image-links"><summary><span class="text-primary text-decoration-underline">Find more image links here</span></summary><div class="rundata-more-image-grid" tabindex="0" role="region" aria-label="More inscription images" contenteditable="false">';
     hiddenLinks.map(function (v) {
       const indirectUrl = escapeHtml(v.indirect);
-      indirectImages += `<li><a href="${indirectUrl}" contentEditable="false" target="_blank">${indirectUrl}</a></li>`;
+      const directUrl = escapeHtml(v.direct || '');
+      const sourceLabel = escapeHtml(imageSourceLabel(v.indirect));
+      const infoText = escapeHtml((v.info || '').toString().trim());
+      const preview = directUrl
+        ? `<img src="${directUrl}" loading="lazy" decoding="async" alt="Inscription image"><span hidden>Preview unavailable — open source</span>`
+        : '<span>Open image link</span>';
+      indirectImages += `<figure class="rundata-more-image-card"><a class="rundata-more-image-preview" href="${indirectUrl}" target="_blank" rel="noopener noreferrer">${preview}</a><figcaption><a href="${indirectUrl}" target="_blank" rel="noopener noreferrer">${sourceLabel}</a>${infoText ? `<br>${infoText}` : ''}</figcaption></figure>`;
     });
-    indirectImages += '</ul></details>';
+    indirectImages += '</div></details>';
   }
 
   return {directImages, indirectImages};
