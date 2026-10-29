@@ -30,6 +30,20 @@
       background-color: #f8f8f8;
       border-bottom: 1px solid #e7e7e7;
     }
+    .lori-navbar-title {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      padding: .5rem 1rem;
+      text-align: center;
+      font-size: clamp(1rem, 2.2vw, 1.75rem);
+      line-height: 1.3;
+    }
+    @media (min-width: 992px) {
+      .rundata-navbar .navbar-collapse {
+        flex-grow: 0;
+      }
+    }
     .transliteration {
       font-weight: bold;
     }
@@ -103,7 +117,8 @@
 <body class="m-0">
   <nav class="navbar navbar-expand-lg rundata-navbar container-fluid">
     <div class="container">
-      <a class="navbar-brand" href="#">Rundata-net</a>
+      <a class="navbar-brand" href="{% url 'runes:index' %}">Rundata-net</a>
+      <h1 class="lori-navbar-title">Lexicon of Runic Inscriptions (LoRI)</h1>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
@@ -118,7 +133,6 @@
   </nav>
 
   <main class="my-3 mx-5">
-    <h1>Lexicon of Runic Inscriptions (LoRI)</h1>
 
     <section class="border rounded p-3 my-3 bg-primary-subtle" aria-labelledby="word-search-heading">
       <h2 class="fs-5 mb-3" id="word-search-heading">Word search</h2>
