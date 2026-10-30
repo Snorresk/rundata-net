@@ -1,4 +1,5 @@
 import json
+from .image_export_control import check_export_cancelled
 import re
 import ssl
 from html import unescape
@@ -637,11 +638,24 @@ def _fetch_json(url: str, timeout: int = 15) -> dict[str, Any]:
 
 
 def fetch_url_bytes(url: str, timeout: int = 30) -> bytes:
+    check_export_cancelled()
     request = Request(url, headers={"User-Agent": "Rundata-net image export (https://rundata.info/)"})
     ssl_context = ssl.create_default_context(cafile=certifi.where() if certifi else None)
     try:
         with urlopen(request, timeout=timeout, context=ssl_context) as response:
-            return response.read()
+            if not hasattr(response, "read1"):
+                data = response.read()
+                check_export_cancelled()
+                return data
+            chunks = []
+            while True:
+                check_export_cancelled()
+                chunk = response.read1(64 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            check_export_cancelled()
+            return b"".join(chunks)
     except (HTTPError, URLError, TimeoutError) as error:
         raise ImageResolveError(f"Could not read image data from {url}.") from error
 

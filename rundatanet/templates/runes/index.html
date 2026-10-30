@@ -174,6 +174,22 @@
       #alertObj {
         display: none;
       }
+      .image-export-card {
+        display: block;
+        position: relative;
+        height: 100%;
+        padding: .5rem;
+        border: 2px solid var(--bs-border-color);
+        border-radius: .5rem;
+        cursor: pointer;
+      }
+      .image-export-card:has(input:checked) {
+        border-color: var(--bs-primary);
+        background: var(--bs-primary-bg-subtle);
+      }
+      .image-export-card:focus-within { outline: 2px solid var(--bs-primary); }
+      .image-export-card img { width: 100%; height: 140px; object-fit: contain; }
+      .image-export-card .form-check-input { position: absolute; top: .5rem; left: .5rem; }
       .special-letters-toggle {
         min-width: 3rem;
         height: 2.5rem;
@@ -1978,6 +1994,7 @@ html:not(.db-desktop-layout) .query-builder .rule-container .rule-value-containe
         </div>
 
         <div class="modal-body">
+          <p class="small text-body-secondary">Map export requires an internet connection because map backgrounds are loaded from external sources.</p>
           <div class="mb-3">
             <label class="form-label" for="mapExportGroupName">Group name</label>
             <input type="text" class="form-control" id="mapExportGroupName" value="Search results">
@@ -2052,7 +2069,7 @@ html:not(.db-desktop-layout) .query-builder .rule-container .rule-value-containe
   </div>
 
   <div id="modalImageExport" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="modalImageExportLabel">
-    <div class="modal-dialog" role="document">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="modalImageExportLabel">Export images</h5>
@@ -2061,12 +2078,13 @@ html:not(.db-desktop-layout) .query-builder .rule-container .rule-value-containe
 
         <div class="modal-body">
           <p>Download available images for the current search results when a supported image source can be resolved.</p>
+          <p class="small text-body-secondary">Image export requires an internet connection because images are downloaded from external sources.</p>
 
           <fieldset class="mb-3" id="imageExportModeOptions">
             <legend class="col-form-label pt-0">Choose export mode</legend>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="imageExportMode" id="imageExportModeAuto" value="auto" checked>
-              <label class="form-check-label" for="imageExportModeAuto">Auto selection: up to 5 first images per inscription</label>
+              <label class="form-check-label" for="imageExportModeAuto">Auto selection: up to 10 successfully downloaded images per inscription</label>
             </div>
             <div class="form-check">
               <input class="form-check-input" type="radio" name="imageExportMode" id="imageExportModeManual" value="manual">
@@ -2075,12 +2093,17 @@ html:not(.db-desktop-layout) .query-builder .rule-container .rule-value-containe
           </fieldset>
 
           <div class="alert alert-info mb-3" id="imageExportSizeNotice">
-            Manual selection will be available for searches with up to 150 inscriptions. Larger searches will use auto selection.
+            Manual selection is available for searches with up to 150 inscriptions. Larger searches use auto selection.
           </div>
 
           <div id="imageExportManualSelection" class="d-none">
-            <div class="mb-2 fw-bold">Images to include</div>
-            <div id="imageExportThumbnailList" class="row g-2"></div>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+              <span class="fw-bold" id="imageExportSelectedCount" role="status" aria-live="polite">0 images selected</span>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="btnSelectAllExportImages">Select all</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="btnClearExportImages">Clear selection</button>
+            </div>
+            <p class="small text-body-secondary">Click an image to select it. Up to 750 images per export. Unavailable images are skipped.</p>
+            <div id="imageExportThumbnailList"></div>
           </div>
 
           <p class="mb-0">Users must check image licences and reuse conditions with the original source before publishing or sharing downloaded images.</p>
@@ -2146,6 +2169,7 @@ html:not(.db-desktop-layout) .query-builder .rule-container .rule-value-containe
           </h4>
         </div>
       </div>
+      <button type="button" class="btn btn-danger mt-3" id="btnCancelImageExport" hidden>Cancel download</button>
     </div>
   </aside>
 
@@ -2834,7 +2858,6 @@ function getAutoRaaImageExportPayload() {
       .map(inscription => {
         const imageIds = (inscription.imageLinks || [])
           .filter(isRaaImageLink)
-          .slice(0, 5)
           .map(link => link.id)
           .filter(id => Number.isInteger(id));
         return {
@@ -2846,20 +2869,198 @@ function getAutoRaaImageExportPayload() {
   };
 }
 
+const manualImageExport = { inscriptions: [], selected: new Set(), rendered: false };
+let imageExportObserver = null;
+
+function updateImageExportSelection() {
+  const manual = document.getElementById('imageExportModeManual').checked;
+  const count = manualImageExport.selected.size;
+  document.getElementById('imageExportSelectedCount').textContent = `${count} image${count === 1 ? '' : 's'} selected`;
+  document.getElementById('btnDownloadImageExport').disabled = manual && (count === 0 || count > 750);
+  document.querySelectorAll('[data-export-image-id]').forEach(input => {
+    input.checked = manualImageExport.selected.has(Number(input.dataset.exportImageId));
+  });
+}
+
+function renderImageExportThumbnails() {
+  if (manualImageExport.rendered) return;
+  manualImageExport.rendered = true;
+  const container = document.getElementById('imageExportThumbnailList');
+  container.replaceChildren();
+  const escape = escapeHtmlForExportDocument;
+  manualImageExport.inscriptions.forEach(inscription => {
+    const links = (inscription.imageLinks || []).filter(isRaaImageLink).filter(link => Number.isInteger(link.id));
+    const section = document.createElement('section');
+    section.className = 'mb-4';
+    const signature = getImageExportSignature(inscription);
+    section.innerHTML = `<h6>${escape(signature)}</h6>`;
+    if (!links.length) {
+      section.insertAdjacentHTML('beforeend', '<p class="small text-body-secondary">No supported images.</p>');
+    } else {
+      const grid = document.createElement('div');
+      grid.className = 'row row-cols-2 row-cols-md-4 row-cols-xl-5 g-2';
+      links.forEach((link, index) => {
+        const column = document.createElement('div');
+        column.className = 'col';
+        column.innerHTML = `<label class="image-export-card">
+          <input type="checkbox" class="form-check-input" data-export-image-id="${link.id}" aria-label="Select image ${index + 1} for ${escape(signature)}">
+          <img alt="${escape(signature)} — image ${index + 1}" loading="lazy" data-preview-image-id="${link.id}">
+          <span class="small d-block mt-1">Image ${index + 1}</span>
+          <span class="small text-body-secondary d-block" data-preview-status></span>
+        </label>`;
+        const img = column.querySelector('img');
+        if (/^https?:\/\//i.test(link.direct || '')) img.src = link.direct;
+        else img.dataset.needsResolution = 'true';
+        grid.appendChild(column);
+      });
+      section.appendChild(grid);
+    }
+    container.appendChild(section);
+  });
+  if (!manualImageExport.inscriptions.length) container.textContent = 'No search results to export.';
+  imageExportObserver?.disconnect();
+  imageExportObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const image = entry.target;
+      imageExportObserver.unobserve(image);
+      if (image.dataset.needsResolution) resolveExportPreview(image);
+    }
+  }, { root: document.querySelector('#modalImageExport .modal-body'), rootMargin: '150px' });
+  container.querySelectorAll('img').forEach(image => {
+    image.addEventListener('error', () => resolveExportPreview(image));
+    imageExportObserver.observe(image);
+  });
+  updateImageExportSelection();
+}
+
+const imageExportPreviewCache = new Map();
+const imageExportPreviewQueue = [];
+let imageExportPreviewsRunning = 0;
+function resolveExportPreview(image) {
+  if (image.dataset.resolving) {
+    image.hidden = true;
+    image.closest('label').querySelector('[data-preview-status]').textContent = 'Preview unavailable';
+    return;
+  }
+  image.dataset.resolving = 'true';
+  imageExportPreviewQueue.push(image);
+  runImageExportPreviewQueue();
+}
+function runImageExportPreviewQueue() {
+  while (imageExportPreviewsRunning < 3 && imageExportPreviewQueue.length) {
+    const image = imageExportPreviewQueue.shift();
+    if (!image.isConnected) continue;
+    imageExportPreviewsRunning++;
+    const id = Number(image.dataset.previewImageId);
+    let preview = imageExportPreviewCache.get(id);
+    if (!preview) {
+      preview = fetch(`/api/images/${id}/resolve/`).then(async response => {
+        if (!response.ok) throw new Error('Preview unavailable');
+        const data = await response.json();
+        return data.image.thumbnail_url || data.image.download_url;
+      });
+      imageExportPreviewCache.set(id, preview);
+    }
+    preview.then(url => {
+      if (image.isConnected && /^https?:\/\//i.test(url)) image.src = url;
+    }).catch(() => {
+      image.hidden = true;
+      image.closest('label').querySelector('[data-preview-status]').textContent = 'Preview unavailable';
+    }).finally(() => {
+      imageExportPreviewsRunning--;
+      runImageExportPreviewQueue();
+    });
+  }
+}
+
+function updateImageExportMode() {
+  const manual = document.getElementById('imageExportModeManual').checked;
+  document.getElementById('imageExportManualSelection').classList.toggle('d-none', !manual);
+  if (manual) renderImageExportThumbnails();
+  updateImageExportSelection();
+}
+
+function prepareImageExportDialog() {
+  imageExportObserver?.disconnect();
+  imageExportPreviewQueue.length = 0;
+  manualImageExport.inscriptions = getVisibleResultInscriptionsForExport();
+  manualImageExport.selected.clear();
+  manualImageExport.rendered = false;
+  const tooLarge = manualImageExport.inscriptions.length > 150;
+  document.getElementById('imageExportModeManual').disabled = tooLarge;
+  if (tooLarge) document.getElementById('imageExportModeAuto').checked = true;
+  document.getElementById('imageExportSizeNotice').textContent = tooLarge
+    ? 'Manual selection is available for up to 150 inscriptions. Narrow your search to select images individually.'
+    : 'Choose Manual selection to preview images and mark the ones you want to download.';
+  updateImageExportMode();
+}
+
+function getSelectedImageExportPayload() {
+  if (!document.getElementById('imageExportModeManual').checked) return getAutoRaaImageExportPayload();
+  return { mode: 'manual', inscriptions: manualImageExport.inscriptions.map(inscription => ({
+    signature: getImageExportSignature(inscription),
+    image_ids: (inscription.imageLinks || []).filter(isRaaImageLink)
+      .map(link => link.id).filter(id => manualImageExport.selected.has(id)),
+  })).filter(inscription => inscription.image_ids.length) };
+}
+
+let activeImageExport = null;
+
 async function exportAutoRaaImagesZip() {
+  if (activeImageExport) return;
   const button = document.getElementById('btnDownloadImageExport');
-  const payload = getAutoRaaImageExportPayload();
+  const payload = getSelectedImageExportPayload();
   const imageCount = payload.inscriptions.reduce((sum, item) => sum + item.image_ids.length, 0);
 
   if (imageCount === 0) {
-    showAlert('No supported images are available in the current search results.');
+    showAlert(payload.mode === 'manual' ? 'Select at least one image.' : 'No supported images are available in the current search results.');
     return;
   }
 
+  if (imageCount > 750 && payload.mode === 'manual') {
+    showAlert('Select at most 750 images per export.');
+    return;
+  }
+  const controller = new AbortController();
+  const exportId = crypto.randomUUID();
+  payload.export_id = exportId;
+  const cancelButton = document.getElementById('btnCancelImageExport');
   const previousText = button.textContent;
+  const restore = () => {
+    hideLoading();
+    cancelButton.hidden = true;
+    button.disabled = false;
+    button.textContent = previousText;
+    if (activeImageExport?.id === exportId) activeImageExport = null;
+  };
+  activeImageExport = { id: exportId, controller };
+  cancelButton.hidden = false;
+  let cancelRequested = false;
+  cancelButton.onclick = async () => {
+    cancelRequested = true;
+    cancelButton.disabled = true;
+    cancelButton.textContent = 'Cancelling...';
+    try {
+      const response = await fetch("{% url 'runes:cancel_image_export' %}", {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ export_id: exportId }),
+      });
+      if (!response.ok) throw new Error('Could not cancel export. Please try again.');
+      controller.abort();
+      bootstrap.Modal.getInstance(document.getElementById('modalImageExport'))?.hide();
+      restore();
+    } catch (error) {
+      cancelRequested = false;
+      showAlert(error.message);
+    } finally {
+      cancelButton.disabled = false;
+      cancelButton.textContent = 'Cancel download';
+    }
+  };
   button.disabled = true;
   button.textContent = 'Preparing images...';
-  showLoading(`Preparing ${imageCount} image${imageCount === 1 ? '' : 's'} for download.`);
+  showLoading(payload.mode === 'manual' ? `Preparing ${imageCount} selected images.` : 'Checking available images for download (up to 10 per inscription).');
   try {
     const response = await fetch("{% url 'runes:export_raa_images_zip' %}", {
       method: 'POST',
@@ -2867,6 +3068,7 @@ async function exportAutoRaaImagesZip() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
     if (!response.ok) {
       let errorMessage = 'Could not export images.';
@@ -2879,17 +3081,16 @@ async function exportAutoRaaImagesZip() {
       throw new Error(errorMessage);
     }
     const blob = await response.blob();
+    if (controller.signal.aborted || cancelRequested) return;
     downloadExportBlob(blob, 'rundata-images.zip');
     const modal = bootstrap.Modal.getInstance(document.getElementById('modalImageExport'));
     if (modal) {
       modal.hide();
     }
   } catch (error) {
-    showAlert(error.message || 'Could not export images.');
+    if (error.name !== 'AbortError' && !cancelRequested) showAlert(error.message || 'Could not export images.');
   } finally {
-    hideLoading();
-    button.disabled = false;
-    button.textContent = previousText;
+    if (activeImageExport?.id === exportId) restore();
   }
 }
 
@@ -4598,6 +4799,26 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('btnAddMapGroupJson').addEventListener('click', addJsonRulesPublicationMapGroup);
   document.getElementById('btnResetMapExport').addEventListener('click', resetPublicationMapExportGroups);
   document.getElementById('btnExportMapSvg').addEventListener('click', exportPublicationMapSvg);
+  document.getElementById('modalImageExport').addEventListener('show.bs.modal', prepareImageExportDialog);
+  document.querySelectorAll('input[name="imageExportMode"]').forEach(input => input.addEventListener('change', updateImageExportMode));
+  document.getElementById('imageExportThumbnailList').addEventListener('change', event => {
+    const input = event.target.closest('[data-export-image-id]');
+    if (!input) return;
+    const id = Number(input.dataset.exportImageId);
+    if (input.checked) manualImageExport.selected.add(id);
+    else manualImageExport.selected.delete(id);
+    updateImageExportSelection();
+  });
+  document.getElementById('btnSelectAllExportImages').addEventListener('click', () => {
+    const ids = Array.from(document.querySelectorAll('[data-export-image-id]'), input => Number(input.dataset.exportImageId));
+    if (ids.length > 750) { showAlert('Select at most 750 images per export.'); return; }
+    ids.forEach(id => manualImageExport.selected.add(id));
+    updateImageExportSelection();
+  });
+  document.getElementById('btnClearExportImages').addEventListener('click', () => {
+    manualImageExport.selected.clear();
+    updateImageExportSelection();
+  });
   document.getElementById('btnDownloadImageExport').addEventListener('click', exportAutoRaaImagesZip);
   document.getElementById('btnExportRtfResults').addEventListener('click', () => exportHighlightedResults('rtf'));
   document.getElementById('btnExportWordResults').addEventListener('click', () => exportHighlightedResults('word'));
