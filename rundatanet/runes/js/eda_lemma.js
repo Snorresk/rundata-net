@@ -1,4 +1,5 @@
 /** Pure helpers for LoRI's reviewed lemma search. */
+import { getWordTimePeriods, isWordInTimePeriod } from './eda_period.js';
 
 export const PILOT_LEMMAS = Object.freeze([
   { id: 'KIN001', norse: 'faðir', scandinavian: 'faður' },
@@ -33,11 +34,17 @@ export function groupLemmaRowsBySignature(rows, lemmaId) {
   return grouped;
 }
 
-export function getLemmaSearchResults(dbRows, lemmaRows, lemmaId) {
+export function getLemmaSearchResults(dbRows, lemmaRows, lemmaId, selectedPeriod = 'all') {
   const matchesBySignature = groupLemmaRowsBySignature(lemmaRows, lemmaId);
 
   return dbRows.map(entry => {
-    const lemmaMatches = matchesBySignature.get(String(entry.signature_id)) ?? [];
+    const lemmaMatches = (matchesBySignature.get(String(entry.signature_id)) ?? [])
+      .filter(row => isWordInTimePeriod(entry, row.word_index, selectedPeriod))
+      .map(row => {
+        const dating = getWordTimePeriods(entry, row.word_index);
+        return { ...row, inscription_section: dating.section,
+          attestation_periods: dating.periods, dating_basis: dating.basis };
+      });
     if (lemmaMatches.length === 0) {
       return null;
     }
@@ -89,6 +96,46 @@ function incrementVariantCounts(counts, values) {
 function mostFrequentValue(counts) {
   return Array.from(counts)
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? '';
+}
+
+// Nom., gen., dat., acc.; reference: Barnes, A New Introduction to Old Norse,
+// Grammar §3.1.8, and the companion glossary. Forms do not establish attestations.
+const PARADIGM_CASES = ['nominative', 'genitive', 'dative', 'accusative'];
+const PARADIGM_FORMS = {
+  KIN001: { gender: 'maskulinum', singular: ['faðir', 'fôður', 'fôður', 'fôður'],
+    plural: ['feðr', 'feðra', 'feðrum', 'feðr'] },
+  KIN002: { gender: 'femininum', singular: ['móðir', 'móður', 'móður', 'móður'],
+    plural: ['mœðr', 'mœðra', 'mœðrum', 'mœðr'] },
+  KIN005: { gender: 'maskulinum', singular: ['bróðir', 'bróður', 'bróður', 'bróður'],
+    plural: ['brœðr', 'brœðra', 'brœðrum', 'brœðr'] },
+};
+
+export function buildLemmaParadigmRows(rows, lemmaId) {
+  const paradigm = PARADIGM_FORMS[lemmaId];
+  if (!paradigm) {
+    return [];
+  }
+  const lemma = PILOT_LEMMAS.find(item => item.id === lemmaId).norse;
+  const observed = buildLemmaRelationRows(rows.filter(row => row.lemma_id === lemmaId));
+  const result = [];
+  PARADIGM_CASES.forEach((grammaticalCase, index) => {
+    ['singular', 'plural'].forEach(number => {
+      const group = observed.find(row => row.grammaticalCase === grammaticalCase
+        && row.number === number && row.gender === paradigm.gender);
+      result.push(group ? { ...group, expectedOnly: false } : {
+        lemmaId, lemma, form: paradigm[number][index], grammaticalCase, number,
+        gender: paradigm.gender, normalizedTokens: [], transliterations: [],
+        attestations: 0, rows: 0, signatures: [], readingVariants: [],
+        certaintyCounts: [], includesProbable: false, hasGroupedReadingVariants: false,
+        matches: [], expectedOnly: true,
+      });
+    });
+  });
+  // A syncretic/unassigned analysis is kept separate, never counted in two cells.
+  observed.filter(row => !result.some(cell => cell.grammaticalCase === row.grammaticalCase
+    && cell.number === row.number && cell.gender === row.gender))
+    .forEach(row => result.push({ ...row, unresolvedAnalysis: true, expectedOnly: false }));
+  return result;
 }
 
 export function buildLemmaRelationRows(rows) {
