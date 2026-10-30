@@ -10,13 +10,14 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_exempt
 
+from .image_export_control import cancellable_image_export, check_export_cancelled, cancel_export, valid_export_id
 from .image_resolvers import ImageResolveError, fetch_url_bytes, is_supported_image_source, resolve_image_link
 from .models import ImageLink, MetaInformation, Signature
 from .normalization import SlugIndex, normalize_signature
 from .serializers import MetaInformationSerializer
 
 DEFAULT_AZURE_PDF_STORAGE_BASE_URL = "https://rundatapdfssk.blob.core.windows.net/rundatapdfs"
-MAX_AUTO_IMAGES_PER_INSCRIPTION = 5
+MAX_AUTO_IMAGES_PER_INSCRIPTION = 10
 MAX_IMAGE_EXPORT_FILES = 750
 NAME_MARKERS = str.maketrans("", "", '"“”')
 
@@ -106,6 +107,21 @@ def resolve_image_download(request, image_id: int):
 
 
 @csrf_exempt
+def cancel_image_export(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False}, status=405)
+    try:
+        export_id = valid_export_id(json.loads(request.body).get("export_id"))
+    except (ValueError, AttributeError):
+        export_id = None
+    if not export_id:
+        return JsonResponse({"ok": False, "error": "Invalid export ID."}, status=400)
+    cancel_export(export_id)
+    return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@cancellable_image_export
 def export_raa_images_zip(request):
     if request.method != "POST":
         return JsonResponse({"ok": False, "error": "POST is required."}, status=405)
@@ -119,7 +135,11 @@ def export_raa_images_zip(request):
     if not requested_images:
         return JsonResponse({"ok": False, "error": "No images were selected for export."}, status=400)
 
-    image_ids = [item["image_id"] for item in requested_images[:MAX_IMAGE_EXPORT_FILES]]
+    manual_selection = payload.get("mode") == "manual"
+    if manual_selection and len(requested_images) > MAX_IMAGE_EXPORT_FILES:
+        return JsonResponse({"ok": False, "error": "Select at most 750 images per export."}, status=400)
+
+    image_ids = [item["image_id"] for item in requested_images]
     image_links = {
         image.id: image
         for image in ImageLink.objects.select_related("meta__signature").filter(id__in=image_ids)
@@ -129,12 +149,19 @@ def export_raa_images_zip(request):
     metadata_rows = []
     skipped_rows = []
     downloaded_count = 0
+    downloaded_per_inscription = {}
 
     with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for item in requested_images[:MAX_IMAGE_EXPORT_FILES]:
+        for item in requested_images:
+            check_export_cancelled()
+            if downloaded_count >= MAX_IMAGE_EXPORT_FILES:
+                break
             image_link = image_links.get(item["image_id"])
             if not image_link:
                 skipped_rows.append([item["signature"], item["image_id"], "", "Image link not found"])
+                continue
+            inscription_id = image_link.meta.signature_id
+            if not manual_selection and downloaded_per_inscription.get(inscription_id, 0) >= MAX_AUTO_IMAGES_PER_INSCRIPTION:
                 continue
             if not is_supported_image_source(image_link.link_url, image_link.direct_url):
                 skipped_rows.append([item["signature"], item["image_id"], image_link.link_url, "Unsupported image source"])
@@ -147,7 +174,9 @@ def export_raa_images_zip(request):
                 skipped_rows.append([item["signature"], item["image_id"], image_link.link_url, str(error)])
                 continue
 
+            check_export_cancelled()
             downloaded_count += 1
+            downloaded_per_inscription[inscription_id] = downloaded_per_inscription.get(inscription_id, 0) + 1
             signature = item["signature"] or image_link.meta.signature.signature_text
             filename = _image_export_filename(signature, downloaded_count, resolved.file_name)
             archive.writestr(f"images/{filename}", image_bytes)
@@ -207,6 +236,7 @@ def export_raa_images_zip(request):
             status=422,
         )
 
+    check_export_cancelled()
     response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")
     response["Content-Disposition"] = 'attachment; filename="rundata-images.zip"'
     return response
@@ -217,10 +247,7 @@ def _normalize_image_export_request(payload):
     seen = set()
     for inscription in payload.get("inscriptions", []):
         signature = str(inscription.get("signature") or "").strip()
-        selected_for_inscription = 0
         for raw_image_id in inscription.get("image_ids", []):
-            if selected_for_inscription >= MAX_AUTO_IMAGES_PER_INSCRIPTION:
-                break
             try:
                 image_id = int(raw_image_id)
             except (TypeError, ValueError):
@@ -228,10 +255,7 @@ def _normalize_image_export_request(payload):
             if image_id in seen:
                 continue
             seen.add(image_id)
-            selected_for_inscription += 1
             normalized.append({"signature": signature, "image_id": image_id})
-            if len(normalized) >= MAX_IMAGE_EXPORT_FILES:
-                return normalized
     return normalized
 
 

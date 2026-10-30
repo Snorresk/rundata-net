@@ -908,19 +908,28 @@ function setTooltip(el, message) {
 }
 
 export function initClipboardButtons() {
-  /**
-   * There is a collection of buttons that represent various tricky symbols, like umlauts.
-   * Clicking on them should copy the relevant symbol to the clipboard.
-   */
-  const clipboardButtons = document.querySelectorAll('.clip');
-  clipboardButtons.forEach(button => {
+  const fieldSelector = '#builder .rule-value-container input[type="text"], #builder .rule-value-container input:not([type]), #builder .rule-value-container textarea';
+  let lastSearchInput = null;
+  document.addEventListener('focusin', event => {
+    if (event.target.matches(fieldSelector)) {
+      lastSearchInput = event.target;
+    }
+  });
+  document.querySelectorAll('#specialLettersPanel .clip').forEach(button => {
+    button.addEventListener('mousedown', event => event.preventDefault());
     button.addEventListener('click', function() {
-      const symbol = button.innerText;
-      navigator.clipboard.writeText(symbol).then(function() {
-        setTooltip(button, 'Copied to clipboard!');
-      }).catch(function(err) {
-        setTooltip(button, 'Failed to copy!');
-      });
+      const available = input => input && input.isConnected && !input.disabled
+        && !input.readOnly && input.getClientRects().length > 0;
+      const input = available(lastSearchInput) ? lastSearchInput
+        : Array.from(document.querySelectorAll(fieldSelector)).find(available);
+      if (!input) {
+        setTooltip(button, 'Choose a text search field first.');
+        return;
+      }
+      input.setRangeText(button.textContent.trim(), input.selectionStart, input.selectionEnd, 'end');
+      input.focus();
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
     });
   });
 }

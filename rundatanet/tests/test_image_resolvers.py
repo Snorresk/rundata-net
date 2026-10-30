@@ -2,6 +2,7 @@ import csv
 import json
 import zipfile
 from io import BytesIO, StringIO
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
@@ -560,3 +561,134 @@ class TestResolveImageDownloadView(TestCase):
             assert "CC-BY 4.0" in metadata
             assert RAA_DISPLAY_URL in metadata
         assert mocked_urlopen.call_count == 2
+
+    @patch("rundatanet.runes.views.fetch_url_bytes")
+    @patch("rundatanet.runes.views.resolve_image_link")
+    def test_export_counts_successful_downloads_and_tries_remaining_candidates(self, mocked_resolve, mocked_fetch):
+        other_signature = Signature.objects.using("runes_db").create(signature_text="U 1")
+        other_meta = MetaInformation.objects.using("runes_db").create(signature=other_signature)
+        inscriptions = []
+        failed_urls = set()
+        for meta in [self.meta, other_meta]:
+            images = [ImageLink.objects.using("runes_db").create(
+                meta=meta, link_url=RAA_SOURCE_URL, direct_url=RAA_THUMBNAIL_URL,
+            ) for _ in range(13)]
+            for image in images[:2]:
+                failed_urls.add(f"https://example.org/{image.id}.jpg")
+            inscriptions.append({"signature": meta.signature.signature_text,
+                                 "image_ids": [image.id for image in images]})
+
+        # Use each image's ID as its download URL so the first two candidates per
+        # inscription fail, and the thirteenth must never be requested.
+        def resolve_candidate(*args):
+            index = mocked_resolve.call_count - 1
+            image_id = candidate_ids[index]
+            return SimpleNamespace(
+                download_url=f"https://example.org/{image_id}.jpg",
+                file_name="image.jpg", provider="raa", thumbnail_url="",
+                media_type="image/jpeg", file_size=None, license_name="",
+                license_url="", creator="",
+            )
+
+        def download(url):
+            if url in failed_urls:
+                raise ImageResolveError("Image unavailable")
+            return b"image bytes"
+
+        for total_limit in [750, 12]:
+            with self.subTest(total_limit=total_limit):
+                mocked_resolve.reset_mock()
+                mocked_fetch.reset_mock()
+                candidate_ids = inscriptions[0]["image_ids"][:12] + inscriptions[1]["image_ids"][:12]
+                mocked_resolve.side_effect = resolve_candidate
+                mocked_fetch.side_effect = download
+                with patch("rundatanet.runes.views.MAX_IMAGE_EXPORT_FILES", total_limit):
+                    response = self.client.post(
+                        reverse("runes:export_raa_images_zip"),
+                        data=json.dumps({"mode": "auto", "inscriptions": inscriptions}),
+                        content_type="application/json",
+                    )
+                assert response.status_code == 200
+                with zipfile.ZipFile(BytesIO(response.content)) as archive:
+                    metadata = list(csv.DictReader(StringIO(archive.read("metadata.csv").decode())))
+                    skipped = list(csv.DictReader(StringIO(archive.read("skipped-images.csv").decode())))
+                    assert len(metadata) == min(total_limit, 20)
+                    assert sum(row["signature"] == "Öl 26" for row in metadata) == 10
+                    assert sum(row["signature"] == "U 1" for row in metadata) == min(total_limit - 10, 10)
+                    assert len(skipped) == 4
+                assert mocked_fetch.call_count == min(total_limit, 20) + 4
+
+    def test_cancel_export_before_it_starts(self):
+        from uuid import uuid4
+        export_id = str(uuid4())
+        response = self.client.post(reverse('runes:cancel_image_export'),
+                                    data=json.dumps({'export_id': export_id}),
+                                    content_type='application/json')
+        assert response.status_code == 200
+        with patch('rundatanet.runes.views.resolve_image_link') as resolve:
+            response = self.client.post(reverse('runes:export_raa_images_zip'),
+                data=json.dumps({'export_id': export_id, 'inscriptions': [
+                    {'signature': 'Öl 26', 'image_ids': [self.image.id]}]}),
+                content_type='application/json')
+        assert response.status_code == 409
+        assert response.json()['cancelled'] is True
+        resolve.assert_not_called()
+
+    @patch('rundatanet.runes.image_resolvers.urlopen')
+    def test_cancel_during_download_stops_reads_and_allows_new_export(self, mocked_urlopen):
+        from uuid import uuid4
+        export_id = str(uuid4())
+        client = self.client
+
+        class CancelDuringRead(FakeUrlopenResponse):
+            reads = 0
+
+            def read1(inner_self, size):
+                inner_self.reads += 1
+                response = client.post(reverse('runes:cancel_image_export'),
+                    data=json.dumps({'export_id': export_id}), content_type='application/json')
+                assert response.status_code == 200
+                return b'partial image'
+
+        partial = CancelDuringRead()
+        mocked_urlopen.return_value = partial
+        payload = {'export_id': export_id, 'inscriptions': [
+            {'signature': 'Öl 26', 'image_ids': [self.image.id]}]}
+        response = client.post(reverse('runes:export_raa_images_zip'),
+            data=json.dumps(payload), content_type='application/json')
+        assert response.status_code == 409
+        assert partial.reads == 1
+        assert mocked_urlopen.call_count == 1
+
+        mocked_urlopen.return_value = FakeUrlopenResponse()
+        payload['export_id'] = str(uuid4())
+        response = client.post(reverse('runes:export_raa_images_zip'),
+            data=json.dumps(payload), content_type='application/json')
+        assert response.status_code == 200
+        assert response['Content-Type'] == 'application/zip'
+
+    @patch('rundatanet.runes.image_resolvers.urlopen', return_value=FakeUrlopenResponse())
+    def test_manual_export_downloads_only_selected_images_without_auto_cap(self, mocked_urlopen):
+        images = [self.image] + [ImageLink.objects.using('runes_db').create(
+            meta=self.meta, link_url=RAA_SOURCE_URL, direct_url=RAA_THUMBNAIL_URL,
+        ) for _ in range(12)]
+        selected_ids = [image.id for image in images[1:]]
+        response = self.client.post(reverse('runes:export_raa_images_zip'),
+            data=json.dumps({'mode': 'manual', 'inscriptions': [
+                {'signature': 'Öl 26', 'image_ids': selected_ids}]}),
+            content_type='application/json')
+        assert response.status_code == 200
+        with zipfile.ZipFile(BytesIO(response.content)) as archive:
+            rows = list(csv.DictReader(StringIO(archive.read('metadata.csv').decode())))
+        assert [int(row['image_id']) for row in rows] == selected_ids
+        assert len(rows) == 12
+        assert mocked_urlopen.call_count == 24
+
+    def test_manual_export_rejects_too_many_selections_before_downloading(self):
+        with patch('rundatanet.runes.views.resolve_image_link') as resolve:
+            response = self.client.post(reverse('runes:export_raa_images_zip'),
+                data=json.dumps({'mode': 'manual', 'inscriptions': [
+                    {'signature': 'Öl 26', 'image_ids': list(range(1, 752))}]}),
+                content_type='application/json')
+        assert response.status_code == 400
+        resolve.assert_not_called()
