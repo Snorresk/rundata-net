@@ -72,6 +72,48 @@
       width: 3rem;
     }
 
+      .special-letters-toggle {
+        min-width: 3rem;
+        height: 2.5rem;
+        padding-inline: 0.7rem;
+        color: #fff;
+        background-color: #c9511b;
+        border-color: #c9511b;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .special-letters-toggle:hover,
+      .special-letters-toggle:focus {
+        color: #fff;
+        background-color: #b84717;
+        border-color: #b84717;
+      }
+      .special-letters-toggle .bi {
+        font-size: 1.45rem;
+        line-height: 1;
+      }
+      .special-letters-panel {
+        max-width: 100%;
+      }
+      .special-letters-panel.collapsing {
+        width: auto !important;
+        height: auto !important;
+        transition: none;
+      }
+      .special-letters-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.125rem;
+      }
+      .special-letters-panel .clip {
+        width: 1.75rem;
+        min-width: 1.75rem;
+        height: 2rem;
+        padding: 0;
+        font-size: 0.9rem;
+      }
+
     /*body {
       font-family: Arial, sans-serif;
       margin: 20px;
@@ -113,6 +155,7 @@
   </style>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" integrity="sha256-9kPW/n5nn53j4WMRYAxe9c1rCY96Oogo/MKSVdKzPmI=" crossorigin="anonymous">
 </head>
 <body class="m-0">
   <nav class="navbar navbar-expand-lg rundata-navbar container-fluid">
@@ -135,7 +178,49 @@
   <main class="my-3 mx-5">
 
     <section class="border rounded p-3 my-3 bg-primary-subtle" aria-labelledby="word-search-heading">
-      <h2 class="fs-5 mb-3" id="word-search-heading">Word search</h2>
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+        <h2 class="fs-5 mb-0" id="word-search-heading">Word search</h2>
+        <button type="button" class="btn special-letters-toggle" id="btnSpecialLettersToggle" data-bs-toggle="collapse" data-bs-target="#specialLettersPanel" aria-expanded="false" aria-controls="specialLettersPanel" aria-label="Open special letters keyboard" title="Special letters">
+          <i class="bi bi-keyboard" aria-hidden="true"></i>
+        </button>
+        <div class="collapse collapse-horizontal special-letters-panel" id="specialLettersPanel">
+          <div class="special-letters-grid" role="group" aria-label="Insert special letters">
+            <button type="button" class="btn btn-light border clip" id="btnAacute">Á</button>
+            <button type="button" class="btn btn-light border clip" id="btnAacuteSmall">á</button>
+            <button type="button" class="btn btn-light border clip" id="btnDhCapital">Ð</button>
+            <button type="button" class="btn btn-light border clip" id="btnDh">ð</button>
+            <button type="button" class="btn btn-light border clip" id="btnEacute">É</button>
+            <button type="button" class="btn btn-light border clip" id="btnEacuteSmall">é</button>
+            <button type="button" class="btn btn-light border clip" id="btnIacute">Í</button>
+            <button type="button" class="btn btn-light border clip" id="btnIacuteSmall">í</button>
+            <button type="button" class="btn btn-light border clip" id="btnIiDiaeresis">ï</button>
+            <button type="button" class="btn btn-light border clip" id="btnEn">ñ</button>
+            <button type="button" class="btn btn-light border clip" id="btnOacute">Ó</button>
+            <button type="button" class="btn btn-light border clip" id="btnOacuteSmall">ó</button>
+            <button type="button" class="btn btn-light border clip" id="btnOhakeCapital">Ô</button>
+            <button type="button" class="btn btn-light border clip" id="btnOhakeSmall">ô</button>
+            <button type="button" class="btn btn-light border clip" id="btnUacute">Ú</button>
+            <button type="button" class="btn btn-light border clip" id="btnUacuteSmall">ú</button>
+            <button type="button" class="btn btn-light border clip" id="btnYacute">Ý</button>
+            <button type="button" class="btn btn-light border clip" id="btnYacuteSmall">ý</button>
+            <button type="button" class="btn btn-light border clip" id="btnThCapital">Þ</button>
+            <button type="button" class="btn btn-light border clip" id="btnTh">þ</button>
+            <button type="button" class="btn btn-light border clip" id="btnAeCapital">Æ</button>
+            <button type="button" class="btn btn-light border clip" id="btnAe">æ</button>
+            <button type="button" class="btn btn-light border clip" id="btnOe2Capital">Œ</button>
+            <button type="button" class="btn btn-light border clip" id="btnOe2">œ</button>
+            <button type="button" class="btn btn-light border clip" id="btnOeCapital">Ø</button>
+            <button type="button" class="btn btn-light border clip" id="btnOe">ø</button>
+            <button type="button" class="btn btn-light border clip" id="btnAa">Å</button>
+            <button type="button" class="btn btn-light border clip" id="btnAaSmall">å</button>
+            <button type="button" class="btn btn-light border clip" id="btnAaUmlaut">Ä</button>
+            <button type="button" class="btn btn-light border clip" id="btnAaUmlautSmall">ä</button>
+            <button type="button" class="btn btn-light border clip" id="btnOUmlaut">Ö</button>
+            <button type="button" class="btn btn-light border clip" id="btnOUmlautSmall">ö</button>
+          </div>
+        </div>
+      </div>
+
       <div class="row g-2 align-items-start">
         <div class="col-12 col-lg-2">
           <label class="visually-hidden" for="searchModeSelect">Match method</label>
@@ -1168,6 +1253,22 @@ document.addEventListener('DOMContentLoaded', function() {
       input.value = '';
       input.focus();
       performSearch();
+    });
+  });
+  let specialLettersTarget = normalisationInput;
+  [normalisationInput, transliterationInput].forEach(input => {
+    input.addEventListener('focus', function() {
+      specialLettersTarget = input;
+    });
+  });
+  document.querySelectorAll('#specialLettersPanel .clip').forEach(button => {
+    // Keep the search field's selection when clicking a character.
+    button.addEventListener('mousedown', event => event.preventDefault());
+    button.addEventListener('click', function() {
+      const input = specialLettersTarget.disabled ? normalisationInput : specialLettersTarget;
+      input.setRangeText(button.textContent.trim(), input.selectionStart, input.selectionEnd, 'end');
+      input.focus();
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     });
   });
   updateSearchModeUi();
