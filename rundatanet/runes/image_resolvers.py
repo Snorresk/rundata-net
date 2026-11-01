@@ -576,8 +576,34 @@ def is_digitaltmuseum_url(url: str) -> bool:
     return bool(url and DIGITALT_MUSEUM_RE.search(url))
 
 
+def _digitaltmuseum_saved_image(link_url: str, direct_url: str) -> ResolvedImage | None:
+    """Use the stored DiMu image identity when the object page is unavailable."""
+    parsed = urlparse(unescape(direct_url or ""))
+    image_path = re.fullmatch(r"/image/([A-Za-z0-9_-]+)", parsed.path)
+    if parsed.scheme not in {"https", "http"} or parsed.netloc.lower() != "ems.dimu.org" or not image_path:
+        return None
+    image_id = image_path.group(1)
+    query = parse_qs(parsed.query)
+    filename = query.get("filename", [f"{image_id}.jpg"])[0]
+    download_url = f"https://ems.dimu.org/image/{image_id}?" + urlencode({
+        "dimension": "max", "quality": "100", "mediatype": "image/jpeg",
+    })
+    return ResolvedImage(
+        provider="Digitalt museum", source_url=link_url,
+        download_url=download_url, thumbnail_url=direct_url,
+        file_name=filename, media_type="image/jpeg", file_size=None,
+        license_url="", license_name="",
+    )
+
+
 def resolve_digitaltmuseum_image(link_url: str, direct_url: str = "", timeout: int = 15) -> ResolvedImage:
-    page_html = fetch_url_bytes(link_url, timeout=timeout).decode("utf-8", errors="replace")
+    saved_image = _digitaltmuseum_saved_image(link_url, direct_url)
+    try:
+        page_html = fetch_url_bytes(link_url, timeout=timeout).decode("utf-8", errors="replace")
+    except ImageResolveError:
+        if saved_image:
+            return saved_image
+        raise
     download_url = _extract_first_match(
         page_html,
         [
@@ -598,6 +624,8 @@ def resolve_digitaltmuseum_image(link_url: str, direct_url: str = "", timeout: i
             ],
         )
     if not download_url:
+        if saved_image:
+            return saved_image
         raise ImageResolveError("No downloadable Digitalt museum image resource was found.")
 
     download_url = unescape(download_url).replace("&amp;", "&")
@@ -657,7 +685,7 @@ def fetch_url_bytes(url: str, timeout: int = 30) -> bytes:
             check_export_cancelled()
             return b"".join(chunks)
     except (HTTPError, URLError, TimeoutError) as error:
-        raise ImageResolveError(f"Could not read image data from {url}.") from error
+        raise ImageResolveError(f"Could not read image data from {url}: {error}") from error
 
 
 def _choose_raa_download_resource(document: dict[str, Any]) -> dict[str, Any]:

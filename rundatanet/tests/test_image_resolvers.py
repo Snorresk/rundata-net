@@ -428,6 +428,34 @@ class TestRaaImageResolver(TestCase):
         assert mocked_urlopen.called
 
 
+    @patch('rundatanet.runes.image_resolvers.fetch_url_bytes', side_effect=ImageResolveError('HTTP 403'))
+    def test_digitaltmuseum_uses_stored_image_when_object_page_is_unavailable(self, mocked_fetch):
+        source = 'https://digitaltmuseum.se/021017226173'
+        thumbnail = 'https://ems.dimu.org/image/032ymUZbCaXn?dimension=145x105'
+        resolved = resolve_image_link(source, thumbnail)
+        assert resolved.download_url == 'https://ems.dimu.org/image/032ymUZbCaXn?dimension=max&quality=100&mediatype=image%2Fjpeg'
+        assert resolved.thumbnail_url == thumbnail
+        assert resolved.file_name == '032ymUZbCaXn.jpg'
+        assert resolved.license_name == ''
+        assert resolved.license_url == ''
+        assert resolved.creator == ''
+
+    @patch('rundatanet.runes.image_resolvers.fetch_url_bytes', return_value=b'<html>Access denied</html>')
+    def test_digitaltmuseum_uses_stored_image_when_page_has_no_image_metadata(self, mocked_fetch):
+        resolved = resolve_image_link(DIGITALT_MUSEUM_SOURCE_URL, DIGITALT_MUSEUM_THUMBNAIL_URL)
+        assert urlparse(resolved.download_url).path == '/image/022s93Xu15Yc'
+        assert parse_qs(urlparse(resolved.download_url).query)['dimension'] == ['max']
+
+    @patch('rundatanet.runes.image_resolvers.fetch_url_bytes', side_effect=ImageResolveError('HTTP 403'))
+    def test_digitaltmuseum_fallback_requires_valid_stored_dimu_image(self, mocked_fetch):
+        for direct in ['', 'https://example.org/image/123',
+                       'https://ems.dimu.org.evil.test/image/123',
+                       'https://ems.dimu.org@evil.test/image/123',
+                       'https://ems.dimu.org/object/123']:
+            with self.subTest(direct=direct), self.assertRaises(ImageResolveError):
+                resolve_image_link(DIGITALT_MUSEUM_SOURCE_URL, direct)
+
+
 class TestResolveImageDownloadView(TestCase):
     databases = {"default", "runes_db"}
 
@@ -692,3 +720,63 @@ class TestResolveImageDownloadView(TestCase):
                 content_type='application/json')
         assert response.status_code == 400
         resolve.assert_not_called()
+
+    @patch('rundatanet.runes.image_resolvers.urlopen', return_value=FakeUrlopenResponse())
+    def test_manual_export_can_select_images_50_and_63(self, mocked_urlopen):
+        images = [self.image] + [ImageLink.objects.using('runes_db').create(
+            meta=self.meta, link_url=RAA_SOURCE_URL, direct_url=RAA_THUMBNAIL_URL,
+        ) for _ in range(70)]
+        selected_ids = [images[49].id, images[62].id]
+        response = self.client.post(reverse('runes:export_raa_images_zip'),
+            data=json.dumps({'mode': 'manual', 'inscriptions': [
+                {'signature': 'Öl 26', 'image_ids': selected_ids}]}),
+            content_type='application/json')
+        assert response.status_code == 200
+        with zipfile.ZipFile(BytesIO(response.content)) as archive:
+            rows = list(csv.DictReader(StringIO(archive.read('metadata.csv').decode())))
+            skipped = list(csv.DictReader(StringIO(archive.read('skipped-images.csv').decode())))
+            assert len([name for name in archive.namelist() if name.startswith('images/')]) == 2
+        assert [int(row['image_id']) for row in rows] == selected_ids
+        assert skipped == []
+        assert mocked_urlopen.call_count == 4
+
+    @patch('rundatanet.runes.views.resolve_image_link', side_effect=ImageResolveError('Source returned HTTP 403'))
+    def test_failed_manual_export_reports_reason_for_each_selected_image(self, mocked_resolve):
+        response = self.client.post(reverse('runes:export_raa_images_zip'),
+            data=json.dumps({'mode': 'manual', 'inscriptions': [
+                {'signature': 'Öl 26', 'image_ids': [self.image.id]}]}),
+            content_type='application/json')
+        assert response.status_code == 422
+        assert response.json()['failures'] == [
+            {'signature': 'Öl 26', 'image_id': self.image.id, 'reason': 'Source returned HTTP 403'}]
+
+    @patch('rundatanet.runes.image_resolvers.urlopen')
+    def test_manual_export_uses_dimu_originals_when_object_pages_fail(self, mocked_urlopen):
+        from urllib.error import HTTPError
+        images = [ImageLink.objects.using('runes_db').create(
+            meta=self.meta, link_url=source, direct_url=thumbnail,
+        ) for source, thumbnail in [
+            ('https://digitaltmuseum.se/021017226173', 'https://ems.dimu.org/image/032ymUZbCaXn?dimension=145x105'),
+            ('https://digitaltmuseum.se/021017174430', 'https://ems.dimu.org/image/032ykzF5oFrs?dimension=145x105'),
+        ]]
+
+        def fetch(request, **kwargs):
+            if request.full_url.startswith('https://digitaltmuseum.se/'):
+                raise HTTPError(request.full_url, 403, 'Forbidden', None, None)
+            assert 'dimension=max' in request.full_url
+            assert request.full_url.startswith('https://ems.dimu.org/image/')
+            return FakeUrlopenResponse()
+
+        mocked_urlopen.side_effect = fetch
+        response = self.client.post(reverse('runes:export_raa_images_zip'),
+            data=json.dumps({'mode': 'manual', 'inscriptions': [
+                {'signature': 'Vg 119', 'image_ids': [image.id for image in images]}]}),
+            content_type='application/json')
+        assert response.status_code == 200
+        with zipfile.ZipFile(BytesIO(response.content)) as archive:
+            rows = list(csv.DictReader(StringIO(archive.read('metadata.csv').decode())))
+            assert len(rows) == 2
+            assert [int(row['image_id']) for row in rows] == [image.id for image in images]
+            assert all('dimension=max' in row['download_url'] for row in rows)
+            assert all(row['license_name'] == '' for row in rows)
+        assert mocked_urlopen.call_count == 4
