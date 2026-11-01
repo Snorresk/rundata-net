@@ -232,6 +232,7 @@ def export_raa_images_zip(request):
                 "ok": False,
                 "error": "No supported images could be downloaded.",
                 "skipped": len(skipped_rows),
+                "failures": [{"signature": row[0], "image_id": row[1], "reason": row[3]} for row in skipped_rows],
             },
             status=422,
         )
