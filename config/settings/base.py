@@ -262,8 +262,13 @@ USE_GA = env.bool("USE_GA", False)
 
 # Azure Model API key
 MODEL_KEY = env("MODEL_KEY", default="")
-MODEL_ENDPOINT = env("MODEL_ENDPOINT", default="https://Phi-4-kduuo.eastus2.models.ai.azure.com")
-MODEL_NAME = env("MODEL_NAME", default="Phi-4")
+MODEL_ENDPOINT = env(
+    "MODEL_ENDPOINT",
+    default="https://rundata-phi-4-resource.services.ai.azure.com/openai/v1",
+)
+MODEL_NAME = env("MODEL_NAME", default="gpt-6-luna")
+MODEL_MAX_OUTPUT_TOKENS = env.int("MODEL_MAX_OUTPUT_TOKENS", default=4096)
+MODEL_REASONING_EFFORT = env("MODEL_REASONING_EFFORT", default="")
 
 # Azure Blob Storage (PDF files)
 # Single source of truth for both the frontend (window.BLOB_BASE_URL) and the

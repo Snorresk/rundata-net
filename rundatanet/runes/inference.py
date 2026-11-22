@@ -1,16 +1,12 @@
 import importlib.resources
 import logging
-import os
 from typing import Optional
 
-from azure.ai.inference import ChatCompletionsClient
-from azure.ai.inference.models import SystemMessage, UserMessage
-from azure.core.credentials import AzureKeyCredential
 from django.conf import settings
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-MODEL_CONNECTION_TIMEOUT_SECONDS = 5
 MODEL_READ_TIMEOUT_SECONDS = 20
 
 
@@ -25,13 +21,17 @@ def clean_llm_response(llm_response: str) -> str:
     return llm_response.strip()
 
 
-def _get_system_message() -> SystemMessage:
+def _get_system_message() -> dict[str, str]:
     """
     Get the system message for the model.
     """
     # Load the system message from a file
-    system_prompt = importlib.resources.files("rundatanet.runes").joinpath("prompt.txt").read_text(encoding="utf-8")
-    return SystemMessage(content=system_prompt)
+    system_prompt = (
+        importlib.resources.files("rundatanet.runes")
+        .joinpath("prompt.txt")
+        .read_text(encoding="utf-8")
+    )
+    return {"role": "system", "content": system_prompt}
 
 
 def inference(user_msg: str, api_token: Optional[str] = None) -> str:
@@ -46,24 +46,24 @@ def inference(user_msg: str, api_token: Optional[str] = None) -> str:
     if not api_token:
         raise ValueError("MODEL_KEY is not configured")
 
-    client = ChatCompletionsClient(
-        endpoint=endpoint,
-        credential=AzureKeyCredential(api_token),
+    client = OpenAI(
+        base_url=f"{endpoint.rstrip('/')}/",
+        api_key=api_token,
+        timeout=MODEL_READ_TIMEOUT_SECONDS,
+        max_retries=0,
     )
     system_prompt = _get_system_message()
 
-    response = client.complete(
-        messages=[system_prompt, UserMessage(content=user_msg)],
-        max_tokens=4096,
-        temperature=0.0,
-        top_p=0.1,
-        presence_penalty=0.0,
-        frequency_penalty=0.0,
-        model=model_name,
-        connection_timeout=MODEL_CONNECTION_TIMEOUT_SECONDS,
-        read_timeout=MODEL_READ_TIMEOUT_SECONDS,
-        retry_total=0,
-    )
-    logger.debug(f"Raw LLM response: {response.choices[0].message.content}")
+    request_options = {
+        "model": model_name,
+        "messages": [system_prompt, {"role": "user", "content": user_msg}],
+        "max_completion_tokens": settings.MODEL_MAX_OUTPUT_TOKENS,
+    }
+    if settings.MODEL_REASONING_EFFORT:
+        request_options["reasoning_effort"] = settings.MODEL_REASONING_EFFORT
 
-    return clean_llm_response(response.choices[0].message.content)
+    response = client.chat.completions.create(**request_options)
+    response_text = response.choices[0].message.content or ""
+    logger.debug("Raw LLM response: %s", response_text)
+
+    return clean_llm_response(response_text)
