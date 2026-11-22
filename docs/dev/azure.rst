@@ -228,8 +228,10 @@ Optional integrations
 ``APPLICATIONINSIGHTS_CONNECTION_STRING``
     Enable Application Insights telemetry when set.
 
-``USE_GA``
-    Set to ``true`` to enable Google Analytics tracking in the frontend.
+``GTM_CONTAINER_ID``
+    Set to the production Google Tag Manager web container ID (``GTM-…``).
+    Configure and publish the Google Analytics tag in that container. Leave
+    the setting unset or empty to omit the container from the site.
 
 5. First deployment checklist
 =============================

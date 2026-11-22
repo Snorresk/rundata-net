@@ -4,21 +4,12 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
+    {% include 'runes/includes/google_tag_manager.html' %}
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="About Rundata.info — a free web version of the Scandinavian Runic-text Data Base. Learn how to use the site, interpret runic inscriptions, and explore the data sources.">
     {% get_from_settings 'CANONICAL_DOMAIN' as canonical_domain %}
     <link rel="canonical" href="https://{% if canonical_domain %}{{ canonical_domain }}{% else %}{{ request.get_host }}{% endif %}{{ request.path }}">
     <link rel="stylesheet" href="{% static 'css/runinskrifter_style.css' %}" />
-    {% get_from_settings 'USE_GA' as use_ga %}
-    {% if use_ga %}
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6M319VSZGS"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-6M319VSZGS');
-    </script>
-    {% endif %}
 
     <link rel="apple-touch-icon" sizes="180x180" href="{% static 'apple-touch-icon.png' %}">
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'favicon-32x32.png' %}">

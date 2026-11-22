@@ -257,8 +257,8 @@ MANAGERS = ADMINS
 
 # Your stuff...
 # ------------------------------------------------------------------------------
-# Whether to use Google Analytics or not.
-USE_GA = env.bool("USE_GA", False)
+# An empty container ID disables Google Tag Manager.
+GTM_CONTAINER_ID = env("GTM_CONTAINER_ID", default="").strip()
 
 # Azure Model API key
 MODEL_KEY = env("MODEL_KEY", default="")

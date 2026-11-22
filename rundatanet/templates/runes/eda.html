@@ -1,22 +1,12 @@
 {% load static %}
-{% load settings %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  {% include 'runes/includes/google_tag_manager.html' %}
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Explore and analyze Scandinavian runic inscription data with the Lexicon of Runic Inscriptions (LoRI). Visualize patterns and gain insights from the runic text database.">
   <title>Lexicon of Runic Inscriptions (LoRI) | Rundata-net</title>
-  {% get_from_settings 'USE_GA' as use_ga %}
-  {% if use_ga %}
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-6M319VSZGS"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-6M319VSZGS');
-  </script>
-  {% endif %}
 
   <link rel="apple-touch-icon" sizes="180x180" href="{% static 'apple-touch-icon.png' %}">
   <link rel="icon" type="image/png" sizes="32x32" href="{% static 'favicon-32x32.png' %}">
