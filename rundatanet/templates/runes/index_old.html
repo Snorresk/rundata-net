@@ -1,22 +1,12 @@
 ﻿{% load static %}
-{% load settings %}
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8">
+    {% include 'runes/includes/google_tag_manager.html' %}
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Rundata.info is a web version of ​​​Scandinavian Runic-text Data Base.">
     <title>Rundata-net</title>
-    {% get_from_settings 'USE_GA' as use_ga %}
-    {% if use_ga %}
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6M319VSZGS"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-6M319VSZGS');
-    </script>
-    {% endif %}
 
     <link href="https://netdna.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.7/themes/default/style.min.css" integrity="sha512-P8BwDSUInKMA7I116Z1RFg/Dfk85uFdliEUYO7vQlwtxLVMNvZimfMAQsaf++9EhlAGOVX6yhDQAIY3/70jDUg==" crossorigin="anonymous" referrerpolicy="no-referrer" />

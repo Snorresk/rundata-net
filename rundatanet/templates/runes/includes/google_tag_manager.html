@@ -1,0 +1,10 @@
+{% load settings %}
+{% get_from_settings 'GTM_CONTAINER_ID' as gtm_container_id %}
+{% if gtm_container_id %}
+<script async src="https://www.googletagmanager.com/gtm.js?id={{ gtm_container_id|urlencode:'' }}"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+</script>
+{% endif %}

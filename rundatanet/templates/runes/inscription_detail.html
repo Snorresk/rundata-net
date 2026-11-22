@@ -4,6 +4,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
+    {% include 'runes/includes/google_tag_manager.html' %}
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="Runic inscription {{ display_signature }}{% if meta.found_location %}, found at {{ meta.found_location }}{% endif %}{% if meta.dating %} ({{ meta.dating }}){% endif %}. Browse the runic text, transliteration, and scholarly interpretation on Rundata-net, the online Scandinavian Runic-text Data Base.">
     <meta property="og:title" content="{{ display_signature }} — Scandinavian Runic Inscription{% if meta.found_location %} from {{ meta.found_location }}{% endif %} — Rundata-net">
@@ -12,17 +13,6 @@
     <title>{{ display_signature }} — Scandinavian Runic Inscription{% if meta.found_location %} from {{ meta.found_location }}{% endif %} — Rundata-net</title>
     {% get_from_settings 'CANONICAL_DOMAIN' as canonical_domain %}
     <link rel="canonical" href="{{ canonical_domain }}{% url 'runes:inscription_detail' slug=canonical_slug %}">
-
-    {% get_from_settings 'USE_GA' as use_ga %}
-    {% if use_ga %}
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6M319VSZGS"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-6M319VSZGS');
-    </script>
-    {% endif %}
 
     <link rel="stylesheet" href="{% static 'css/runinskrifter_style.css' %}">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" integrity="sha256-9kPW/n5nn53j4WMRYAxe9c1rCY96Oogo/MKSVdKzPmI=" crossorigin="anonymous">
