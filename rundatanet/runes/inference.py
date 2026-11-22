@@ -57,13 +57,17 @@ def inference(user_msg: str, api_token: Optional[str] = None) -> str:
     request_options = {
         "model": model_name,
         "messages": [system_prompt, {"role": "user", "content": user_msg}],
-        "max_completion_tokens": settings.MODEL_MAX_OUTPUT_TOKENS,
     }
     if settings.MODEL_REASONING_EFFORT:
         request_options["reasoning_effort"] = settings.MODEL_REASONING_EFFORT
 
     response = client.chat.completions.create(**request_options)
-    response_text = response.choices[0].message.content or ""
+    choice = response.choices[0]
+    if choice.finish_reason == "length":
+        logger.warning("Model %s reached its completion length limit.", model_name)
+        return ""
+
+    response_text = choice.message.content or ""
     logger.debug("Raw LLM response: %s", response_text)
 
     return clean_llm_response(response_text)

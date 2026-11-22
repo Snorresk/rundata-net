@@ -221,9 +221,6 @@ Optional integrations
     is in another Foundry resource, update ``MODEL_ENDPOINT`` and ``MODEL_KEY``
     together.
 
-``MODEL_MAX_OUTPUT_TOKENS``
-    Maximum completion-token budget. Defaults to ``4096``.
-
 ``MODEL_REASONING_EFFORT``
     Optional reasoning effort for models that support it. Leave unset for
     models, such as Phi-4, that do not accept this parameter.

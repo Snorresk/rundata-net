@@ -267,7 +267,6 @@ MODEL_ENDPOINT = env(
     default="https://rundata-phi-4-resource.services.ai.azure.com/openai/v1",
 )
 MODEL_NAME = env("MODEL_NAME", default="gpt-6-luna")
-MODEL_MAX_OUTPUT_TOKENS = env.int("MODEL_MAX_OUTPUT_TOKENS", default=4096)
 MODEL_REASONING_EFFORT = env("MODEL_REASONING_EFFORT", default="")
 
 # Azure Blob Storage (PDF files)

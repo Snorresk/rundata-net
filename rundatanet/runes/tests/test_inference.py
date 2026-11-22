@@ -11,7 +11,6 @@ class InferenceTests(SimpleTestCase):
         MODEL_ENDPOINT="https://example.services.ai.azure.com/openai/v1",
         MODEL_NAME="gpt-6-luna",
         MODEL_KEY="test-key",
-        MODEL_MAX_OUTPUT_TOKENS=4096,
         MODEL_REASONING_EFFORT="",
     )
     @patch("rundatanet.runes.inference.OpenAI")
@@ -19,7 +18,8 @@ class InferenceTests(SimpleTestCase):
         openai_mock.return_value.chat.completions.create.return_value = SimpleNamespace(
             choices=[
                 SimpleNamespace(
-                    message=SimpleNamespace(content='```json\n{"rules": []}\n```')
+                    finish_reason="stop",
+                    message=SimpleNamespace(content='```json\n{"rules": []}\n```'),
                 )
             ]
         )
@@ -35,7 +35,7 @@ class InferenceTests(SimpleTestCase):
         )
         request = openai_mock.return_value.chat.completions.create.call_args.kwargs
         self.assertEqual(request["model"], "gpt-6-luna")
-        self.assertEqual(request["max_completion_tokens"], 4096)
+        self.assertNotIn("max_completion_tokens", request)
         self.assertEqual(request["messages"][0]["role"], "system")
         self.assertEqual(
             request["messages"][1],
@@ -49,21 +49,39 @@ class InferenceTests(SimpleTestCase):
         MODEL_ENDPOINT="https://example.services.ai.azure.com/openai/v1/",
         MODEL_NAME="gpt-6-luna",
         MODEL_KEY="configured-key",
-        MODEL_MAX_OUTPUT_TOKENS=2048,
         MODEL_REASONING_EFFORT="minimal",
     )
     @patch("rundatanet.runes.inference.OpenAI")
-    def test_supports_token_override_and_optional_reasoning_effort(self, openai_mock):
+    def test_supports_key_override_and_optional_reasoning_effort(self, openai_mock):
         openai_mock.return_value.chat.completions.create.return_value = SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))]
+            choices=[
+                SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content="{}"))
+            ]
         )
 
         inference("query", api_token="request-key")
 
         self.assertEqual(openai_mock.call_args.kwargs["api_key"], "request-key")
         request = openai_mock.return_value.chat.completions.create.call_args.kwargs
-        self.assertEqual(request["max_completion_tokens"], 2048)
         self.assertEqual(request["reasoning_effort"], "minimal")
+
+    @override_settings(
+        MODEL_ENDPOINT="https://example.services.ai.azure.com/openai/v1",
+        MODEL_NAME="gpt-6-luna",
+        MODEL_KEY="test-key",
+    )
+    @patch("rundatanet.runes.inference.OpenAI")
+    def test_discards_truncated_completion(self, openai_mock):
+        openai_mock.return_value.chat.completions.create.return_value = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    finish_reason="length",
+                    message=SimpleNamespace(content='{"rules": ['),
+                )
+            ]
+        )
+
+        self.assertEqual(inference("query"), "")
 
     @override_settings(
         MODEL_ENDPOINT="",
