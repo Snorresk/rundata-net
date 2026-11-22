@@ -21,6 +21,6 @@ django-extensions==4.1.* # https://github.com/django-extensions/django-extension
 django-ninja==1.5.*  # https://github.com/vitalik/django-ninja
 
 # Azure
-azure-ai-inference  # https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/ai/azure-ai-inference/README.md
+openai>=2.0,<3.0  # OpenAI-compatible Microsoft Foundry/Azure OpenAI v1 API
 azure-storage-blob  # https://github.com/Azure/azure-sdk-for-python/tree/main/sdk/storage/azure-storage-blob
 azure-identity  # https://github.com/Azure/azure-sdk-for-python/tree/main/sdk/identity/azure-identity

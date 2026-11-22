@@ -63,6 +63,15 @@ from rundatanet.runes.models import (
 class EnglishTranslationIntentTests(SimpleTestCase):
     prompt = "Find all inscriptions with the word stone"
 
+    @patch("rundatanet.runes.api._is_simple_deterministic_query", return_value=False)
+    @patch("rundatanet.runes.api.inference", return_value='{"rules": [')
+    def test_txt2rules_uses_fallback_for_invalid_model_json(self, inference_mock, _preflight):
+        response = txt2rules(None, TextRequest(text=self.prompt))
+
+        inference_mock.assert_called_once_with(self.prompt)
+        self.assertEqual(response.rules, _build_rules_fallback_from_text(self.prompt))
+        self.assertIsNone(response.error)
+
     def test_extracts_word_as_english_translation_term(self):
         self.assertEqual(_extract_english_translation_terms(self.prompt), ["stone"])
 

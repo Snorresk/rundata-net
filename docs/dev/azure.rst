@@ -206,7 +206,24 @@ Optional integrations
     In the future, you can set up your own container and provide its URL here.
 
 ``MODEL_KEY``
-    Set to a non-empty value to enable the AI features. This is Azure Foundry API.
+    Set to a non-empty value to enable the AI features. Store this Azure
+    Foundry API key only in App Service configuration; never commit it.
+
+``MODEL_ENDPOINT``
+    OpenAI-compatible Azure Foundry v1 endpoint, including ``/openai/v1``.
+    For example,
+    ``https://<resource>.services.ai.azure.com/openai/v1``.
+
+``MODEL_NAME``
+    Deployment name to call. The default is ``gpt-6-luna``. You can switch to
+    another deployment, such as Phi-4, without changing application code as
+    long as it supports the OpenAI v1 Chat Completions API. If the deployment
+    is in another Foundry resource, update ``MODEL_ENDPOINT`` and ``MODEL_KEY``
+    together.
+
+``MODEL_REASONING_EFFORT``
+    Optional reasoning effort for models that support it. Leave unset for
+    models, such as Phi-4, that do not accept this parameter.
 
 ``APPLICATIONINSIGHTS_CONNECTION_STRING``
     Enable Application Insights telemetry when set.

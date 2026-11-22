@@ -3483,8 +3483,9 @@ def _postprocess_ai_rules(user_text: str, llm_rules_json: str) -> str:
     """
     try:
         parsed = json.loads(llm_rules_json)
-    except Exception:
-        return llm_rules_json
+    except json.JSONDecodeError:
+        logger.warning("LLM returned invalid JSON for search rules.")
+        return ""
 
     root = _normalize_root(parsed)
     text = (user_text or "").lower()
@@ -5909,14 +5910,14 @@ def txt2rules(request, data: TextRequest):
         # Call the inference function to get the rules
         llm_response = inference(data.text)
         if llm_response and llm_response.strip():
-            llm_response = _postprocess_ai_rules(data.text, llm_response)
-            resp = TextResponse(rules=llm_response)
-        else:
-            if fallback_rules:
-                logger.warning("LLM returned empty rules; using deterministic fallback.")
-                resp = TextResponse(rules=fallback_rules)
-            else:
-                resp = TextResponse(rules="", error="Failed to convert text to rules")
+            rules = _postprocess_ai_rules(data.text, llm_response)
+            if rules:
+                return TextResponse(rules=rules)
+
+        if fallback_rules:
+            logger.warning("LLM returned no usable rules; using deterministic fallback.")
+            return TextResponse(rules=fallback_rules)
+        return TextResponse(rules="", error="Failed to convert text to rules")
     except ServiceResponseTimeoutError as e:
         logger.warning("Timed out while converting text to rules: %s", str(e), exc_info=True)
         fallback_rules = _build_rules_fallback_from_text(data.text)
